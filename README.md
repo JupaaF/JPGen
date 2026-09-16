@@ -28,7 +28,8 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `configuration_values.py` | Shared scalar, vector and mapping checks |
 | `sampling.py` | Random streams, distributions and isotropic directions |
 | `strategies.py` | Abstract geometry strategy, mode registry and three box/radius preparation methods |
-| `generation.py` | Shared retries, random streams, placement and particle assembly |
+| `generation.py` | Shared retries, random streams, final packing audit and particle assembly |
+| `packing/` | Abstract packing contract, insertion, geometric relaxation, growth and neighbor searches |
 | `validation.py` | Structural and containment checks on datasets |
 | `persistence.py` | Versioned HDF5 writer and reader |
 | `exporters/` | Kratos and VTK adapters |
@@ -42,7 +43,7 @@ Everything specific to particle generation is contained in `src/particle_generat
 
 The configuration coordinator first validates common inputs, then calls `strategy.validate_config(config)` on its private configuration copy. Each strategy validates and normalizes its own fields; no `super()` call is required. Shared value checks live in `configuration_values.py` to avoid circular dependencies.
 
-To add a geometry method, implement `GeometryStrategy.validate_config` and `prepare`, declare its additional accepted fields in `config_options`, and register its class. Mode-specific rules belong to the strategy, so adding a mode does not require conditionals in `configuration.py`. The common orchestration and random insertion can then be reused. A future placement method (such as a lattice) is a separate concern from this geometry strategy. Existing YAML mode names and seed behavior are unchanged.
+To add a geometry method, implement `GeometryStrategy.validate_config` and `prepare`, declare its additional accepted fields in `config_options`, and register its class. Mode-specific rules belong to the strategy, so adding a mode does not require conditionals in `configuration.py`. The common orchestration and any packing strategy can then be reused. Placement is a separate concern handled by `PackingStrategy`. Existing YAML mode names and seed behavior are unchanged.
 
 Configurations include a top-level `particle_generation` mapping. Other top-level sections may coexist for future modules; the current CLI only executes particle generation. See `examples/particles.yaml` for a complete working input, and `examples/fixed_box_fraction.yaml` and `examples/variable_box_fraction.yaml` for the other modes. Unknown options within the particle-generation section are rejected to catch spelling errors.
 
@@ -52,7 +53,7 @@ Configurations include a top-level `particle_generation` mapping. Other top-leve
 
 For example, change the example to `mode: fixed_box_fraction`, remove `count` and add `target_solid_fraction: 0.05`. For the variable box mode, retain `count` and add the target.
 
-Solid fraction is `sum(4*pi*r**3/3) / box_volume`, including overlapping particle volumes separately. It is a nominal material-volume fraction, not the geometric union fraction when overlaps exist. Material density and mass calculation belong to DEM setup, not particle generation. Fractions above one are allowed when overlap permits them; geometric feasibility is still checked by insertion.
+Solid fraction is `sum(4*pi*r**3/3) / box_volume`, including overlapping particle volumes separately. It is a nominal material-volume fraction, not the geometric union fraction when overlaps exist. Material density and mass calculation belong to DEM setup, not particle generation. Fractions above one are allowed when overlap permits them; geometric feasibility is still checked by the selected packing strategy.
 
 `solid_fraction_tolerance` defaults to `0.001` and is an absolute fraction tolerance, not a relative percentage. For fixed boxes, sample an unmodified prefix of radii and choose the particle count immediately below or above the target, whichever is closest (prefer fewer particles on a tie). Never resize a sphere to force the target. If neither meets tolerance, restart. An explicit list fixes all radii and count; its resulting fraction must meet tolerance. Exact targets may be impossible due to discrete volumes.
 
@@ -85,9 +86,69 @@ min(1, max(0, ri + rj - d) / (2 * min(ri, rj)))
 
 Zero prohibits penetration; one permits complete containment/coincidence. A value of 0.1 allows penetration equal to 10% of the smaller sphere's diameter. Tangency is allowed. There is no extra surface gap.
 
-Positions use random sequential insertion, with larger spheres inserted first and original radius/ID ordering retained in outputs. A spatial hash checks only neighboring cells. `position_attempts` defaults to 1000 per particle. `restarts` defaults to 10 full restarts **after** the initial attempt (11 total attempts). Each restart draws new radii and positions. Exhaustion fails the run without exporting partial particle sets. `max_particles` defaults to 1,000,000 as a resource guard for target-based generation.
+By default, positions use random sequential insertion, with larger spheres inserted first and original radius/ID ordering retained in outputs. A spatial hash checks only neighboring cells. `position_attempts` defaults to 1000 per particle and applies only to random sequential insertion. `restarts` defaults to 10 full restarts **after** the initial attempt (11 total attempts). Each restart draws new radii and positions. Exhaustion fails the run without exporting partial particle sets. `max_particles` defaults to 1,000,000 as a resource guard for target-based generation.
 
 Random insertion cannot achieve all geometrically possible dense packings. It does not relax, compact or run DEM. Broad size distributions and dense configurations can increase runtime significantly.
+
+## Packing strategies
+
+Geometry `mode` and `packing.method` are independent choices: all three geometry modes work with all three packing methods. The coordinator determines final radii and box once per restart, then calls `PackingStrategy.pack`. It audits final containment and overlaps before constructing or exporting particles. Each packer validates its own configuration; add a subclass and register it in `PACKING_STRATEGIES` to add a method. Packing never modifies the supplied box or radii.
+
+Omitting `packing` selects the existing method and preserves its positional random sequence:
+
+```yaml
+particle_generation:
+  # Other geometry, distribution and seed inputs...
+  packing:
+    method: random_sequential
+```
+
+Choose `method: overlap_relaxation` or `method: progressive_growth` for the new algorithms. Complete runnable configurations are provided in `examples/overlap_relaxation.yaml` and `examples/progressive_growth.yaml`.
+
+### Overlap relaxation
+
+All centers start at random positions and may initially violate overlap constraints. For each nearby pair, the solver computes the excess distance violation `e = max(0, ri + rj - 2*max_overlap*min(ri,rj) - distance)`. Each pair proposes equal and opposite separation displacements. The solver averages accumulated displacements by each particle's active neighbor count, multiplies by `step_size`, and caps each displacement relative to its radius. These are numerical displacements, not physical velocities or forces.
+
+After each update, nonperiodic centers are projected into `[radius, box_length-radius]`; periodic centers wrap into the primary box. A SciPy cKDTree is rebuilt after every move. Neighbor queries are processed in blocks to limit memory use, with deterministic pair ordering. Coincident centers receive seeded isotropic separation directions. If progress stalls, bounded seeded perturbations restart relaxation from its best-energy configuration; exhaustion returns failure to the outer restart coordinator.
+
+The diagnostic objective is the sum of squared distance excesses normalized by the smaller diameter. Updates are a damped geometric heuristic, not an exact energy-minimization solver; energy need not decrease on every iteration. Success requires the **maximum normalized excess** to be at most `overlap_tolerance`, not merely a small total energy. `max_overlap: 1` disables pair separation entirely, including containment of unequal spheres.
+
+### Progressive growth
+
+Final radii `R` are retained unchanged, while working radii start at `initial_scale * R`. The final box stays fixed throughout, including for `variable_box_fraction`. Initial centers are random and the first stage is relaxed. Growth then increases the common scale and calls the same relaxation function by composition. Scaling all radii together preserves their ratios; the temporary nominal fraction equals `scale**3 * final_fraction`.
+
+Only converged stages are accepted. On failure, positions revert to the previous accepted stage and the attempted scale increment is halved. Stages that converge within one quarter of the iteration budget allow a 1.25x increment increase, capped by `max_increment`. The random stream is not rewound on rollback. Walls use the current working radii at each stage. Reaching the stage limit or falling below `min_increment` fails the attempt. The last step is clamped to exactly `1.0`; a packing at smaller radii is never exported as success.
+
+### Controls and diagnostics
+
+All controls below live inside `packing`. Unknown or method-inapplicable keys are rejected. The two relaxation-based methods share:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `max_iterations` | 3000 | Update limit per relaxation call; per stage for growth |
+| `step_size` | 1.0 | Multiplier for averaged pair corrections, in `(0, 1]` |
+| `max_displacement` | 0.2 | Maximum displacement per update as a fraction of each working radius |
+| `overlap_tolerance` | 1e-8 | Numerical excess allowed above `max_overlap`, normalized by the smaller diameter |
+| `stagnation_iterations` | 200 | Updates without a sufficient energy improvement before perturbing |
+| `improvement_tolerance` | 1e-6 | Required relative energy decrease to reset stagnation detection |
+| `max_perturbations` | 3 | Maximum stagnation perturbations per relaxation call; zero disables them |
+| `perturbation` | 0.01 | Perturbation magnitude as a fraction of each working radius |
+
+Growth additionally accepts:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `initial_scale` | 0.25 | Initial radius multiplier, strictly between zero and one |
+| `initial_increment` | 0.05 | Initial increment of radius scale |
+| `min_increment` | 0.0001 | Smallest increment allowed after a failed stage |
+| `max_increment` | 0.1 | Maximum adaptive increment |
+| `max_stages` | 200 | Total stage attempts, including initialization and rejected stages |
+
+`min_increment <= initial_increment <= max_increment` is required. `restarts`, `max_overlap`, and the insertion-only `position_attempts` remain at the `particle_generation` level. Full restart limits apply to all methods. Successful runs record the method, iteration counts, perturbations, final overlap audit and growth stage history in `summary.json` and HDF5 metadata. Failed runs preserve the effective controls and seed, but never export an unfinished packing.
+
+With the default numerical tolerance, `max_overlap: 0` can leave residual penetrations up to `1e-8` of the smaller diameter for relaxation-based methods. This tolerance is independent of the solid-fraction tolerance. The final audit adds a small float64 roundoff allowance. The insertion method continues to reject candidates with any positive overlap.
+
+These algorithms do not guarantee convergence at arbitrary target fractions, and do not establish mechanical equilibrium. Dense or broadly polydisperse systems can be expensive. Velocities are sampled independently after packing; material properties and DEM contact laws are never used.
 
 ## DEM separation and Kratos export
 
@@ -107,6 +168,20 @@ Open `particles.vtp` and click Apply. Add a **Glyph** filter, choose **Sphere**,
 
 HDF5 schema `JPGen.particles`, version `2.0`, stores float64 positions/radii/velocities, int64 particle IDs, SI unit attributes, domain and generation metadata. Materials and contact laws are not part of this schema. Version `1.0` files are rejected explicitly; existing run files are left untouched. To regenerate them, remove or relocate the material section in their saved YAML and run the CLI again. Arrays are gzip compressed. The internal reader validates the schema and restores the same dataset; all runs export from the HDF5 readback.
 
-Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed using the system random source. The actual seed is saved **before** generation. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, positions=1, speed=2, linear direction=3, angular speed=4, angular direction=5. Changing speed settings does not consume positional randomness. Run names are unique filesystem identifiers and do not influence particle generation.
+Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed using the system random source. The actual seed is saved **before** generation. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, packing=1, speed=2, linear direction=3, angular speed=4, angular direction=5. The packing stream includes initialization, coincident-center separation and stagnation perturbations; algorithm iterations and failed growth stages consume this same deterministic stream. Changing speed settings does not consume positional randomness. Run names are unique filesystem identifiers and do not influence particle generation.
 
 Replay requires the same effective configuration, generator version and dependency versions, which are saved per run. Numerical results are reproducible within that environment; identical files across library versions or platforms are not guaranteed. HDF5 files are not restart checkpoints of an evolving DEM simulation: contact history is outside this module's scope.
+
+## Dense-packing benchmark
+
+Run a bounded experiment with exactly 8,000 particles, nominal solid fraction 0.62, periodic boundaries, uniform radii from 0.5 to 1 mm, zero permitted geometric overlap and seed 20260916:
+
+```bash
+.venv/bin/python scripts/benchmark_dense_packing.py --method overlap_relaxation
+.venv/bin/python scripts/benchmark_dense_packing.py --method progressive_growth
+.venv/bin/python scripts/benchmark_dense_packing.py --method random_sequential
+```
+
+Each experiment uses `variable_box_fraction`, disables full restarts to measure one reproducible attempt, and defaults to a 300-second generation limit and 3,000 iterations per relaxation call. Override `--seconds`, `--iterations`, `--seed`, `--count`, `--overlap`, or `--fraction` as needed. For example, add `--overlap 0.15` to allow penetration up to 15% of the smaller sphere diameter. The benchmark uses POSIX interval timers (Linux/macOS). A timeout is an experiment limit, not proof that the requested geometry is impossible.
+
+The run directory contains `benchmark.log` with timestamped progress and `benchmark.json` with elapsed time and completion/failure status, alongside the usual effective configuration and summary. Successful output is checked independently with an all-pairs overlap calculation and a recomputed volume fraction. Failed or timed-out generation does not export particle datasets. Wall-clock timings depend on competing system load; run methods sequentially for a controlled performance comparison.

@@ -1,0 +1,39 @@
+# SI units. Geometry and packing are independently configurable.
+particle_generation:
+  mode: variable_box_fraction
+  count: 500
+  seed: 20260916
+  box:
+    origin:
+    - 0.0
+    - 0.0
+    - 0.0
+    lengths:
+    - 0.1
+    - 0.1
+    - 0.1
+    periodic: true
+  radii:
+    type: uniform
+    min: 0.0005
+    max: 0.001
+  max_overlap: 0.0
+  position_attempts: 1000
+  restarts: 10
+  max_particles: 1000000
+  solid_fraction_tolerance: 0.001
+  velocity:
+    type: normal
+    mean: 0.01
+    std: 0.003
+    min: 0.0
+    max: 0.02
+  angular_velocity:
+    type: uniform
+    min: 0.0
+    max: 1.0
+  target_solid_fraction: 0.3
+  packing:
+    method: overlap_relaxation
+    max_iterations: 3000
+    overlap_tolerance: 1.0e-08

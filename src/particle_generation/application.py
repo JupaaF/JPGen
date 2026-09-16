@@ -8,6 +8,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import scipy
 import yaml
 
 from . import __version__
@@ -30,7 +31,7 @@ def run(raw, report=print):
     effective = {"particle_generation": cfg}
     (directory / "configuration.yaml").write_text(yaml.safe_dump(effective, sort_keys=False), encoding="utf-8")
     versions = {"jpgen_particle_generation": __version__, "python": platform.python_version(),
-                "numpy": np.__version__, "h5py": h5py.__version__, "pyyaml": yaml.__version__}
+                "numpy": np.__version__, "scipy": scipy.__version__, "h5py": h5py.__version__, "pyyaml": yaml.__version__}
     status = {"status": "running", "seed": cfg["seed"], "versions": versions}
     status_path = directory / "summary.json"
 

@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from .configuration_values import ConfigurationError, integer, mapping, number, vector
 from .strategies import GEOMETRY_STRATEGIES
+from .packing import PACKING_STRATEGIES
 
 
 def distribution(value, name, radius=False):
@@ -47,7 +48,7 @@ def validate_config(raw):
         raise ConfigurationError(f"mode must be one of: {', '.join(GEOMETRY_STRATEGIES)}.")
     strategy = GEOMETRY_STRATEGIES[mode]()
     common_options = {
-        "mode", "solid_fraction_tolerance", "box", "radii", "velocity",
+        "mode", "packing", "solid_fraction_tolerance", "box", "radii", "velocity",
         "angular_velocity", "seed", "max_overlap", "position_attempts", "restarts", "max_particles",
     }
     mapping(cfg, "particle_generation", common_options | strategy.config_options, {"mode", "box", "radii"})
@@ -79,4 +80,11 @@ def validate_config(raw):
     for field in ("velocity", "angular_velocity"):
         cfg[field] = distribution(cfg.get(field, {"type": "constant", "value": 0}), field)
     strategy.validate_config(cfg)
+    packing = cfg.setdefault("packing", {"method": "random_sequential"})
+    if not isinstance(packing, dict):
+        raise ConfigurationError("packing must be a mapping.")
+    method = packing.setdefault("method", "random_sequential")
+    if not isinstance(method, str) or method not in PACKING_STRATEGIES:
+        raise ConfigurationError(f"packing.method must be one of: {', '.join(PACKING_STRATEGIES)}.")
+    PACKING_STRATEGIES[method]().validate_config(packing)
     return cfg
