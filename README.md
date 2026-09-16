@@ -84,7 +84,7 @@ Velocity distributions specify nonnegative **magnitudes** in m/s and rad/s respe
 
 `box.origin` defaults to `[0, 0, 0]`. `box.lengths` contains three positive lengths. `box.periodic` is one boolean for all three axes and defaults to false. Nonperiodic spheres remain entirely inside the box. Periodic centers lie in the primary box and spheres may cross its boundaries. Minimum-image distances are used, including a check against each sphere's own periodic images.
 
-`max_overlap` is in `[0, 1]` and defaults to zero. For radii `ri`, `rj` and center distance `d`, the overlap measure is:
+`packing.max_overlap` is in `[0, 1]` and defaults to zero. For radii `ri`, `rj` and center distance `d`, the overlap measure is:
 
 ```text
 min(1, max(0, ri + rj - d) / (2 * min(ri, rj)))
@@ -107,6 +107,7 @@ particle_generation:
   # Other geometry, distribution and seed inputs...
   packing:
     method: random_sequential
+    max_overlap: 0
     position_attempts: 1000
 ```
 
@@ -118,7 +119,7 @@ All centers start at random positions and may initially violate overlap constrai
 
 After each update, nonperiodic centers are projected into `[radius, box_length-radius]`; periodic centers wrap into the primary box. A SciPy cKDTree is rebuilt after every move. Neighbor queries are processed in blocks to limit memory use, with deterministic pair ordering. Coincident centers receive seeded isotropic separation directions. If progress stalls, bounded seeded perturbations restart relaxation from its best-energy configuration; exhaustion returns failure to the outer restart coordinator.
 
-The diagnostic objective is the sum of squared distance excesses normalized by the smaller diameter. Updates are a damped geometric heuristic, not an exact energy-minimization solver; energy need not decrease on every iteration. Success requires the **maximum normalized excess** to be at most `overlap_tolerance`, not merely a small total energy. `max_overlap: 1` disables pair separation entirely, including containment of unequal spheres.
+The diagnostic objective is the sum of squared distance excesses normalized by the smaller diameter. Updates are a damped geometric heuristic, not an exact energy-minimization solver; energy need not decrease on every iteration. Success requires the **maximum normalized excess** to be at most `overlap_tolerance`, not merely a small total energy. `packing.max_overlap: 1` disables pair separation entirely, including containment of unequal spheres.
 
 ### Progressive growth
 
@@ -128,7 +129,7 @@ Only converged stages are accepted. On failure, positions revert to the previous
 
 ### Controls and diagnostics
 
-All controls below live inside `packing`. Unknown or method-inapplicable keys are rejected. The two relaxation-based methods share:
+All controls below live inside `packing`. `max_overlap` is a shared constraint accepted by every method; unknown or method-inapplicable keys are rejected. The two relaxation-based methods share:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -151,9 +152,9 @@ Growth additionally accepts:
 | `max_increment` | 0.1 | Maximum adaptive increment |
 | `max_stages` | 200 | Total stage attempts, including initialization and rejected stages |
 
-`min_increment <= initial_increment <= max_increment` is required. `restarts` and the shared `max_overlap` constraint remain at the `particle_generation` level; every algorithm-specific control lives inside `packing`. Full restart limits apply to all methods. Successful runs record the method, iteration counts, perturbations, final overlap audit and growth stage history in `summary.json` and HDF5 metadata. Failed runs preserve the effective controls and seed, but never export an unfinished packing.
+`min_increment <= initial_increment <= max_increment` is required. `restarts` remains at the `particle_generation` level because it repeats geometry preparation as well as packing; the shared `max_overlap` constraint lives inside `packing`. Full restart limits apply to all methods. Successful runs record the method, iteration counts, perturbations, final overlap audit and growth stage history in `summary.json` and HDF5 metadata. Failed runs preserve the effective controls and seed, but never export an unfinished packing.
 
-With the default numerical tolerance, `max_overlap: 0` can leave residual penetrations up to `1e-8` of the smaller diameter for relaxation-based methods. This tolerance is independent of the solid-fraction tolerance. The final audit adds a small float64 roundoff allowance. The insertion method continues to reject candidates with any positive overlap.
+With the default numerical tolerance, `packing.max_overlap: 0` can leave residual penetrations up to `1e-8` of the smaller diameter for relaxation-based methods. This tolerance is independent of the solid-fraction tolerance. The final audit adds a small float64 roundoff allowance. The insertion method continues to reject candidates with any positive overlap.
 
 These algorithms do not guarantee convergence at arbitrary target fractions, and do not establish mechanical equilibrium. Dense or broadly polydisperse systems can be expensive. Velocities are sampled independently after packing; material properties and DEM contact laws are never used.
 

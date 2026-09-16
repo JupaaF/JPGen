@@ -3,7 +3,7 @@
 import numpy as np
 
 from .domain import GenerationMetadata, ParticleSet
-from .packing import PackingConstraints, PackingRequest
+from .packing import PackingRequest
 from .packing.geometry import audit_packing
 from .progress import (
     ExpectedParticleCount,
@@ -22,6 +22,7 @@ class ParticleGenerator:
         cfg = plan.config
         strategy = plan.geometry_strategy
         packing_strategy = plan.packing_strategy
+        packing_constraints = plan.packing_constraints
         last_error = None
         for restart in range(cfg["restarts"] + 1):
             emit(observer, GenerationAttemptStarted(restart + 1, cfg["restarts"] + 1))
@@ -37,7 +38,7 @@ class ParticleGenerator:
                     PackingRequest(
                         box=box,
                         radii=radii,
-                        constraints=PackingConstraints(max_overlap=cfg["max_overlap"]),
+                        constraints=packing_constraints,
                         rng=stream(cfg["seed"], restart, 1),
                     ),
                     observer,
@@ -47,7 +48,7 @@ class ParticleGenerator:
                     packing.positions,
                     radii,
                     box,
-                    cfg["max_overlap"],
+                    packing_constraints.max_overlap,
                     packing_strategy.overlap_tolerance,
                 )
                 positions = packing.positions

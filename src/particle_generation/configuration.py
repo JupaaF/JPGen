@@ -7,17 +7,18 @@ from dataclasses import dataclass
 from .configuration_values import ConfigurationError, integer, mapping, number, vector
 from .distributions import ExplicitDistribution, build_distribution
 from .domain import Box
-from .packing import PACKING_STRATEGIES, PackingStrategy
+from .packing import PACKING_STRATEGIES, PackingConstraints, PackingStrategy
 from .strategies import GEOMETRY_STRATEGIES, GeometryStrategy
 
 
 @dataclass(frozen=True)
 class GenerationPlan:
-    """Validated configuration and the exact strategy instances that will execute it."""
+    """Validated configuration, packing constraints and executable strategies."""
 
     config: dict
     geometry_strategy: GeometryStrategy
     packing_strategy: PackingStrategy
+    packing_constraints: PackingConstraints
 
     def to_config(self):
         result = deepcopy(self.config)
@@ -28,7 +29,13 @@ class GenerationPlan:
             "lengths": self.config["box"].lengths.tolist(),
             "periodic": self.config["box"].periodic,
         }
-        result["packing"] = self.packing_strategy.to_config()
+        packing = self.packing_strategy.to_config()
+        method = packing.pop("method")
+        result["packing"] = {
+            "method": method,
+            "max_overlap": self.packing_constraints.max_overlap,
+            **packing,
+        }
         return result
 
 
@@ -43,11 +50,10 @@ def build_generation_plan(raw):
     strategy = GEOMETRY_STRATEGIES[mode]()
     common_options = {
         "mode", "packing", "solid_fraction_tolerance", "box", "radii", "velocity",
-        "angular_velocity", "seed", "max_overlap", "restarts", "max_particles",
+        "angular_velocity", "seed", "restarts", "max_particles",
     }
     mapping(cfg, "particle_generation", common_options | strategy.config_options, {"mode", "box", "radii"})
     cfg["solid_fraction_tolerance"] = number(cfg.get("solid_fraction_tolerance", 0.001), "solid_fraction_tolerance", 0)
-    cfg["max_overlap"] = number(cfg.get("max_overlap", 0), "max_overlap", 0, 1)
     cfg["restarts"] = integer(cfg.get("restarts", 10), "restarts", 0)
     cfg["max_particles"] = integer(cfg.get("max_particles", 1_000_000), "max_particles")
     if "seed" not in cfg:
@@ -75,6 +81,10 @@ def build_generation_plan(raw):
     method = packing.setdefault("method", "random_sequential")
     if not isinstance(method, str) or method not in PACKING_STRATEGIES:
         raise ConfigurationError(f"packing.method must be one of: {', '.join(PACKING_STRATEGIES)}.")
-    packing_strategy = PACKING_STRATEGIES[method].from_config(packing)
+    constraints = PackingConstraints(
+        max_overlap=number(packing.get("max_overlap", 0), "packing.max_overlap", 0, 1)
+    )
+    strategy_config = {key: value for key, value in packing.items() if key != "max_overlap"}
+    packing_strategy = PACKING_STRATEGIES[method].from_config(strategy_config)
     del cfg["packing"]
-    return GenerationPlan(cfg, strategy, packing_strategy)
+    return GenerationPlan(cfg, strategy, packing_strategy, constraints)

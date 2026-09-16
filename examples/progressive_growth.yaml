@@ -17,7 +17,6 @@ particle_generation:
     type: uniform
     min: 0.003
     max: 0.007
-  max_overlap: 0.005
   restarts: 10
   max_particles: 1000000
   solid_fraction_tolerance: 0.001
@@ -31,9 +30,10 @@ particle_generation:
     type: uniform
     min: 0.0
     max: 1.0
-  target_solid_fraction: 0.66
+  target_solid_fraction: 0.64
   packing:
     method: progressive_growth
+    max_overlap: 0.005
     max_iterations: 10000
     overlap_tolerance: 1.0e-05
     initial_scale: 0.25

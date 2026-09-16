@@ -55,7 +55,7 @@ class PackingStrategy(ABC):
     @classmethod
     @abstractmethod
     def from_config(cls, config: dict):
-        """Build a configured strategy from its complete packing mapping."""
+        """Build a strategy from its method-specific packing mapping."""
 
     @abstractmethod
     def to_config(self) -> dict:
