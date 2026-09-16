@@ -1,0 +1,6 @@
+.agents/
+.codex/
+.deps/
+Kratos/
+.venv/
+*.pyc
