@@ -1,25 +1,26 @@
-import argparse
+"""JPGen command-line entry point."""
 
-from utilities.validate import validate_file
+import argparse
+import sys
+
+from configuration import load_config
+from particle_generation.application import run
 
 
 def main():
-
-    parser = argparse.ArgumentParser(description="JPGen 🤓.")
-    parser.add_argument("file_path", help="Path to the YAML input file")
+    parser = argparse.ArgumentParser(description="JPGen: reproducible particle generation.")
+    parser.add_argument("file_path", help="Path to the YAML configuration file")
     args = parser.parse_args()
-
     try:
-        config = validate_file(args.file_path)
-    except ValueError as e:
-        print(f"Error: {e}")
-        return
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return
-    
-    print(f"Processing file: {args.file_path}")
+        config = load_config(args.file_path)
+        if "particle_generation" not in config:
+            raise ValueError("Missing required configuration section: particle_generation.")
+        run(config["particle_generation"])
+    except (ValueError, OSError, KeyError, OverflowError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-
-    main()
+    sys.exit(main())

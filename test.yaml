@@ -1,8 +1,0 @@
-test:
-  enabled: true
-  environment: local
-  message: "Archivo YAML de prueba"
-  values:
-    - one
-    - two
-    - three

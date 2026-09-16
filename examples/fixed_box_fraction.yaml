@@ -1,0 +1,34 @@
+# SI units. Particle geometry and initial velocities.
+particle_generation:
+  mode: fixed_box_fraction
+  seed: 20260916
+  box:
+    origin:
+    - 0.0
+    - 0.0
+    - 0.0
+    lengths:
+    - 0.02
+    - 0.02
+    - 0.02
+    periodic: true
+  radii:
+    type: uniform
+    min: 0.0005
+    max: 0.001
+  max_overlap: 0.0
+  position_attempts: 1000
+  restarts: 10
+  max_particles: 1000000
+  solid_fraction_tolerance: 0.001
+  velocity:
+    type: normal
+    mean: 0.01
+    std: 0.003
+    min: 0.0
+    max: 0.02
+  angular_velocity:
+    type: uniform
+    min: 0.0
+    max: 1.0
+  target_solid_fraction: 0.05

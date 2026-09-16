@@ -4,3 +4,6 @@
 Kratos/
 .venv/
 *.pyc
+
+runs/
+__pycache__/
