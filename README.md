@@ -28,13 +28,14 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `configuration_values.py` | Shared scalar, vector and mapping checks |
 | `sampling.py` | Random streams, distributions and isotropic directions |
 | `strategies.py` | Abstract geometry strategy, mode registry and three box/radius preparation methods |
-| `generation.py` | Shared retries, random streams, final packing audit and particle assembly |
+| `generation.py` | `ParticleGenerator`: retries, random streams, final packing audit and particle assembly |
 | `packing/` | Abstract packing contract, insertion, geometric relaxation, growth and neighbor searches |
-| `persistence.py` | Versioned HDF5 writer and reader |
-| `exporters/` | Kratos and VTK adapters |
-| `application.py` | Run lifecycle, metadata and orchestration |
+| `persistence.py` | `Hdf5ParticleStore`, the versioned particle persistence adapter |
+| `exporters/` | `ParticleExporter` port and the Kratos and VTK adapters |
+| `run_repository.py` | Filesystem adapter for run workspaces, summaries and atomic output staging |
+| `application.py` | Injected application service and default CLI composition |
 
-`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the module. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
+`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the composed `ParticleGenerationApplication`. The application coordinates injected generation, run repository, particle store, exporters and version provider; concrete filesystem and file-format operations remain in their adapters. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
 
 ## Generation modes
 
