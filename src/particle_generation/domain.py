@@ -326,6 +326,18 @@ class ParticleSet:
             raise ValueError("Particle IDs must be integers.")
         if np.any(self.radii <= 0):
             raise ValueError("Radii must be positive.")
+        if self.metadata.count != n:
+            raise ValueError("Particle metadata count does not match the particle arrays.")
+        solid_fraction = self._calculate_solid_fraction()
+        if not np.isfinite(solid_fraction) or solid_fraction <= 0:
+            raise ValueError("Particle solid fraction must be finite and positive.")
+        if not np.isclose(
+            self.metadata.solid_fraction,
+            solid_fraction,
+            rtol=1e-12,
+            atol=0.0,
+        ):
+            raise ValueError("Particle metadata solid fraction does not match the particle geometry.")
         relative = self.positions - self.box.origin
         margin = 0 if self.box.periodic else self.radii[:, None]
         epsilon = 16 * np.finfo(float).eps * np.maximum(
@@ -336,6 +348,10 @@ class ParticleSet:
         ):
             raise ValueError("Particles lie outside their permitted box bounds.")
 
+    def _calculate_solid_fraction(self):
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            return float(np.sum((4.0 * np.pi / 3.0) * self.radii**3) / self.box.volume)
+
     @property
     def solid_fraction(self):
-        return float(np.sum((4.0 * np.pi / 3.0) * self.radii**3) / self.box.volume)
+        return self._calculate_solid_fraction()
