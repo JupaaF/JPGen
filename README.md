@@ -30,7 +30,6 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `strategies.py` | Abstract geometry strategy, mode registry and three box/radius preparation methods |
 | `generation.py` | Shared retries, random streams, final packing audit and particle assembly |
 | `packing/` | Abstract packing contract, insertion, geometric relaxation, growth and neighbor searches |
-| `validation.py` | Structural and containment checks on datasets |
 | `persistence.py` | Versioned HDF5 writer and reader |
 | `exporters/` | Kratos and VTK adapters |
 | `application.py` | Run lifecycle, metadata and orchestration |
@@ -86,13 +85,13 @@ min(1, max(0, ri + rj - d) / (2 * min(ri, rj)))
 
 Zero prohibits penetration; one permits complete containment/coincidence. A value of 0.1 allows penetration equal to 10% of the smaller sphere's diameter. Tangency is allowed. There is no extra surface gap.
 
-By default, positions use random sequential insertion, with larger spheres inserted first and original radius/ID ordering retained in outputs. A spatial hash checks only neighboring cells. `position_attempts` defaults to 1000 per particle and applies only to random sequential insertion. `restarts` defaults to 10 full restarts **after** the initial attempt (11 total attempts). Each restart draws new radii and positions. Exhaustion fails the run without exporting partial particle sets. `max_particles` defaults to 1,000,000 as a resource guard for target-based generation.
+By default, positions use random sequential insertion, with larger spheres inserted first and original radius/ID ordering retained in outputs. A spatial hash checks only neighboring cells. `packing.position_attempts` defaults to 1000 per particle and is owned by the random sequential strategy. `restarts` defaults to 10 full restarts **after** the initial attempt (11 total attempts). Each restart draws new radii and positions. Exhaustion fails the run without exporting partial particle sets. `max_particles` defaults to 1,000,000 as a resource guard for target-based generation.
 
 Random insertion cannot achieve all geometrically possible dense packings. It does not relax, compact or run DEM. Broad size distributions and dense configurations can increase runtime significantly.
 
 ## Packing strategies
 
-Geometry `mode` and `packing.method` are independent choices: all three geometry modes work with all three packing methods. The coordinator determines final radii and box once per restart, then calls `PackingStrategy.pack`. It audits final containment and overlaps before constructing or exporting particles. Each packer validates its own configuration; add a subclass and register it in `PACKING_STRATEGIES` to add a method. Packing never modifies the supplied box or radii.
+Geometry `mode` and `packing.method` are independent choices: all three geometry modes work with all three packing methods. The coordinator determines final radii and box once per restart, builds a `PackingRequest` with the shared geometry, overlap constraint and random stream, and passes it to `PackingStrategy.pack`. Each strategy owns immutable typed options, constructs them with `from_config`, and emits its normalized effective mapping with `to_config`. Add a subclass and register it in `PACKING_STRATEGIES` to add a method. Packing never receives the global generation dictionary or modifies the supplied box or radii.
 
 Omitting `packing` selects the existing method and preserves its positional random sequence:
 
@@ -101,6 +100,7 @@ particle_generation:
   # Other geometry, distribution and seed inputs...
   packing:
     method: random_sequential
+    position_attempts: 1000
 ```
 
 Choose `method: overlap_relaxation` or `method: progressive_growth` for the new algorithms. Complete runnable configurations are provided in `examples/overlap_relaxation.yaml` and `examples/progressive_growth.yaml`.
@@ -144,7 +144,7 @@ Growth additionally accepts:
 | `max_increment` | 0.1 | Maximum adaptive increment |
 | `max_stages` | 200 | Total stage attempts, including initialization and rejected stages |
 
-`min_increment <= initial_increment <= max_increment` is required. `restarts`, `max_overlap`, and the insertion-only `position_attempts` remain at the `particle_generation` level. Full restart limits apply to all methods. Successful runs record the method, iteration counts, perturbations, final overlap audit and growth stage history in `summary.json` and HDF5 metadata. Failed runs preserve the effective controls and seed, but never export an unfinished packing.
+`min_increment <= initial_increment <= max_increment` is required. `restarts` and the shared `max_overlap` constraint remain at the `particle_generation` level; every algorithm-specific control lives inside `packing`. Full restart limits apply to all methods. Successful runs record the method, iteration counts, perturbations, final overlap audit and growth stage history in `summary.json` and HDF5 metadata. Failed runs preserve the effective controls and seed, but never export an unfinished packing.
 
 With the default numerical tolerance, `max_overlap: 0` can leave residual penetrations up to `1e-8` of the smaller diameter for relaxation-based methods. This tolerance is independent of the solid-fraction tolerance. The final audit adds a small float64 roundoff allowance. The insertion method continues to reject candidates with any positive overlap.
 

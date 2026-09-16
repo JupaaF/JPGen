@@ -1,7 +1,8 @@
-"""Independent contracts for placement algorithms and their results."""
+"""Typed contracts for placement algorithms and their results."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 
@@ -14,6 +15,30 @@ class PackingResult:
     statistics: dict
 
 
+@dataclass(frozen=True)
+class PackingConstraints:
+    """Geometric limits shared by every placement algorithm."""
+
+    max_overlap: float
+
+    def __post_init__(self):
+        if isinstance(self.max_overlap, bool) or not np.isfinite(self.max_overlap):
+            raise ValueError("Maximum overlap must be a finite number.")
+        if not 0 <= self.max_overlap <= 1:
+            raise ValueError("Maximum overlap must be between zero and one.")
+        object.__setattr__(self, "max_overlap", float(self.max_overlap))
+
+
+@dataclass(frozen=True)
+class PackingRequest:
+    """Inputs shared by every placement algorithm for one generation attempt."""
+
+    box: Box
+    radii: np.ndarray
+    constraints: PackingConstraints
+    rng: np.random.Generator
+
+
 class PackingStrategy(ABC):
     """Place final radii in a final box without changing either input.
 
@@ -21,11 +46,17 @@ class PackingStrategy(ABC):
     raise GenerationError on failure; internal displacements are not velocities.
     """
 
+    method: ClassVar[str]
+
+    @classmethod
     @abstractmethod
-    def validate_config(self, config: dict) -> None:
-        """Validate and normalize the packing-specific configuration in place."""
+    def from_config(cls, config: dict):
+        """Build a configured strategy from its complete packing mapping."""
 
     @abstractmethod
-    def pack(self, box: Box, radii: np.ndarray, config: dict,
-             rng: np.random.Generator, report=None) -> PackingResult:
+    def to_config(self) -> dict:
+        """Return the complete normalized packing mapping."""
+
+    @abstractmethod
+    def pack(self, request: PackingRequest, report=None) -> PackingResult:
         """Return final positions and algorithm statistics for one attempt."""

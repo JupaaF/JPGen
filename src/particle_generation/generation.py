@@ -3,7 +3,7 @@
 import numpy as np
 
 from .domain import ParticleSet
-from .packing import PACKING_STRATEGIES
+from .packing import PackingConstraints, PackingRequest, build_packing_strategy
 from .packing.geometry import validate_result
 from .sampling import GenerationError, stream, vectors
 from .strategies import GEOMETRY_STRATEGIES, solid_volume
@@ -11,7 +11,7 @@ from .strategies import GEOMETRY_STRATEGIES, solid_volume
 
 def generate(cfg, report=None):
     strategy = GEOMETRY_STRATEGIES[cfg["mode"]]()
-    packing_strategy = PACKING_STRATEGIES[cfg["packing"]["method"]]()
+    packing_strategy = build_packing_strategy(cfg["packing"])
     last_error = None
     for restart in range(cfg["restarts"] + 1):
         if report:
@@ -26,7 +26,15 @@ def generate(cfg, report=None):
             fraction = volume / box.volume
             if "target_solid_fraction" in cfg and abs(fraction - cfg["target_solid_fraction"]) > cfg["solid_fraction_tolerance"] + 1e-14:
                 raise GenerationError(f"Sample solid fraction {fraction:.9g} is outside the requested tolerance.")
-            packing = packing_strategy.pack(box, radii, cfg, stream(cfg["seed"], restart, 1), report)
+            packing = packing_strategy.pack(
+                PackingRequest(
+                    box=box,
+                    radii=radii,
+                    constraints=PackingConstraints(max_overlap=cfg["max_overlap"]),
+                    rng=stream(cfg["seed"], restart, 1),
+                ),
+                report,
+            )
             # Every algorithm must satisfy the final geometry, not just its internal stopping rule.
             audit = validate_result(packing.positions, radii, box, cfg["max_overlap"],
                                     cfg["packing"].get("overlap_tolerance", 0.0))

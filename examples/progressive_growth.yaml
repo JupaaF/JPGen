@@ -15,10 +15,9 @@ particle_generation:
     periodic: true
   radii:
     type: uniform
-    min: 0.001
-    max: 0.002
-  max_overlap: 0.02
-  position_attempts: 1000
+    min: 0.003
+    max: 0.007
+  max_overlap: 0.005
   restarts: 10
   max_particles: 1000000
   solid_fraction_tolerance: 0.001
@@ -32,7 +31,7 @@ particle_generation:
     type: uniform
     min: 0.0
     max: 1.0
-  target_solid_fraction: 0.67
+  target_solid_fraction: 0.66
   packing:
     method: progressive_growth
     max_iterations: 10000

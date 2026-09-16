@@ -49,12 +49,11 @@ def validate_config(raw):
     strategy = GEOMETRY_STRATEGIES[mode]()
     common_options = {
         "mode", "packing", "solid_fraction_tolerance", "box", "radii", "velocity",
-        "angular_velocity", "seed", "max_overlap", "position_attempts", "restarts", "max_particles",
+        "angular_velocity", "seed", "max_overlap", "restarts", "max_particles",
     }
     mapping(cfg, "particle_generation", common_options | strategy.config_options, {"mode", "box", "radii"})
     cfg["solid_fraction_tolerance"] = number(cfg.get("solid_fraction_tolerance", 0.001), "solid_fraction_tolerance", 0)
     cfg["max_overlap"] = number(cfg.get("max_overlap", 0), "max_overlap", 0, 1)
-    cfg["position_attempts"] = integer(cfg.get("position_attempts", 1000), "position_attempts")
     cfg["restarts"] = integer(cfg.get("restarts", 10), "restarts", 0)
     cfg["max_particles"] = integer(cfg.get("max_particles", 1_000_000), "max_particles")
     if "seed" not in cfg:
@@ -86,5 +85,5 @@ def validate_config(raw):
     method = packing.setdefault("method", "random_sequential")
     if not isinstance(method, str) or method not in PACKING_STRATEGIES:
         raise ConfigurationError(f"packing.method must be one of: {', '.join(PACKING_STRATEGIES)}.")
-    PACKING_STRATEGIES[method]().validate_config(packing)
+    cfg["packing"] = PACKING_STRATEGIES[method].from_config(packing).to_config()
     return cfg

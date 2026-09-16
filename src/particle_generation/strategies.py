@@ -96,8 +96,7 @@ class VariableBoxFraction(GeometryStrategy):
         box = _box_from_config(config)
         radii = sample(config["radii"], config["count"], rng)
         scale = (solid_volume(radii) / config["target_solid_fraction"] / box.volume) ** (1.0 / 3.0)
-        box.lengths *= scale
-        return box, radii
+        return Box(box.origin, box.lengths * scale, box.periodic), radii
 
 
 GEOMETRY_STRATEGIES = {
@@ -140,4 +139,3 @@ def _radii_for_fraction(cfg, rng, volume):
         if abs(total - target) <= tolerance:
             return np.concatenate(chunks)
     raise GenerationError("Target requires more than max_particles; increase the limit or revise the target.")
-

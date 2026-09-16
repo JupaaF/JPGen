@@ -5,7 +5,6 @@ import json
 import h5py
 
 from .domain import Box, ParticleSet
-from .validation import validate_particles
 
 
 SCHEMA_VERSION = "2.0"
@@ -14,7 +13,7 @@ UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angul
 
 
 def write_hdf5(path, particles, configuration):
-    validate_particles(particles)
+    particles.validate()
     with h5py.File(path, "w") as file:
         file.attrs.update(schema="JPGen.particles", schema_version=SCHEMA_VERSION, units="SI")
         group = file.create_group("particles")
@@ -40,5 +39,5 @@ def read_hdf5(path):
         metadata = json.loads(file["generation"].attrs["metadata_json"])
         configuration = json.loads(file["generation/configuration_json"].asstr()[()])
     particles = ParticleSet(**arrays, box=box, metadata=metadata)
-    validate_particles(particles)
+    particles.validate()
     return particles, configuration

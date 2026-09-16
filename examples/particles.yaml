@@ -12,7 +12,6 @@ particle_generation:
     min: 0.0005
     max: 0.001
   max_overlap: 0.0
-  position_attempts: 1000
   restarts: 10
   max_particles: 1000000
   solid_fraction_tolerance: 0.001
@@ -26,3 +25,6 @@ particle_generation:
     type: uniform
     min: 0.0
     max: 1.0
+  packing:
+    method: random_sequential
+    position_attempts: 1000

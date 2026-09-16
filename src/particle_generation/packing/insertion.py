@@ -1,21 +1,38 @@
 """Random sequential insertion; previously accepted particles remain fixed."""
 
+from dataclasses import dataclass
 from itertools import product
 
 import numpy as np
 
-from ..configuration_values import mapping
+from ..configuration_values import integer, mapping
 from ..sampling import GenerationError
-from .base import PackingResult, PackingStrategy
+from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility
 
 
+@dataclass(frozen=True)
 class RandomSequentialInsertion(PackingStrategy):
-    def validate_config(self, config):
-        mapping(config, "packing", {"method"})
+    method = "random_sequential"
+    position_attempts: int
 
-    def pack(self, box, radii, config, rng, report=None):
-        positions, overlap, draws = place(radii, box, config["max_overlap"], config["position_attempts"], rng)
+    @classmethod
+    def from_config(cls, config):
+        mapping(config, "packing", {"method", "position_attempts"})
+        attempts = integer(config.get("position_attempts", 1000), "packing.position_attempts")
+        return cls(attempts)
+
+    def to_config(self):
+        return {"method": self.method, "position_attempts": self.position_attempts}
+
+    def pack(self, request: PackingRequest, report=None):
+        positions, overlap, draws = place(
+            request.radii,
+            request.box,
+            request.constraints.max_overlap,
+            self.position_attempts,
+            request.rng,
+        )
         return PackingResult(positions, {"position_draws": draws, "iterations": 0,
                                         "max_observed_overlap": overlap})
 
@@ -69,4 +86,3 @@ def place(radii, box, max_overlap, attempts, rng):
         else:
             raise GenerationError(f"Could not place particle {index + 1} after {attempts} position attempts ({sum(map(len, cells.values()))}/{len(radii)} placed).")
     return positions + box.origin, observed, position_draws
-
