@@ -5,8 +5,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from .configuration_values import ConfigurationError, integer, number
+from .distributions import ExplicitDistribution
 from .domain import Box
-from .sampling import GenerationError, sample
+from .sampling import GenerationError
 
 VOLUME_FACTOR = 4.0 * np.pi / 3.0
 
@@ -15,7 +16,7 @@ def _validate_count(config):
     config["count"] = integer(config.get("count"), "count")
     if config["count"] > config["max_particles"]:
         raise ConfigurationError("count exceeds max_particles.")
-    if config["radii"]["type"] == "explicit" and len(config["radii"]["values"]) != config["count"]:
+    if isinstance(config["radii"], ExplicitDistribution) and len(config["radii"].values) != config["count"]:
         raise ConfigurationError("Explicit radii must match count.")
 
 
@@ -71,7 +72,7 @@ class FixedCount(GeometryStrategy):
         _validate_count(config)
 
     def prepare(self, config, rng):
-        return _box_from_config(config), sample(config["radii"], config["count"], rng)
+        return _box_from_config(config), config["radii"].sample(config["count"], rng)
 
 
 class FixedBoxFraction(GeometryStrategy):
@@ -94,7 +95,7 @@ class VariableBoxFraction(GeometryStrategy):
 
     def prepare(self, config, rng):
         box = _box_from_config(config)
-        radii = sample(config["radii"], config["count"], rng)
+        radii = config["radii"].sample(config["count"], rng)
         scale = (solid_volume(radii) / config["target_solid_fraction"] / box.volume) ** (1.0 / 3.0)
         return Box(box.origin, box.lengths * scale, box.periodic), radii
 
@@ -108,8 +109,8 @@ GEOMETRY_STRATEGIES = {
 
 def _radii_for_fraction(cfg, rng, volume):
     spec = cfg["radii"]
-    if spec["type"] == "explicit":
-        return sample(spec, cfg.get("count", len(spec.get("values", []))), rng)
+    if isinstance(spec, ExplicitDistribution):
+        return spec.sample(cfg.get("count", len(spec.values)), rng)
     target = cfg["target_solid_fraction"] * volume
     tolerance = cfg["solid_fraction_tolerance"] * volume
     # Keep an unmodified prefix of the sampled distribution; never shrink the last sphere.
@@ -117,7 +118,7 @@ def _radii_for_fraction(cfg, rng, volume):
     total = 0.0
     size = 0
     while size < cfg["max_particles"]:
-        draws = sample(spec, min(4096, cfg["max_particles"] - size), rng)
+        draws = spec.sample(min(4096, cfg["max_particles"] - size), rng)
         volumes = VOLUME_FACTOR * draws**3
         if not np.all(np.isfinite(volumes)) or np.any(volumes <= 0):
             raise GenerationError("Particle volumes must be finite and positive in float64.")

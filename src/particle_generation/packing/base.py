@@ -48,6 +48,10 @@ class PackingStrategy(ABC):
 
     method: ClassVar[str]
 
+    @property
+    def overlap_tolerance(self) -> float:
+        return 0.0
+
     @classmethod
     @abstractmethod
     def from_config(cls, config: dict):

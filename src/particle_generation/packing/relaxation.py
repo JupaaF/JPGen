@@ -115,6 +115,10 @@ class OverlapRelaxation(PackingStrategy):
     method = "overlap_relaxation"
     options: RelaxationOptions
 
+    @property
+    def overlap_tolerance(self):
+        return self.options.overlap_tolerance
+
     @classmethod
     def from_config(cls, config):
         mapping(config, "packing", {"method"} | RELAXATION_OPTIONS)

@@ -19,6 +19,10 @@ class ProgressiveGrowth(PackingStrategy):
     max_increment: float
     max_stages: int
 
+    @property
+    def overlap_tolerance(self):
+        return self.options.overlap_tolerance
+
     @classmethod
     def from_config(cls, config):
         mapping(config, "packing", {"method", "initial_scale", "initial_increment", "min_increment",

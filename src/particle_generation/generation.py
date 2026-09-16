@@ -3,18 +3,19 @@
 import numpy as np
 
 from .domain import ParticleSet
-from .packing import PackingConstraints, PackingRequest, build_packing_strategy
+from .packing import PackingConstraints, PackingRequest
 from .packing.geometry import validate_result
 from .sampling import GenerationError, stream, vectors
-from .strategies import GEOMETRY_STRATEGIES, solid_volume
+from .strategies import solid_volume
 
 
 class ParticleGenerator:
     """Generate one validated particle aggregate from normalized configuration."""
 
-    def generate(self, cfg, report=None):
-        strategy = GEOMETRY_STRATEGIES[cfg["mode"]]()
-        packing_strategy = build_packing_strategy(cfg["packing"])
+    def generate(self, plan, report=None):
+        cfg = plan.config
+        strategy = plan.geometry_strategy
+        packing_strategy = plan.packing_strategy
         last_error = None
         for restart in range(cfg["restarts"] + 1):
             if report:
@@ -40,7 +41,7 @@ class ParticleGenerator:
                 )
                 # Every algorithm must satisfy the final geometry, not just its internal stopping rule.
                 audit = validate_result(packing.positions, radii, box, cfg["max_overlap"],
-                                        cfg["packing"].get("overlap_tolerance", 0.0))
+                                        packing_strategy.overlap_tolerance)
                 positions = packing.positions
                 count = len(radii)
                 return ParticleSet(
@@ -48,7 +49,7 @@ class ParticleGenerator:
                     vectors(cfg["velocity"], count, stream(cfg["seed"], restart, 2), stream(cfg["seed"], restart, 3)),
                     vectors(cfg["angular_velocity"], count, stream(cfg["seed"], restart, 4), stream(cfg["seed"], restart, 5)),
                     box,
-                    {"seed": cfg["seed"], "successful_restart": restart, "packing_method": cfg["packing"]["method"],
+                    {"seed": cfg["seed"], "successful_restart": restart, "packing_method": packing_strategy.method,
                      "packing": packing.statistics, **audit, "solid_fraction": fraction,
                      "count": count, "rng": "PCG64", "stream_scheme": "SeedSequence(seed, spawn_key=(restart, role)); roles: radii=0, packing=1, speed=2, direction=3, angular_speed=4, angular_direction=5"},
                 )

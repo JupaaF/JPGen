@@ -11,7 +11,7 @@ import scipy
 import yaml
 
 from . import __version__
-from .configuration import validate_config
+from .configuration import build_generation_plan
 from .exporters.base import ParticleExporter
 from .exporters.kratos import KratosExporter
 from .exporters.vtk import VtkExporter
@@ -33,8 +33,8 @@ class ParticleStore(Protocol):
 
 
 class GenerationService(Protocol):
-    def generate(self, configuration, report=None):
-        """Build a validated particle aggregate from normalized configuration."""
+    def generate(self, plan, report=None):
+        """Build a validated particle aggregate from an executable plan."""
 
 
 def runtime_versions():
@@ -58,8 +58,9 @@ class ParticleGenerationApplication:
 
     def run(self, raw, report=print):
         """Execute and publish one run from a particle-generation mapping."""
-        cfg = validate_config(raw)
-        effective = {"particle_generation": cfg}
+        plan = build_generation_plan(raw)
+        cfg = plan.config
+        effective = {"particle_generation": plan.to_config()}
         versions = self.version_provider()
         status = {"status": "running", "seed": cfg["seed"], "versions": versions}
         workspace = self.runs.create(effective, status)
@@ -67,7 +68,7 @@ class ParticleGenerationApplication:
         report(f"Run directory: {workspace.directory}")
         report(f"Random seed: {cfg['seed']}")
         try:
-            particles = self.generator.generate(cfg, report)
+            particles = self.generator.generate(plan, report)
             particles.metadata["versions"] = versions
             filenames = [self.store.filename, *(exporter.filename for exporter in self.exporters)]
             with workspace.stage_outputs() as staging:

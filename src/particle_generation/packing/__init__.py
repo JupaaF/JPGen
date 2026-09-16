@@ -11,8 +11,3 @@ PACKING_STRATEGIES = {
     OverlapRelaxation.method: OverlapRelaxation,
     ProgressiveGrowth.method: ProgressiveGrowth,
 }
-
-
-def build_packing_strategy(config):
-    """Create a fully configured strategy from a validated packing mapping."""
-    return PACKING_STRATEGIES[config["method"]].from_config(config)

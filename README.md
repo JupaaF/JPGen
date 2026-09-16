@@ -26,7 +26,8 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `domain.py` | Box and particle data, without file or solver dependencies |
 | `configuration.py` | Common input validation, defaults and dispatch to strategy validation |
 | `configuration_values.py` | Shared scalar, vector and mapping checks |
-| `sampling.py` | Random streams, distributions and isotropic directions |
+| `distributions.py` | Polymorphic validation, sampling and serialization of scalar distributions |
+| `sampling.py` | Independent random streams and isotropic vector construction |
 | `strategies.py` | Abstract geometry strategy, mode registry and three box/radius preparation methods |
 | `generation.py` | `ParticleGenerator`: retries, random streams, final packing audit and particle assembly |
 | `packing/` | Abstract packing contract, insertion, geometric relaxation, growth and neighbor searches |
@@ -35,13 +36,13 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `run_repository.py` | Filesystem adapter for run workspaces, summaries and atomic output staging |
 | `application.py` | Injected application service and default CLI composition |
 
-`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the composed `ParticleGenerationApplication`. The application coordinates injected generation, run repository, particle store, exporters and version provider; concrete filesystem and file-format operations remain in their adapters. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
+`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the composed `ParticleGenerationApplication`. The application coordinates injected generation, run repository, particle store, exporters and version provider; concrete filesystem and file-format operations remain in their adapters. Configuration builds a `GenerationPlan` containing the normalized values and the exact geometry and packing strategy instances that will execute the run. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
 
 ## Generation modes
 
 `GeometryStrategy.prepare(config, rng)` returns a fresh `Box` and radius array for one attempt. `FixedCount`, `FixedBoxFraction` and `VariableBoxFraction` implement that contract and are selected through `GEOMETRY_STRATEGIES`. Strategies receive the validated section and the restart-specific radius stream; they do not place particles, manage retries, write files or create their own random generators. Box scaling belongs entirely to `VariableBoxFraction`.
 
-The configuration coordinator first validates common inputs, then calls `strategy.validate_config(config)` on its private configuration copy. Each strategy validates and normalizes its own fields; no `super()` call is required. Shared value checks live in `configuration_values.py` to avoid circular dependencies.
+The configuration coordinator first validates common inputs, then calls `strategy.validate_config(config)` on its private configuration copy. Each strategy validates and normalizes its own fields; no `super()` call is required. The selected geometry instance and the configured packing instance are retained in `GenerationPlan` and reused by `ParticleGenerator`; execution does not consult either strategy registry again. Shared value checks live in `configuration_values.py` to avoid circular dependencies.
 
 To add a geometry method, implement `GeometryStrategy.validate_config` and `prepare`, declare its additional accepted fields in `config_options`, and register its class. Mode-specific rules belong to the strategy, so adding a mode does not require conditionals in `configuration.py`. The common orchestration and any packing strategy can then be reused. Placement is a separate concern handled by `PackingStrategy`. Existing YAML mode names and seed behavior are unchanged.
 
@@ -70,7 +71,7 @@ The same distribution syntax applies to `radii`, `velocity` and `angular_velocit
 {type: explicit, values: [0.001, 0.0015, 0.002]}
 ```
 
-Radii must be strictly positive. Normal and lognormal bounds are mandatory, and values outside the interval are rejected, never clipped. `mean` and `std` describe the underlying normal before truncation; `median` and dimensionless `sigma` describe the underlying lognormal (`sigma` is the standard deviation of the logarithm). Truncation changes the resulting statistics. Rejection has a safety limit of 1000 draws per value; extremely unlikely intervals fail with an explanatory message. Distributions represent particle number, not mass fractions.
+Radii must be strictly positive. Normal and lognormal bounds are mandatory, and values outside the interval are rejected, never clipped. `mean` and `std` describe the underlying normal before truncation; `median` and dimensionless `sigma` describe the underlying lognormal (`sigma` is the standard deviation of the logarithm). Truncation changes the resulting statistics. Rejection has a safety limit of 1000 draws per value; extremely unlikely intervals fail with an explanatory message. Each distribution class owns its validation, sampling and normalized serialization, and is selected once through `DISTRIBUTIONS`. Distributions represent particle number, not mass fractions.
 
 Velocity distributions specify nonnegative **magnitudes** in m/s and rad/s respectively. Each particle receives independent directions uniformly distributed over the sphere, for both linear and angular velocity. These directions are statistically isotropic; the finite sample is not adjusted to have exactly zero net momentum. Both fields default to `{type: constant, value: 0}`. Explicit radii must match `count` where provided.
 
