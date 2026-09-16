@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..configuration_values import integer, mapping, number
+from ..domain import RelaxationStatistics
+from ..progress import RelaxationProgress, emit
 from ..sampling import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility, constrain, evaluate, random_positions
@@ -70,7 +72,7 @@ class RelaxationResult:
     max_excess: float
 
 
-def relax(positions, radii, box, max_overlap, options, rng, report=None):
+def relax(positions, radii, box, max_overlap, options, rng, observer=None):
     """Relax a copy of local positions; callers retain accepted stages for rollback."""
     positions = constrain(positions.copy(), radii, box)
     best_positions = positions.copy()
@@ -88,8 +90,8 @@ def relax(positions, radii, box, max_overlap, options, rng, report=None):
             best_positions = positions.copy()
         if iteration == options.max_iterations:
             break
-        if report and iteration and iteration % 100 == 0:
-            report(f"Relaxation iteration {iteration}: maximum overlap excess {excess:.6g}")
+        if iteration and iteration % 100 == 0:
+            emit(observer, RelaxationProgress(iteration, excess))
         stalled = iteration - last_progress >= options.stagnation_iterations
         if stalled or not np.any(correction):
             if perturbations >= options.max_perturbations:
@@ -127,7 +129,7 @@ class OverlapRelaxation(PackingStrategy):
     def to_config(self):
         return {"method": self.method, **self.options.to_config()}
 
-    def pack(self, request: PackingRequest, report=None):
+    def pack(self, request: PackingRequest, observer=None):
         check_feasibility(request.radii, request.box, request.constraints.max_overlap)
         initial = random_positions(request.radii, request.box, request.rng)
         result = relax(
@@ -137,11 +139,15 @@ class OverlapRelaxation(PackingStrategy):
             request.constraints.max_overlap,
             self.options,
             request.rng,
-            report,
+            observer,
         )
         if not result.converged:
             raise GenerationError(f"Overlap relaxation did not converge after {result.iterations} iterations; maximum overlap excess {result.max_excess:.6g}.")
-        return PackingResult(result.positions + request.box.origin, {
-            "position_draws": len(request.radii), "iterations": result.iterations,
-            "perturbations": result.perturbations,
-        })
+        return PackingResult(
+            result.positions + request.box.origin,
+            RelaxationStatistics(
+                position_draws=len(request.radii),
+                iterations=result.iterations,
+                perturbations=result.perturbations,
+            ),
+        )

@@ -17,6 +17,7 @@ from .exporters.kratos import KratosExporter
 from .exporters.vtk import VtkExporter
 from .generation import ParticleGenerator
 from .persistence import Hdf5ParticleStore
+from .progress import ConsoleProgressObserver, RunCompleted, RunFailed, RunStarted, emit
 from .run_repository import FileRunRepository, RunRepository
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +34,7 @@ class ParticleStore(Protocol):
 
 
 class GenerationService(Protocol):
-    def generate(self, plan, report=None):
+    def generate(self, plan, observer=None):
         """Build a validated particle aggregate from an executable plan."""
 
 
@@ -56,8 +57,10 @@ class ParticleGenerationApplication:
     exporters: Sequence[ParticleExporter]
     version_provider: Callable[[], dict]
 
-    def run(self, raw, report=print):
+    def run(self, raw, observer=None):
         """Execute and publish one run from a particle-generation mapping."""
+        if observer is None:
+            observer = ConsoleProgressObserver()
         plan = build_generation_plan(raw)
         cfg = plan.config
         effective = {"particle_generation": plan.to_config()}
@@ -65,11 +68,10 @@ class ParticleGenerationApplication:
         status = {"status": "running", "seed": cfg["seed"], "versions": versions}
         workspace = self.runs.create(effective, status)
 
-        report(f"Run directory: {workspace.directory}")
-        report(f"Random seed: {cfg['seed']}")
+        emit(observer, RunStarted(workspace.directory, cfg["seed"]))
         try:
-            particles = self.generator.generate(plan, report)
-            particles.metadata["versions"] = versions
+            particles = self.generator.generate(plan, observer)
+            particles = particles.with_metadata(particles.metadata.with_versions(versions))
             filenames = [self.store.filename, *(exporter.filename for exporter in self.exporters)]
             with workspace.stage_outputs() as staging:
                 self.store.write(staging / self.store.filename, particles, effective)
@@ -77,7 +79,7 @@ class ParticleGenerationApplication:
                 for exporter in self.exporters:
                     exporter.export(staging / exporter.filename, restored)
                 workspace.publish(staging, filenames)
-            status.update(particles.metadata)
+            status.update(particles.metadata.to_dict())
             status.update(
                 status="complete",
                 box_origin=particles.box.origin.tolist(),
@@ -85,12 +87,20 @@ class ParticleGenerationApplication:
                 periodic=particles.box.periodic,
             )
             workspace.save_summary(status)
-            report(f"Generated {len(particles.ids)} particles; solid fraction: {particles.solid_fraction:.9g}")
-            report(f"Saved {', '.join(filenames)} to {workspace.directory}")
+            emit(
+                observer,
+                RunCompleted(
+                    directory=workspace.directory,
+                    particle_count=len(particles.ids),
+                    solid_fraction=particles.solid_fraction,
+                    filenames=tuple(filenames),
+                ),
+            )
             return workspace.directory
         except Exception as error:
             status.update(status="failed", error=str(error))
             workspace.save_summary(status)
+            emit(observer, RunFailed(workspace.directory, str(error)))
             raise
 
 

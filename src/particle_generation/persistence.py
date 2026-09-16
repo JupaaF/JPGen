@@ -4,7 +4,7 @@ import json
 
 import h5py
 
-from .domain import Box, ParticleSet
+from .domain import Box, GenerationMetadata, ParticleSet
 
 
 SCHEMA_VERSION = "2.0"
@@ -30,7 +30,7 @@ class Hdf5ParticleStore:
                 domain.create_dataset(name, data=getattr(particles.box, name)).attrs["units"] = "m"
             domain.attrs["periodic"] = particles.box.periodic
             generation = file.create_group("generation")
-            generation.attrs["metadata_json"] = json.dumps(particles.metadata, sort_keys=True)
+            generation.attrs["metadata_json"] = json.dumps(particles.metadata.to_dict(), sort_keys=True)
             generation.create_dataset(
                 "configuration_json",
                 data=json.dumps(configuration, sort_keys=True),
@@ -44,7 +44,7 @@ class Hdf5ParticleStore:
             arrays = {name: file[f"particles/{name}"][:] for name in ARRAYS}
             domain = file["domain"]
             box = Box(domain["origin"][:], domain["lengths"][:], bool(domain.attrs["periodic"]))
-            metadata = json.loads(file["generation"].attrs["metadata_json"])
+            metadata = GenerationMetadata.from_dict(json.loads(file["generation"].attrs["metadata_json"]))
             configuration = json.loads(file["generation/configuration_json"].asstr()[()])
         particles = ParticleSet(**arrays, box=box, metadata=metadata)
         particles.validate()

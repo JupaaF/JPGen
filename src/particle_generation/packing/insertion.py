@@ -6,6 +6,7 @@ from itertools import product
 import numpy as np
 
 from ..configuration_values import integer, mapping
+from ..domain import InsertionStatistics
 from ..sampling import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility
@@ -25,7 +26,7 @@ class RandomSequentialInsertion(PackingStrategy):
     def to_config(self):
         return {"method": self.method, "position_attempts": self.position_attempts}
 
-    def pack(self, request: PackingRequest, report=None):
+    def pack(self, request: PackingRequest, observer=None):
         positions, overlap, draws = place(
             request.radii,
             request.box,
@@ -33,8 +34,10 @@ class RandomSequentialInsertion(PackingStrategy):
             self.position_attempts,
             request.rng,
         )
-        return PackingResult(positions, {"position_draws": draws, "iterations": 0,
-                                        "max_observed_overlap": overlap})
+        return PackingResult(
+            positions,
+            InsertionStatistics(position_draws=draws, iterations=0, max_observed_overlap=overlap),
+        )
 
 
 OFFSETS = tuple(product((-1, 0, 1), repeat=3))

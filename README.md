@@ -23,7 +23,7 @@ Everything specific to particle generation is contained in `src/particle_generat
 
 | Component | Responsibility |
 | --- | --- |
-| `domain.py` | Box and particle data, without file or solver dependencies |
+| `domain.py` | Validated value objects, typed generation metadata, audits and packing statistics |
 | `configuration.py` | Common input validation, defaults and dispatch to strategy validation |
 | `configuration_values.py` | Shared scalar, vector and mapping checks |
 | `distributions.py` | Polymorphic validation, sampling and serialization of scalar distributions |
@@ -32,11 +32,16 @@ Everything specific to particle generation is contained in `src/particle_generat
 | `generation.py` | `ParticleGenerator`: retries, random streams, final packing audit and particle assembly |
 | `packing/` | Abstract packing contract, insertion, geometric relaxation, growth and neighbor searches |
 | `persistence.py` | `Hdf5ParticleStore`, the versioned particle persistence adapter |
+| `progress.py` | Structured progress events, observer port and console presentation adapter |
 | `exporters/` | `ParticleExporter` port and the Kratos and VTK adapters |
 | `run_repository.py` | Filesystem adapter for run workspaces, summaries and atomic output staging |
 | `application.py` | Injected application service and default CLI composition |
 
-`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the composed `ParticleGenerationApplication`. The application coordinates injected generation, run repository, particle store, exporters and version provider; concrete filesystem and file-format operations remain in their adapters. Configuration builds a `GenerationPlan` containing the normalized values and the exact geometry and packing strategy instances that will execute the run. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
+`src/main.py` handles CLI arguments and dispatch, passing only the `particle_generation` section to the composed `ParticleGenerationApplication`. The application coordinates injected generation, run repository, particle store, exporters, progress observer and version provider; concrete filesystem and file-format operations remain in their adapters. Configuration builds a `GenerationPlan` containing the normalized values and the exact geometry and packing strategy instances that will execute the run. `src/configuration.py` provides `load_config`, which reads YAML and checks that its root is a nonempty mapping. The module validates its own section without inspecting other modules' inputs. Saved configuration files retain the top-level `particle_generation` wrapper for CLI replay. There is no public Python API commitment.
+
+Validation is divided by responsibility. Configuration checks input syntax and constructs domain values; `Box`, `ParticleSet`, `GenerationMetadata` and the statistics DTOs enforce their own invariants when constructed. Packing feasibility is an operation-specific precondition, while `audit_packing` independently checks an algorithm's final containment and overlap result. Persistence reconstructs the same domain objects instead of maintaining a separate set of structural rules.
+
+Progress is emitted as typed events such as `GenerationAttemptStarted`, `RelaxationProgress` and `RunCompleted`. Algorithms do not format user-facing strings. The CLI installs `ConsoleProgressObserver`; other callers can inject an observer that records, translates or forwards events without parsing console text.
 
 ## Generation modes
 

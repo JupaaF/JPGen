@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 
 from ..configuration_values import ConfigurationError, integer, mapping, number
+from ..domain import GrowthStage, GrowthStatistics
+from ..progress import GrowthStageRejected, GrowthStageStarted, emit
 from ..sampling import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility, random_positions
@@ -52,19 +54,18 @@ class ProgressiveGrowth(PackingStrategy):
             "max_stages": self.max_stages,
         }
 
-    def pack(self, request: PackingRequest, report=None):
+    def pack(self, request: PackingRequest, observer=None):
         check_feasibility(request.radii, request.box, request.constraints.max_overlap)
         scale = self.initial_scale
         temporary_radii = scale * request.radii
         result = relax(random_positions(temporary_radii, request.box, request.rng), temporary_radii,
-                       request.box, request.constraints.max_overlap, self.options, request.rng, report)
+                       request.box, request.constraints.max_overlap, self.options, request.rng, observer)
         if not result.converged:
             raise GenerationError(f"Initial growth stage at scale {scale:.6g} did not converge; maximum overlap excess {result.max_excess:.6g}.")
         accepted = result.positions
         iterations = result.iterations
         perturbations = result.perturbations
-        history = [{"scale": scale, "accepted": True, "iterations": result.iterations,
-                    "max_excess": result.max_excess}]
+        history = [GrowthStage(scale, True, result.iterations, result.max_excess)]
         increment = self.initial_increment
         while scale < 1:
             if len(history) >= self.max_stages:
@@ -72,16 +73,14 @@ class ProgressiveGrowth(PackingStrategy):
             trial_scale = min(1.0, scale + increment)
             if trial_scale <= scale:
                 raise GenerationError("Growth increment is too small to change the radius scale.")
-            if report:
-                report(f"Growth stage {len(history) + 1}: radius scale {trial_scale:.6g}")
+            emit(observer, GrowthStageStarted(len(history) + 1, trial_scale))
             # relax() copies accepted positions. Failed stages never overwrite this checkpoint.
             result = relax(accepted, trial_scale * request.radii, request.box,
                            request.constraints.max_overlap,
-                           self.options, request.rng, report)
+                           self.options, request.rng, observer)
             iterations += result.iterations
             perturbations += result.perturbations
-            history.append({"scale": trial_scale, "accepted": result.converged,
-                            "iterations": result.iterations, "max_excess": result.max_excess})
+            history.append(GrowthStage(trial_scale, result.converged, result.iterations, result.max_excess))
             if result.converged:
                 accepted = result.positions
                 scale = trial_scale
@@ -89,13 +88,16 @@ class ProgressiveGrowth(PackingStrategy):
                     increment = min(self.max_increment, increment * 1.25)
             else:
                 increment = (trial_scale - scale) * 0.5
-                if report:
-                    report(f"Growth stage rejected; restoring scale {scale:.6g}, next increment {increment:.6g}")
+                emit(observer, GrowthStageRejected(scale, increment))
                 if increment < self.min_increment:
                     raise GenerationError(f"Growth stalled at scale {scale:.6g}; increment fell below min_increment. Final radii were not reached.")
-        return PackingResult(accepted + request.box.origin, {
-            "position_draws": len(request.radii), "iterations": iterations, "perturbations": perturbations,
-            "final_scale": scale, "stages": history,
-            "accepted_stages": sum(stage["accepted"] for stage in history),
-            "rejected_stages": sum(not stage["accepted"] for stage in history),
-        })
+        return PackingResult(
+            accepted + request.box.origin,
+            GrowthStatistics(
+                position_draws=len(request.radii),
+                iterations=iterations,
+                perturbations=perturbations,
+                final_scale=scale,
+                stages=tuple(history),
+            ),
+        )

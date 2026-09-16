@@ -3,10 +3,12 @@
 import numpy as np
 from scipy.spatial import cKDTree
 
+from ..domain import PackingAudit
 from ..sampling import GenerationError
 
 
 def check_feasibility(radii, box, max_overlap):
+    """Check whether a packing operation can satisfy its boundary constraints."""
     largest = float(np.max(radii))
     if not box.periodic and np.any(2 * largest > box.lengths):
         raise GenerationError("A sphere is too large to fit completely inside the nonperiodic box.")
@@ -92,7 +94,8 @@ def evaluate(positions, radii, box, max_overlap, rng=None):
     return maximum, observed, energy, correction
 
 
-def validate_result(positions, radii, box, max_overlap, tolerance):
+def audit_packing(positions, radii, box, max_overlap, tolerance):
+    """Audit algorithm output against containment and overlap constraints."""
     check_feasibility(radii, box, max_overlap)
     if positions.shape != (len(radii), 3) or not np.all(np.isfinite(positions)):
         raise GenerationError("Packing returned invalid positions.")
@@ -106,5 +109,8 @@ def validate_result(positions, radii, box, max_overlap, tolerance):
     excess, observed, _, _ = evaluate(local, radii, box, max_overlap)
     if excess > tolerance + 64 * np.finfo(float).eps:
         raise GenerationError(f"Final packing exceeds the overlap limit by {excess:.6g}; tolerance is {tolerance:.6g}.")
-    return {"max_observed_overlap": observed, "max_overlap_excess": excess,
-            "overlap_tolerance": tolerance}
+    return PackingAudit(
+        max_observed_overlap=observed,
+        max_overlap_excess=excess,
+        overlap_tolerance=tolerance,
+    )

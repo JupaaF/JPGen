@@ -1,12 +1,12 @@
 """Validate YAML values and resolve defaults before generation starts."""
 
-import math
 import secrets
 from copy import deepcopy
 from dataclasses import dataclass
 
 from .configuration_values import ConfigurationError, integer, mapping, number, vector
 from .distributions import ExplicitDistribution, build_distribution
+from .domain import Box
 from .packing import PACKING_STRATEGIES, PackingStrategy
 from .strategies import GEOMETRY_STRATEGIES, GeometryStrategy
 
@@ -23,6 +23,11 @@ class GenerationPlan:
         result = deepcopy(self.config)
         for field in ("radii", "velocity", "angular_velocity"):
             result[field] = self.config[field].to_config()
+        result["box"] = {
+            "origin": self.config["box"].origin.tolist(),
+            "lengths": self.config["box"].lengths.tolist(),
+            "periodic": self.config["box"].periodic,
+        }
         result["packing"] = self.packing_strategy.to_config()
         return result
 
@@ -55,11 +60,7 @@ def build_generation_plan(raw):
     if not isinstance(box.get("periodic", False), bool):
         raise ConfigurationError("box.periodic must be true or false for all three axes.")
     box["periodic"] = box.get("periodic", False)
-    volume = math.prod(box["lengths"])
-    if not math.isfinite(volume) or volume <= 0:
-        raise ConfigurationError("Box volume must be finite and positive in float64.")
-    if any(not math.isfinite(o + l) or o + l == o for o, l in zip(box["origin"], box["lengths"])):
-        raise ConfigurationError("Box bounds cannot be represented accurately in float64.")
+    cfg["box"] = Box(box["origin"], box["lengths"], box["periodic"])
     cfg["radii"] = build_distribution(cfg["radii"], "radii", positive=True, allow_explicit=True)
     if isinstance(cfg["radii"], ExplicitDistribution):
         size = len(cfg["radii"].values)

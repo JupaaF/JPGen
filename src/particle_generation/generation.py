@@ -2,9 +2,15 @@
 
 import numpy as np
 
-from .domain import ParticleSet
+from .domain import GenerationMetadata, ParticleSet
 from .packing import PackingConstraints, PackingRequest
-from .packing.geometry import validate_result
+from .packing.geometry import audit_packing
+from .progress import (
+    ExpectedParticleCount,
+    GenerationAttemptFailed,
+    GenerationAttemptStarted,
+    emit,
+)
 from .sampling import GenerationError, stream, vectors
 from .strategies import solid_volume
 
@@ -12,21 +18,18 @@ from .strategies import solid_volume
 class ParticleGenerator:
     """Generate one validated particle aggregate from normalized configuration."""
 
-    def generate(self, plan, report=None):
+    def generate(self, plan, observer=None):
         cfg = plan.config
         strategy = plan.geometry_strategy
         packing_strategy = plan.packing_strategy
         last_error = None
         for restart in range(cfg["restarts"] + 1):
-            if report:
-                report(f"Generation attempt {restart + 1}/{cfg['restarts'] + 1}")
+            emit(observer, GenerationAttemptStarted(restart + 1, cfg["restarts"] + 1))
             try:
                 box, radii = strategy.prepare(cfg, stream(cfg["seed"], restart, 0))
-                if "count" not in cfg and report:
-                    report(f"Expected particle count: {len(radii)}")
+                if "count" not in cfg:
+                    emit(observer, ExpectedParticleCount(len(radii)))
                 volume = solid_volume(radii)
-                if not np.all(np.isfinite(box.lengths)) or not np.isfinite(box.volume) or box.volume <= 0:
-                    raise GenerationError("Generated box is not representable in float64.")
                 fraction = volume / box.volume
                 if "target_solid_fraction" in cfg and abs(fraction - cfg["target_solid_fraction"]) > cfg["solid_fraction_tolerance"] + 1e-14:
                     raise GenerationError(f"Sample solid fraction {fraction:.9g} is outside the requested tolerance.")
@@ -37,11 +40,16 @@ class ParticleGenerator:
                         constraints=PackingConstraints(max_overlap=cfg["max_overlap"]),
                         rng=stream(cfg["seed"], restart, 1),
                     ),
-                    report,
+                    observer,
                 )
                 # Every algorithm must satisfy the final geometry, not just its internal stopping rule.
-                audit = validate_result(packing.positions, radii, box, cfg["max_overlap"],
-                                        packing_strategy.overlap_tolerance)
+                audit = audit_packing(
+                    packing.positions,
+                    radii,
+                    box,
+                    cfg["max_overlap"],
+                    packing_strategy.overlap_tolerance,
+                )
                 positions = packing.positions
                 count = len(radii)
                 return ParticleSet(
@@ -49,12 +57,19 @@ class ParticleGenerator:
                     vectors(cfg["velocity"], count, stream(cfg["seed"], restart, 2), stream(cfg["seed"], restart, 3)),
                     vectors(cfg["angular_velocity"], count, stream(cfg["seed"], restart, 4), stream(cfg["seed"], restart, 5)),
                     box,
-                    {"seed": cfg["seed"], "successful_restart": restart, "packing_method": packing_strategy.method,
-                     "packing": packing.statistics, **audit, "solid_fraction": fraction,
-                     "count": count, "rng": "PCG64", "stream_scheme": "SeedSequence(seed, spawn_key=(restart, role)); roles: radii=0, packing=1, speed=2, direction=3, angular_speed=4, angular_direction=5"},
+                    GenerationMetadata(
+                        seed=cfg["seed"],
+                        successful_restart=restart,
+                        packing_method=packing_strategy.method,
+                        packing=packing.statistics,
+                        audit=audit,
+                        solid_fraction=fraction,
+                        count=count,
+                        rng="PCG64",
+                        stream_scheme="SeedSequence(seed, spawn_key=(restart, role)); roles: radii=0, packing=1, speed=2, direction=3, angular_speed=4, angular_direction=5",
+                    ),
                 )
             except GenerationError as error:
                 last_error = error
-                if report:
-                    report(f"Attempt failed: {error}")
+                emit(observer, GenerationAttemptFailed(restart + 1, str(error)))
         raise GenerationError(f"Generation failed after {cfg['restarts'] + 1} attempts. {last_error}")

@@ -6,13 +6,13 @@ from typing import ClassVar
 
 import numpy as np
 
-from ..domain import Box
+from ..domain import Box, PackingStatistics
 
 
 @dataclass
 class PackingResult:
     positions: np.ndarray
-    statistics: dict
+    statistics: PackingStatistics
 
 
 @dataclass(frozen=True)
@@ -62,5 +62,5 @@ class PackingStrategy(ABC):
         """Return the complete normalized packing mapping."""
 
     @abstractmethod
-    def pack(self, request: PackingRequest, report=None) -> PackingResult:
+    def pack(self, request: PackingRequest, observer=None) -> PackingResult:
         """Return final positions and algorithm statistics for one attempt."""

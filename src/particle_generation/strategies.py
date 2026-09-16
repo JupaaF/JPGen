@@ -27,11 +27,6 @@ def _validate_target_fraction(config):
         raise ConfigurationError("solid_fraction_tolerance must be smaller than target_solid_fraction.")
 
 
-def _box_from_config(cfg):
-    return Box(np.array(cfg["box"]["origin"], dtype=np.float64),
-               np.array(cfg["box"]["lengths"], dtype=np.float64), cfg["box"]["periodic"])
-
-
 def solid_volume(radii):
     """Return total sphere volume, rejecting invalid numerical values."""
     with np.errstate(over="ignore", under="ignore"):
@@ -45,7 +40,7 @@ def solid_volume(radii):
 class GeometryStrategy(ABC):
     """Stateless preparation using validated inputs and the supplied random stream.
 
-    prepare() must return fresh geometry without mutating config or owning RNG state.
+    prepare() returns immutable geometry without mutating config or owning RNG state.
     Raise GenerationError when an attempt cannot produce feasible geometry.
     """
 
@@ -72,7 +67,7 @@ class FixedCount(GeometryStrategy):
         _validate_count(config)
 
     def prepare(self, config, rng):
-        return _box_from_config(config), config["radii"].sample(config["count"], rng)
+        return config["box"], config["radii"].sample(config["count"], rng)
 
 
 class FixedBoxFraction(GeometryStrategy):
@@ -82,7 +77,7 @@ class FixedBoxFraction(GeometryStrategy):
         _validate_target_fraction(config)
 
     def prepare(self, config, rng):
-        box = _box_from_config(config)
+        box = config["box"]
         return box, _radii_for_fraction(config, rng, box.volume)
 
 
@@ -94,7 +89,7 @@ class VariableBoxFraction(GeometryStrategy):
         _validate_target_fraction(config)
 
     def prepare(self, config, rng):
-        box = _box_from_config(config)
+        box = config["box"]
         radii = config["radii"].sample(config["count"], rng)
         scale = (solid_volume(radii) / config["target_solid_fraction"] / box.volume) ** (1.0 / 3.0)
         return Box(box.origin, box.lengths * scale, box.periodic), radii
