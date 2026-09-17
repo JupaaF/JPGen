@@ -6,8 +6,8 @@ import numpy as np
 
 from ..configuration_values import integer, mapping, number
 from ..domain import RelaxationStatistics
+from ..errors import GenerationError
 from ..progress import RelaxationProgress, emit
-from ..sampling import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility, constrain, evaluate, random_positions
 

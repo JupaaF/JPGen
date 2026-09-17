@@ -3,6 +3,7 @@
 import numpy as np
 
 from .domain import GenerationMetadata, ParticleSet
+from .errors import GenerationError
 from .packing import PackingRequest
 from .packing.geometry import audit_packing
 from .progress import (
@@ -11,7 +12,7 @@ from .progress import (
     GenerationAttemptStarted,
     emit,
 )
-from .sampling import GenerationError, stream, vectors
+from .sampling import stream, vectors
 from .strategies import solid_volume
 
 

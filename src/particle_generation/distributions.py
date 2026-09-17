@@ -6,8 +6,8 @@ from typing import ClassVar
 
 import numpy as np
 
-from .configuration_values import ConfigurationError, mapping, number
-from .sampling import GenerationError
+from .configuration_values import mapping, number
+from .errors import ConfigurationError, GenerationError
 
 
 class Distribution(ABC):

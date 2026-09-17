@@ -4,7 +4,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from ..domain import PackingAudit
-from ..sampling import GenerationError
+from ..errors import GenerationError
 
 
 def check_feasibility(radii, box, max_overlap):

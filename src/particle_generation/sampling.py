@@ -3,10 +3,6 @@
 import numpy as np
 
 
-class GenerationError(ValueError):
-    pass
-
-
 def stream(seed, restart, role):
     return np.random.Generator(np.random.PCG64(np.random.SeedSequence(seed, spawn_key=(restart, role))))
 

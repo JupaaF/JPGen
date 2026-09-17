@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass
 
-from ..configuration_values import ConfigurationError, integer, mapping, number
+from ..configuration_values import integer, mapping, number
 from ..domain import GrowthStage, GrowthStatistics
+from ..errors import ConfigurationError, GenerationError
 from ..progress import GrowthStageRejected, GrowthStageStarted, emit
-from ..sampling import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility, random_positions
 from .relaxation import RELAXATION_OPTIONS, RelaxationOptions, relax

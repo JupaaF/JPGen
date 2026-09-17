@@ -7,7 +7,7 @@ import numpy as np
 
 from ..configuration_values import integer, mapping
 from ..domain import InsertionStatistics
-from ..sampling import GenerationError
+from ..errors import GenerationError
 from .base import PackingRequest, PackingResult, PackingStrategy
 from .geometry import check_feasibility
 

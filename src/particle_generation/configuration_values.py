@@ -2,9 +2,7 @@
 
 import math
 
-
-class ConfigurationError(ValueError):
-    pass
+from .errors import ConfigurationError
 
 
 def mapping(value, name, allowed, required=()):
@@ -36,5 +34,4 @@ def vector(value, name, positive=False):
     if not isinstance(value, list) or len(value) != 3:
         raise ConfigurationError(f"{name} must contain three numbers.")
     return [number(v, name, 0 if positive else None, strict_min=positive) for v in value]
-
 

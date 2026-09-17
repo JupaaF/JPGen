@@ -4,9 +4,10 @@ import secrets
 from copy import deepcopy
 from dataclasses import dataclass
 
-from .configuration_values import ConfigurationError, integer, mapping, number, vector
+from .configuration_values import integer, mapping, number, vector
 from .distributions import ExplicitDistribution, build_distribution
 from .domain import Box
+from .errors import ConfigurationError
 from .packing import PACKING_STRATEGIES, PackingConstraints, PackingStrategy
 from .strategies import GEOMETRY_STRATEGIES, GeometryStrategy
 

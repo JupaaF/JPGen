@@ -23,9 +23,10 @@ Everything specific to particle generation is contained in `src/particle_generat
 
 | Component | Responsibility |
 | --- | --- |
-| `domain.py` | Validated value objects, typed generation metadata, audits and packing statistics |
+| `domain/` | Validated box and particle values, generation metadata, audits and packing statistics |
 | `configuration.py` | Common input validation, defaults and dispatch to strategy validation |
 | `configuration_values.py` | Shared scalar, vector and mapping checks |
+| `errors.py` | Configuration and generation exceptions shared across layers |
 | `distributions.py` | Polymorphic validation, sampling and serialization of scalar distributions |
 | `sampling.py` | Independent random streams and isotropic vector construction |
 | `strategies.py` | Abstract geometry strategy, mode registry and three box/radius preparation methods |
@@ -179,17 +180,3 @@ HDF5 schema `JPGen.particles`, version `2.0`, stores float64 positions/radii/vel
 Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed using the system random source. The actual seed is saved **before** generation. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, packing=1, speed=2, linear direction=3, angular speed=4, angular direction=5. The packing stream includes initialization, coincident-center separation and stagnation perturbations; algorithm iterations and failed growth stages consume this same deterministic stream. Changing speed settings does not consume positional randomness. Run names are unique filesystem identifiers and do not influence particle generation.
 
 Replay requires the same effective configuration, generator version and dependency versions, which are saved per run. Numerical results are reproducible within that environment; identical files across library versions or platforms are not guaranteed. HDF5 files are not restart checkpoints of an evolving DEM simulation: contact history is outside this module's scope.
-
-## Dense-packing benchmark
-
-Run a bounded experiment with exactly 8,000 particles, nominal solid fraction 0.62, periodic boundaries, uniform radii from 0.5 to 1 mm, zero permitted geometric overlap and seed 20260916:
-
-```bash
-.venv/bin/python scripts/benchmark_dense_packing.py --method overlap_relaxation
-.venv/bin/python scripts/benchmark_dense_packing.py --method progressive_growth
-.venv/bin/python scripts/benchmark_dense_packing.py --method random_sequential
-```
-
-Each experiment uses `variable_box_fraction`, disables full restarts to measure one reproducible attempt, and defaults to a 300-second generation limit and 3,000 iterations per relaxation call. Override `--seconds`, `--iterations`, `--seed`, `--count`, `--overlap`, or `--fraction` as needed. For example, add `--overlap 0.15` to allow penetration up to 15% of the smaller sphere diameter. The benchmark uses POSIX interval timers (Linux/macOS). A timeout is an experiment limit, not proof that the requested geometry is impossible.
-
-The run directory contains `benchmark.log` with timestamped progress and `benchmark.json` with elapsed time and completion/failure status, alongside the usual effective configuration and summary. Successful output is checked independently with an all-pairs overlap calculation and a recomputed volume fraction. Failed or timed-out generation does not export particle datasets. Wall-clock timings depend on competing system load; run methods sequentially for a controlled performance comparison.

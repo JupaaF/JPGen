@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from .configuration_values import ConfigurationError, integer, number
+from .configuration_values import integer, number
 from .distributions import ExplicitDistribution
 from .domain import Box
-from .sampling import GenerationError
+from .errors import ConfigurationError, GenerationError
 
 VOLUME_FACTOR = 4.0 * np.pi / 3.0
 
