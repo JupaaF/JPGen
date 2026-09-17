@@ -122,7 +122,7 @@ Available methods:
 - `overlap_relaxation`: begins from random centers and iteratively removes overlap using bounded displacements and optional seeded perturbations.
 - `progressive_growth`: places reduced temporary radii, relaxes them, and grows toward the final radii with rollback and adaptive increments.
 
-The relaxation-based methods accept `max_iterations`, `step_size`, `max_displacement`, `overlap_tolerance`, `stagnation_iterations`, `improvement_tolerance`, `max_perturbations` and `perturbation`. Progressive growth additionally accepts `initial_scale`, `initial_increment`, `min_increment`, `max_increment` and `max_stages`.
+The relaxation-based methods accept `max_iterations`, `step_size`, `max_displacement`, `overlap_tolerance`, `stagnation_iterations`, `improvement_tolerance`, `max_perturbations`, `perturbation` and `relax_all_overlaps`. The last option defaults to `true`: while any pair exceeds `max_overlap`, every overlapping pair contributes a correction toward zero overlap. Set it to `false` to correct only the portion of overlap above `max_overlap`. In both modes relaxation stops as soon as all pairs satisfy `max_overlap` within `overlap_tolerance`. Progressive growth additionally accepts `initial_scale`, `initial_increment`, `min_increment`, `max_increment` and `max_stages`.
 
 These methods are geometric heuristics. They do not guarantee convergence, calculate forces, establish mechanical equilibrium or run DEM.
 

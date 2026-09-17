@@ -350,6 +350,15 @@ class PackingStageWizard:
                 strict_minimum=True,
                 visible=relaxation,
             ),
+            _select(
+                "placement.relax_all_overlaps",
+                "Should relaxation act on every overlap?",
+                "Yes pushes every overlapping pair towards zero overlap while any pair exceeds the permitted limit. No corrects only the excess above max_overlap.",
+                "true usually distributes particles more evenly before convergence.",
+                (MenuChoice("Yes", True), MenuChoice("No", False)),
+                default=True,
+                visible=relaxation,
+            ),
             _integer_question(
                 "placement.stagnation_iterations",
                 "Stagnation iteration limit",
@@ -499,6 +508,7 @@ class PackingStageWizard:
             for field in (
                 "max_iterations", "step_size", "max_displacement", "stagnation_iterations",
                 "improvement_tolerance", "max_perturbations", "perturbation", "overlap_tolerance",
+                "relax_all_overlaps",
             ):
                 placement[field] = answers[f"placement.{field}"]
             if method == "progressive_growth":

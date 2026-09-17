@@ -6,7 +6,7 @@ import numpy as np
 
 from ...configuration_values import integer, mapping, number
 from ..domain import RelaxationStatistics
-from ...errors import PackingGenerationError
+from ...errors import ConfigurationError, PackingGenerationError
 from ...progress import RelaxationProgress, emit
 from .base import PlacementRequest, PlacementResult, PlacementStrategy
 from .geometry import check_feasibility, constrain, evaluate, random_positions
@@ -14,6 +14,7 @@ from .geometry import check_feasibility, constrain, evaluate, random_positions
 RELAXATION_OPTIONS = {
     "max_iterations", "step_size", "max_displacement", "stagnation_iterations",
     "improvement_tolerance", "max_perturbations", "perturbation", "overlap_tolerance",
+    "relax_all_overlaps",
 }
 
 
@@ -22,6 +23,7 @@ class RelaxationOptions:
     max_iterations: int
     stagnation_iterations: int
     max_perturbations: int
+    relax_all_overlaps: bool
     step_size: float
     max_displacement: float
     improvement_tolerance: float
@@ -30,6 +32,9 @@ class RelaxationOptions:
 
     @classmethod
     def from_config(cls, config):
+        relax_all_overlaps = config.get("relax_all_overlaps", True)
+        if not isinstance(relax_all_overlaps, bool):
+            raise ConfigurationError("placement.relax_all_overlaps must be true or false.")
         integers = {
             name: integer(config.get(name, default), f"placement.{name}", minimum)
             for name, default, minimum in (
@@ -48,13 +53,14 @@ class RelaxationOptions:
                 ("overlap_tolerance", 1e-8),
             )
         }
-        return cls(**integers, **numbers)
+        return cls(relax_all_overlaps=relax_all_overlaps, **integers, **numbers)
 
     def to_config(self):
         return {
             "max_iterations": self.max_iterations,
             "stagnation_iterations": self.stagnation_iterations,
             "max_perturbations": self.max_perturbations,
+            "relax_all_overlaps": self.relax_all_overlaps,
             "step_size": self.step_size,
             "max_displacement": self.max_displacement,
             "improvement_tolerance": self.improvement_tolerance,
@@ -76,18 +82,29 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
     """Relax a copy of local positions; callers retain accepted stages for rollback."""
     positions = constrain(positions.copy(), radii, box)
     best_positions = positions.copy()
-    best_energy = float("inf")
+    best_score = (float("inf"), float("inf"))
+    lowest_energy = float("inf")
     last_progress = 0
     perturbations = 0
     for iteration in range(options.max_iterations + 1):
-        excess, _, energy, correction = evaluate(positions, radii, box, max_overlap, rng)
+        excess, _, energy, correction = evaluate(
+            positions,
+            radii,
+            box,
+            max_overlap,
+            rng,
+            relax_all_overlaps=options.relax_all_overlaps,
+        )
         if excess <= options.overlap_tolerance:
             return RelaxationResult(positions, True, iteration, perturbations, excess)
-        if energy < best_energy:
-            if energy < best_energy * (1 - options.improvement_tolerance):
-                last_progress = iteration
-            best_energy = energy
+        score = (excess, energy)
+        if score < best_score:
+            best_score = score
             best_positions = positions.copy()
+        if energy < lowest_energy:
+            if energy < lowest_energy * (1 - options.improvement_tolerance):
+                last_progress = iteration
+            lowest_energy = energy
         if iteration == options.max_iterations:
             break
         if iteration and iteration % 100 == 0:

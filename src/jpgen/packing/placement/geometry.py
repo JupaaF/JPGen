@@ -52,8 +52,13 @@ def pairs(positions, radii, box):
         yield i, j, delta, np.linalg.norm(delta, axis=1)
 
 
-def evaluate(positions, radii, box, max_overlap, rng=None):
-    """Measure violations and optionally assemble damped pair-separation directions."""
+def evaluate(positions, radii, box, max_overlap, rng=None, relax_all_overlaps=True):
+    """Measure violations and optionally assemble overlap corrections.
+
+    When ``relax_all_overlaps`` is true, ``max_overlap`` is only the acceptance
+    threshold and all overlaps are pushed towards zero. Otherwise, only the
+    portion exceeding ``max_overlap`` contributes to the correction.
+    """
     correction = np.zeros_like(positions) if rng is not None else None
     degree = np.zeros(len(radii), dtype=np.int64) if rng is not None else None
     observed = max(0.0, 1 - float(np.min(box.lengths)) / (2 * float(np.max(radii)))) if box.periodic else 0.0
@@ -65,17 +70,23 @@ def evaluate(positions, radii, box, max_overlap, rng=None):
         observed = max(observed, float(overlap.max()))
         if max_overlap == 1:
             continue  # Complete containment is allowed, even for unequal radii.
-        excess = np.maximum(0, radii[i] + radii[j] - max_overlap * diameter - distance)
-        active = excess > 0
+        overlap_distance = np.maximum(0, radii[i] + radii[j] - distance)
+        excess = np.maximum(0, overlap_distance - max_overlap * diameter)
+        violation = excess > 0
+        if np.any(violation):
+            normalized = excess[violation] / diameter[violation]
+            maximum = max(maximum, float(normalized.max()))
+        separation = overlap_distance if relax_all_overlaps else excess
+        active = separation > 0
         if not np.any(active):
             continue
-        normalized = excess / diameter
-        maximum = max(maximum, float(normalized.max()))
-        energy += float(np.sum(normalized**2))
+        normalized_overlap = separation[active] / diameter[active]
+        energy += float(np.sum(normalized_overlap**2))
         if rng is None:
             continue
         i, j = i[active], j[active]
-        delta, distance, excess = delta[active], distance[active], excess[active]
+        delta, distance = delta[active], distance[active]
+        separation = separation[active]
         coincident = distance == 0
         direction = np.divide(delta, distance[:, None], out=np.zeros_like(delta), where=distance[:, None] != 0)
         if np.any(coincident):
@@ -84,7 +95,7 @@ def evaluate(positions, radii, box, max_overlap, rng=None):
             angle = rng.uniform(0, 2 * np.pi, len(z))
             radial = np.sqrt(np.maximum(0, 1 - z*z))
             direction[coincident] = np.column_stack((radial*np.cos(angle), radial*np.sin(angle), z))
-        shifts = 0.5 * excess[:, None] * direction
+        shifts = 0.5 * separation[:, None] * direction
         np.add.at(correction, i, shifts)
         np.add.at(correction, j, -shifts)
         np.add.at(degree, i, 1)

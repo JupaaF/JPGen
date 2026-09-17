@@ -34,5 +34,6 @@ packing:
   placement:
     method: overlap_relaxation
     max_overlap: 0.0
+    relax_all_overlaps: true
     max_iterations: 3000
     overlap_tolerance: 1.0e-08

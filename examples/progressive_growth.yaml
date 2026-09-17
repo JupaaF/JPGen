@@ -2,7 +2,7 @@
 packing:
   sizing_method: variable_box_fraction
   count: 8000
-  seed: 20260916
+  #seed: 20260916
   box:
     origin:
     - 0.0
@@ -20,20 +20,21 @@ packing:
   restarts: 10
   max_particles: 1000000
   solid_fraction_tolerance: 0.001
-  velocity:
-    type: normal
-    mean: 0.01
-    std: 0.003
-    min: 0.0
-    max: 0.02
-  angular_velocity:
-    type: uniform
-    min: 0.0
-    max: 1.0
-  target_solid_fraction: 0.64
+  # velocity:
+  #   type: normal
+  #   mean: 0.01
+  #   std: 0.003
+  #   min: 0.0
+  #   max: 0.02
+  # angular_velocity:
+  #   type: uniform
+  #   min: 0.0
+  #   max: 1.0
+  target_solid_fraction: 0.66
   placement:
     method: progressive_growth
     max_overlap: 0.005
+    relax_all_overlaps: true
     max_iterations: 10000
     overlap_tolerance: 1.0e-05
     initial_scale: 0.25
