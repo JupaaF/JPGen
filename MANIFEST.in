@@ -1,0 +1,1 @@
+include src/jpgen/packing/placement/_kernels.cpp

@@ -33,7 +33,7 @@ packing:
   target_solid_fraction: 0.65
   placement:
     method: progressive_growth
-    max_overlap: 0.04
+    max_overlap: 0.02
     relax_all_overlaps: true
     max_iterations: 10000
     overlap_tolerance: 1.0e-05

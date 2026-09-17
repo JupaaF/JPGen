@@ -7,6 +7,19 @@ python -m pip install -e .
 jpgen examples/fixed_count.yaml
 ```
 
+Installation builds optional C++17 placement kernels when a compiler is
+available. They accelerate contact evaluation and sequential insertion while
+keeping NumPy's random stream and the existing placement configuration. Without
+the extension, JPGen uses the Python implementation. After editing the C++
+source, rerun the installation command to rebuild it.
+
+For an explicitly Python-only build, set `JPGEN_BUILD_NATIVE=0` when installing.
+At runtime, `JPGEN_PLACEMENT_BACKEND=python` forces Python and
+`JPGEN_PLACEMENT_BACKEND=native` requires the compiled extension; the default
+`auto` uses it when installed. See the
+[profiling study and dense packing captures](docs/placement-performance.md)
+for measurements and reproducibility commands.
+
 Run `jpgen` without a file in an interactive terminal to create a complete YAML
 configuration with the guided wizard and immediately execute it. The wizard
 explains every value, accepts selectable input units, converts physical values

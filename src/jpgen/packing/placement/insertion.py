@@ -11,6 +11,7 @@ from ..domain import InsertionStatistics
 from ...errors import PackingGenerationError
 from .base import PlacementRequest, PlacementResult, PlacementStrategy
 from .geometry import check_feasibility
+from ._backend import native
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ class RandomSequentialInsertion(PlacementStrategy):
 def _place_particles(radii, box, max_overlap, attempts, rng):
     largest = float(np.max(radii))
     check_feasibility(radii, box, max_overlap)
+    if native is not None and radii.dtype == np.float64 and radii.flags.c_contiguous and radii.flags.aligned:
+        return _place_particles_native(radii, box, max_overlap, attempts, rng, largest)
     positions = np.empty((len(radii), 3), dtype=np.float64)
     cells = {}
     # Cell widths >= the largest possible interaction distance; cap indexing for tiny radii.
@@ -105,4 +108,25 @@ def _place_particles(radii, box, max_overlap, attempts, rng):
             break
         else:
             raise PackingGenerationError(f"Could not place particle {index + 1} after {attempts} position attempts ({sum(map(len, cells.values()))}/{len(radii)} placed).")
+    return positions + box.origin, observed, position_draws
+
+
+def _place_particles_native(radii, box, max_overlap, attempts, rng, largest):
+    positions = np.empty((len(radii), 3), dtype=np.float64)
+    counts = np.maximum(1, np.minimum(np.floor(box.lengths / (2 * largest)), 1_000_000)).astype(np.int64)
+    grid = native.InsertionGrid(positions, radii, box.lengths, counts, box.periodic)
+    observed = max(0.0, 1.0 - float(np.min(box.lengths)) / (2 * largest)) if box.periodic else 0.0
+    position_draws = 0
+    for placed, index in enumerate(np.argsort(-radii, kind="stable")):
+        radius = radii[index]
+        low = np.zeros(3) if box.periodic else np.full(3, radius)
+        high = box.lengths if box.periodic else box.lengths - radius
+        for _ in range(attempts):
+            position_draws += 1
+            accepted, local_overlap = grid.try_insert(int(index), rng.uniform(low, high), max_overlap)
+            if accepted:
+                observed = max(observed, local_overlap)
+                break
+        else:
+            raise PackingGenerationError(f"Could not place particle {index + 1} after {attempts} position attempts ({placed}/{len(radii)} placed).")
     return positions + box.origin, observed, position_draws

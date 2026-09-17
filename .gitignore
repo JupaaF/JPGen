@@ -4,6 +4,8 @@
 Kratos/
 .venv/
 *.pyc
+*.so
+*.pyd
 *.egg-info/
 /build/
 /dist/

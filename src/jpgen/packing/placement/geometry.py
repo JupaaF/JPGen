@@ -5,6 +5,7 @@ from scipy.spatial import cKDTree
 
 from ..domain import PlacementAudit
 from ...errors import PackingGenerationError
+from ._backend import native
 
 
 def check_feasibility(radii, box, max_overlap):
@@ -119,6 +120,46 @@ def evaluate(positions, radii, box, max_overlap, rng=None, relax_all_overlaps=Tr
     ``compute_energy=False`` skips the energy metric (returns zero), allowing
     audits without an RNG to skip all correction and energy work.
     """
+    if native is not None and all(
+        array.dtype == np.float64 and array.flags.c_contiguous and array.flags.aligned
+        for array in (positions, radii, box.lengths)
+    ):
+        return _evaluate_native(positions, radii, box, max_overlap, rng,
+                                relax_all_overlaps, neighbors, compute_energy)
+    return _evaluate_python(positions, radii, box, max_overlap, rng,
+                            relax_all_overlaps, neighbors, compute_energy)
+
+
+def _evaluate_native(positions, radii, box, max_overlap, rng, relax_all_overlaps,
+                     neighbors, compute_energy):
+    correction = np.zeros_like(positions) if rng is not None else np.empty(0)
+    degree = np.zeros(len(radii), dtype=np.int64) if rng is not None else np.empty(0, dtype=np.int64)
+    observed = max(0.0, 1 - float(np.min(box.lengths)) / (2 * float(np.max(radii)))) if box.periodic else 0.0
+    maximum = energy = 0.0
+    candidates = (_candidate_pairs(positions, radii, box) if neighbors is None
+                  else neighbors.candidates(positions))
+    for i, j in candidates:
+        result = native.evaluate_block(positions, radii, box.lengths, box.periodic,
+                                       i, j, max_overlap, relax_all_overlaps,
+                                       compute_energy, correction, degree)
+        if result is None:
+            # No native block consumes RNG. Restart this evaluation in Python
+            # to preserve the exact draws and directions for coincident centers.
+            candidates.close()
+            return _evaluate_python(positions, radii, box, max_overlap, rng,
+                                    relax_all_overlaps, neighbors, compute_energy)
+        block_maximum, block_observed, energy_terms = result
+        maximum = max(maximum, block_maximum)
+        observed = max(observed, block_observed)
+        if compute_energy and len(energy_terms):
+            energy += float(np.sum(energy_terms))
+    if rng is not None:
+        correction /= np.maximum(degree, 1)[:, None]
+    return maximum, observed, energy, correction if rng is not None else None
+
+
+def _evaluate_python(positions, radii, box, max_overlap, rng, relax_all_overlaps,
+                     neighbors, compute_energy):
     correction = np.zeros_like(positions) if rng is not None else None
     degree = np.zeros(len(radii), dtype=np.int64) if rng is not None else None
     observed = max(0.0, 1 - float(np.min(box.lengths)) / (2 * float(np.max(radii)))) if box.periodic else 0.0

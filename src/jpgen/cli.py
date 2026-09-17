@@ -7,7 +7,6 @@ from .application import build_application
 from .configuration import load_config
 from .configuration_wizard import build_configuration_wizard
 
-
 MISSING_FILE_MESSAGE = (
     "Error: a YAML configuration file is required when JPGen is not running in "
     "an interactive terminal. Provide one with 'jpgen FILE.yaml', or run 'jpgen' "
