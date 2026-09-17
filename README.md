@@ -7,6 +7,14 @@ python -m pip install -e .
 jpgen examples/fixed_count.yaml
 ```
 
+Run `jpgen` without a file in an interactive terminal to create a complete YAML
+configuration with the guided wizard and immediately execute it. The wizard
+explains every value, accepts selectable input units, converts physical values
+to SI, validates the complete packing configuration and shows a preview before
+saving. It writes a timestamped `.yaml` file in the current directory by
+default. If generation fails, a newly created file is removed or a replaced
+file is restored.
+
 Each invocation creates a unique directory under `runs/`:
 
 - `configuration.yaml`: normalized pipeline configuration, defaults and actual seed; usable for replay.
@@ -25,6 +33,7 @@ Invalid configuration fails before a run directory is created. Packing failures 
 | --- | --- |
 | `jpgen/application.py` | Pipeline orchestration, run lifecycle and default dependency composition |
 | `jpgen/configuration.py` | Load the complete YAML document |
+| `jpgen/configuration_wizard/` | Interactive, extensible configuration collection and recoverable YAML publication |
 | `jpgen/configuration_values.py` | Scalar, vector and mapping validation shared by stages |
 | `jpgen/errors.py` | Pipeline and stage errors |
 | `jpgen/progress.py` | Run-level and stage-level progress events |

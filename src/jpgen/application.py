@@ -1,9 +1,9 @@
 """JPGen pipeline orchestration and default dependency composition."""
 
 import platform
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import h5py
 import numpy as np
