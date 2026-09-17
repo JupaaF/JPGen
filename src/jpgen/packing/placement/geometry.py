@@ -29,42 +29,102 @@ def random_positions(radii, box, rng):
     return rng.uniform(lower, upper, size=(len(radii), 3))
 
 
-def pairs(positions, radii, box):
-    """Yield each nearby unordered pair once; rebuild neighbors after every move.
-
-    Query blocks bound temporary memory, including for fully overlapping inputs.
-    Sorting neighbors makes pair accumulation deterministic within an environment.
-    """
+def _candidate_pairs(positions, radii, box, skin=0.0):
+    """Stream sorted pairs in fixed particle blocks, with per-particle cutoffs."""
     tree = cKDTree(positions, boxsize=box.lengths if box.periodic else None)
-    cutoff = 2 * float(np.max(radii))
+    largest = float(np.max(radii))
     for start in range(0, len(radii), 128):
+        cutoff = np.nextafter(radii[start:start + 128] + largest + skin, np.inf)
         neighbors = tree.query_ball_point(positions[start:start + 128], cutoff, return_sorted=True)
         sizes = np.fromiter((len(items) for items in neighbors), dtype=np.int64)
         i = np.repeat(np.arange(start, start + len(neighbors)), sizes)
         j = np.concatenate(neighbors).astype(np.int64)
         keep = j > i
         i, j = i[keep], j[keep]
-        if not len(i):
-            continue
+        if len(i):
+            yield i, j
+
+
+class NeighborList:
+    """Reuse buffered pairs while every center stays within half the skin.
+
+    One instance belongs to one relax() call with fixed radii and box. Growth
+    stages therefore start fresh. Minimum-image displacements handle wrapping
+    and also detect perturbations that require a rebuild. Dense configurations
+    fall back to streaming rather than retaining an unbounded pair list.
+    """
+
+    max_cached_pairs = 1_000_000
+
+    def __init__(self, radii, box):
+        self.radii = radii
+        self.box = box
+        self.skin = 0.25 * float(np.max(radii))
+        self.reference = None
+        self.blocks = []
+        self.streaming = False
+
+    def candidates(self, positions):
+        if self.streaming:
+            yield from _candidate_pairs(positions, self.radii, self.box)
+            return
+        if self.reference is not None:
+            delta = positions - self.reference
+            if self.box.periodic:
+                delta -= self.box.lengths * np.rint(delta / self.box.lengths)
+            if np.all(np.sum(delta * delta, axis=1) < (0.5 * self.skin)**2):
+                yield from self.blocks
+                return
+        self.reference = None
+        self.blocks = []
+        count = 0
+        for i, j in _candidate_pairs(positions, self.radii, self.box, self.skin):
+            count += len(i)
+            if count <= self.max_cached_pairs:
+                self.blocks.append((i, j))
+            else:
+                self.blocks = []
+                self.streaming = True
+            yield i, j
+        if not self.streaming:
+            self.reference = positions.copy()
+
+
+def pairs(positions, radii, box, neighbors=None):
+    """Yield potentially overlapping unordered pairs in deterministic blocks.
+
+    Query blocks bound temporary memory even for fully overlapping inputs.
+    Filter using squared distances before taking square roots; buffered lists
+    retain the original block and neighbor order for correction accumulation.
+    """
+    candidates = (_candidate_pairs(positions, radii, box) if neighbors is None
+                  else neighbors.candidates(positions))
+    for i, j in candidates:
         delta = positions[i] - positions[j]
         if box.periodic:
             delta -= box.lengths * np.rint(delta / box.lengths)
-        yield i, j, delta, np.linalg.norm(delta, axis=1)
+        distance_squared = np.sum(delta * delta, axis=1)
+        keep = distance_squared <= np.nextafter((radii[i] + radii[j])**2, np.inf)
+        if np.any(keep):
+            yield i[keep], j[keep], delta[keep], np.sqrt(distance_squared[keep])
 
 
-def evaluate(positions, radii, box, max_overlap, rng=None, relax_all_overlaps=True):
+def evaluate(positions, radii, box, max_overlap, rng=None, relax_all_overlaps=True,
+             *, neighbors=None, compute_energy=True):
     """Measure violations and optionally assemble overlap corrections.
 
     When ``relax_all_overlaps`` is true, ``max_overlap`` is only the acceptance
     threshold and all overlaps are pushed towards zero. Otherwise, only the
     portion exceeding ``max_overlap`` contributes to the correction.
+    ``compute_energy=False`` skips the energy metric (returns zero), allowing
+    audits without an RNG to skip all correction and energy work.
     """
     correction = np.zeros_like(positions) if rng is not None else None
     degree = np.zeros(len(radii), dtype=np.int64) if rng is not None else None
     observed = max(0.0, 1 - float(np.min(box.lengths)) / (2 * float(np.max(radii)))) if box.periodic else 0.0
     maximum = 0.0
     energy = 0.0
-    for i, j, delta, distance in pairs(positions, radii, box):
+    for i, j, delta, distance in pairs(positions, radii, box, neighbors):
         diameter = 2 * np.minimum(radii[i], radii[j])
         overlap = np.clip((radii[i] + radii[j] - distance) / diameter, 0, 1)
         observed = max(observed, float(overlap.max()))
@@ -76,12 +136,15 @@ def evaluate(positions, radii, box, max_overlap, rng=None, relax_all_overlaps=Tr
         if np.any(violation):
             normalized = excess[violation] / diameter[violation]
             maximum = max(maximum, float(normalized.max()))
+        if rng is None and not compute_energy:
+            continue
         separation = overlap_distance if relax_all_overlaps else excess
         active = separation > 0
         if not np.any(active):
             continue
-        normalized_overlap = separation[active] / diameter[active]
-        energy += float(np.sum(normalized_overlap**2))
+        if compute_energy:
+            normalized_overlap = separation[active] / diameter[active]
+            energy += float(np.sum(normalized_overlap**2))
         if rng is None:
             continue
         i, j = i[active], j[active]
@@ -117,7 +180,7 @@ def audit_placement(positions, radii, box, max_overlap, tolerance):
         raise PackingGenerationError("Placement returned centers outside the permitted bounds.")
     # Normalize only roundoff at boundaries before the periodic neighbor query.
     local = constrain(local, radii, box)
-    excess, observed, _, _ = evaluate(local, radii, box, max_overlap)
+    excess, observed, _, _ = evaluate(local, radii, box, max_overlap, compute_energy=False)
     if excess > tolerance + 64 * np.finfo(float).eps:
         raise PackingGenerationError(f"Final placement exceeds the overlap limit by {excess:.6g}; tolerance is {tolerance:.6g}.")
     return PlacementAudit(

@@ -9,7 +9,7 @@ from ..domain import RelaxationStatistics
 from ...errors import ConfigurationError, PackingGenerationError
 from ...progress import RelaxationProgress, emit
 from .base import PlacementRequest, PlacementResult, PlacementStrategy
-from .geometry import check_feasibility, constrain, evaluate, random_positions
+from .geometry import NeighborList, check_feasibility, constrain, evaluate, random_positions
 
 RELAXATION_OPTIONS = {
     "max_iterations", "step_size", "max_displacement", "stagnation_iterations",
@@ -80,12 +80,14 @@ class RelaxationResult:
 
 def relax(positions, radii, box, max_overlap, options, rng, observer=None):
     """Relax a copy of local positions; callers retain accepted stages for rollback."""
-    positions = constrain(positions.copy(), radii, box)
+    positions = constrain(positions, radii, box)
     best_positions = positions.copy()
     best_score = (float("inf"), float("inf"))
     lowest_energy = float("inf")
     last_progress = 0
     perturbations = 0
+    neighbors = NeighborList(radii, box)
+    cap = options.max_displacement * radii
     for iteration in range(options.max_iterations + 1):
         excess, _, energy, correction = evaluate(
             positions,
@@ -94,6 +96,7 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
             max_overlap,
             rng,
             relax_all_overlaps=options.relax_all_overlaps,
+            neighbors=neighbors,
         )
         if excess <= options.overlap_tolerance:
             return RelaxationResult(positions, True, iteration, perturbations, excess)
@@ -122,11 +125,9 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
             continue
         displacement = options.step_size * correction
         magnitude = np.linalg.norm(displacement, axis=1)
-        cap = options.max_displacement * radii
         factor = np.minimum(1, np.divide(cap, magnitude, out=np.ones_like(cap), where=magnitude > 0))
         positions = constrain(positions + displacement * factor[:, None], radii, box)
-    excess, _, _, _ = evaluate(best_positions, radii, box, max_overlap)
-    return RelaxationResult(best_positions, False, iteration, perturbations, excess)
+    return RelaxationResult(best_positions, False, iteration, perturbations, best_score[0])
 
 
 @dataclass(frozen=True)

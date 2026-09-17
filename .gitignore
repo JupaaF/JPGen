@@ -7,6 +7,6 @@ Kratos/
 *.egg-info/
 /build/
 /dist/
-
+benchmarks/
 runs/
 __pycache__/
