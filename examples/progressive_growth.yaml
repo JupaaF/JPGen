@@ -1,6 +1,6 @@
-# SI units. Geometry and packing are independently configurable.
-particle_generation:
-  mode: variable_box_fraction
+# SI units. Sizing and placement are independently configurable.
+packing:
+  sizing_method: variable_box_fraction
   count: 8000
   seed: 20260916
   box:
@@ -31,7 +31,7 @@ particle_generation:
     min: 0.0
     max: 1.0
   target_solid_fraction: 0.64
-  packing:
+  placement:
     method: progressive_growth
     max_overlap: 0.005
     max_iterations: 10000

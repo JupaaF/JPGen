@@ -4,6 +4,9 @@
 Kratos/
 .venv/
 *.pyc
+*.egg-info/
+/build/
+/dist/
 
 runs/
 __pycache__/

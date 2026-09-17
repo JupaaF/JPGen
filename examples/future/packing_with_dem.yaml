@@ -1,0 +1,41 @@
+# SI units. Preview of packing plus the reserved future DEM section.
+packing:
+  sizing_method: fixed_box_fraction
+  seed: 20260916
+  box:
+    origin: [0.0, 0.0, 0.0]
+    lengths: [0.1, 0.1, 0.1]
+    periodic: true
+  radii:
+    type: uniform
+    min: 0.001
+    max: 0.002
+  restarts: 10
+  max_particles: 1000000
+  solid_fraction_tolerance: 0.001
+  velocity:
+    type: normal
+    mean: 0.01
+    std: 0.003
+    min: 0.0
+    max: 0.02
+  angular_velocity:
+    type: uniform
+    min: 0.0
+    max: 1.0
+  target_solid_fraction: 0.62
+  placement:
+    method: random_sequential
+    max_overlap: 0.2
+    position_attempts: 1000
+
+# Reserved for the future DEM stage; not processed by the current pipeline.
+dem:
+  material:
+    density: 2500.0
+    young_modulus: 1.0e+7
+    poisson_ratio: 0.25
+    static_friction: 0.5
+    dynamic_friction: 0.4
+    restitution: 0.8
+    contact_law: DEM_D_Hertz_viscous_Coulomb

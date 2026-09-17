@@ -1,18 +1,12 @@
-# SI units. Sizing and placement are independently configurable.
+# SI units. Fixed-count packing and initial velocities.
 packing:
-  sizing_method: variable_box_fraction
-  count: 500
+  sizing_method: fixed_count
+  count: 8000
   seed: 20260916
   box:
-    origin:
-    - 0.0
-    - 0.0
-    - 0.0
-    lengths:
-    - 0.1
-    - 0.1
-    - 0.1
-    periodic: true
+    origin: [0.0, 0.0, 0.0]
+    lengths: [0.1, 0.1, 0.1]
+    periodic: false
   radii:
     type: uniform
     min: 0.0005
@@ -30,9 +24,7 @@ packing:
     type: uniform
     min: 0.0
     max: 1.0
-  target_solid_fraction: 0.3
   placement:
-    method: overlap_relaxation
+    method: random_sequential
     max_overlap: 0.0
-    max_iterations: 3000
-    overlap_tolerance: 1.0e-08
+    position_attempts: 1000

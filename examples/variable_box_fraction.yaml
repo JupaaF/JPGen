@@ -1,6 +1,6 @@
 # SI units. Particle geometry and initial velocities.
-particle_generation:
-  mode: variable_box_fraction
+packing:
+  sizing_method: variable_box_fraction
   count: 80
   seed: 20260916
   box:
@@ -31,7 +31,7 @@ particle_generation:
     min: 0.0
     max: 1.0
   target_solid_fraction: 0.05
-  packing:
+  placement:
     method: random_sequential
     max_overlap: 0.0
     position_attempts: 1000
