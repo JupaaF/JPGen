@@ -1,10 +1,10 @@
-"""Contracts implemented by DEM engine and persistence adapters."""
+"""Common contract and execution records for DEM engine adapters."""
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .domain import DemCase, DemState
+from ..domain import DemCase, DemState
 
 
 @dataclass(frozen=True)
@@ -33,9 +33,3 @@ class DemBackend(Protocol):
     def run(self, prepared: PreparedDemCase, observer=None) -> ExecutionReport: ...
 
     def collect(self, prepared: PreparedDemCase, report: ExecutionReport) -> DemState: ...
-
-
-class DemResultStore(Protocol):
-    filename: str
-
-    def save(self, path, state, case, configuration, report) -> None: ...

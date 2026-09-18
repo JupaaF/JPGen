@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from ..configuration_values import mapping, number, vector
 from ..errors import ConfigurationError
 from .domain import Contact, DemCase, Material
-from .ports import DemBackend
+from .backends.base import DemBackend
 
 
 @dataclass(frozen=True)

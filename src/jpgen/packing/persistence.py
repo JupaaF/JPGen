@@ -1,6 +1,7 @@
 """Versioned, solver-independent HDF5 packing persistence."""
 
 import json
+from typing import Protocol
 
 import h5py
 
@@ -10,6 +11,16 @@ from .domain import Box, PackingMetadata, ParticlePacking
 SCHEMA_VERSION = "3.0"
 ARRAYS = ("ids", "positions", "radii", "velocities", "angular_velocities")
 UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angular_velocities": "rad/s"}
+
+
+class PackingStore(Protocol):
+    filename: str
+
+    def save(self, path, packing, configuration) -> None:
+        """Persist a packing and its effective configuration."""
+
+    def load(self, path):
+        """Restore a packing and its effective configuration."""
 
 
 class Hdf5PackingStore:

@@ -57,23 +57,18 @@ class JPGenApplication:
 
     def run(self, raw, observer=None):
         """Execute the configured pipeline and publish one run."""
-        
+
         mapping(raw, "pipeline", {"packing", "packing_source", "dem"})
 
-        if ("packing" in raw) == ("packing_source" in raw):
-            raise ConfigurationError("Provide exactly one of packing or packing_source.")
-        
-        imported = "packing_source" in raw
-        plan = (self.packing.build_source_plan(raw["packing_source"]) if imported
-                else self.packing.build_plan(raw["packing"]))
-        seed = plan.packing.metadata.seed if imported else plan.config["seed"]
-        effective = {"packing_source" if imported else "packing": plan.to_config()}
+        plan = self.packing.prepare(raw)
+        seed = plan.seed
+        effective = plan.to_pipeline_config()
         dem_plan = None
         if raw.get("dem") is not None:
             if self.dem is None:
                 raise ConfigurationError("DEM stage is not configured in this application.")
             dem_plan = self.dem.build_plan(raw["dem"])
-            dem_plan.validate_box(plan.packing.box if imported else plan.config["box"])
+            dem_plan.validate_box(plan.box)
             dem_plan.backend.validate(dem_plan)
             effective["dem"] = dem_plan.to_config()
         versions = self.version_provider()
@@ -90,19 +85,9 @@ class JPGenApplication:
         emit(observer, PackingStarted(seed))
         active_stage = "packing"
         try:
-            result = (self.packing.import_source(plan, workspace) if imported
-                      else self.packing.execute(plan, workspace, versions, observer))
+            result = self.packing.execute(plan, workspace, versions, observer)
             packing = result.packing
-            packing_status = packing.metadata.to_dict()
-            packing_status.update(
-                status="complete",
-                box_origin=packing.box.origin.tolist(),
-                box_lengths=packing.box.lengths.tolist(),
-                periodic=packing.box.periodic,
-            )
-            if imported:
-                packing_status["source"] = plan.to_config()
-            status.update(packing=packing_status)
+            status["packing"] = result.summary
             workspace.save_summary(status)
             emit(
                 observer,

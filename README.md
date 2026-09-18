@@ -72,20 +72,20 @@ Invalid configuration or an unavailable DEM runtime fails before a run directory
 | `jpgen/errors.py` | Pipeline and stage errors |
 | `jpgen/progress.py` | Run-level and stage-level progress events |
 | `jpgen/run_repository.py` | Run workspaces, summaries and atomic output publication |
-| `jpgen/packing/application.py` | Packing stage orchestration and ports |
-| `jpgen/packing/configuration.py` | Build a validated `PackingPlan` |
+| `jpgen/packing/application.py` | Packing stage orchestration |
+| `jpgen/packing/configuration.py` | `PackingPlan`, `PackingSourcePlan` and packing configuration validation |
 | `jpgen/packing/sizing.py` | Resolve the box and particle population |
 | `jpgen/packing/placement/` | Particle placement contracts and algorithms |
 | `jpgen/packing/domain/` | `ParticlePacking`, metadata, box, audits and placement statistics |
-| `jpgen/packing/generator.py` | Restarts, random streams, placement audit and packing assembly |
-| `jpgen/packing/persistence.py` | Versioned `Hdf5PackingStore` |
+| `jpgen/packing/generator.py` | `PackingGenerationService` and its `PackingGenerator` implementation |
+| `jpgen/packing/persistence.py` | `PackingStore` and its versioned `Hdf5PackingStore` implementation |
 | `jpgen/packing/exporters/` | `PackingExporter` and the Kratos and VTK adapters |
 | `jpgen/dem/application.py` | Prepare, execute, collect and persist a DEM stage |
 | `jpgen/dem/configuration.py` | Validate physical inputs and retain the backend in a `DemPlan` |
 | `jpgen/dem/domain.py` | Engine-independent material, contact, case and final state |
-| `jpgen/dem/ports.py` | `DemBackend`, execution report and result-store contracts |
+| `jpgen/dem/backends/base.py` | `DemBackend` and common execution records |
 | `jpgen/dem/backends/kratos/` | Kratos case translation, isolated runtime and result collection |
-| `jpgen/dem/persistence.py` | Versioned common DEM results |
+| `jpgen/dem/persistence.py` | `DemResultStore` and its versioned `Hdf5DemResultStore` implementation |
 
 `JPGenApplication.run` owns the complete run. It generates or imports a packing,
 then executes DEM when configured. `RunStarted`, `RunCompleted` and `RunFailed`

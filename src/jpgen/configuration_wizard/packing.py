@@ -20,7 +20,6 @@ from .units import (
     unit_choices,
 )
 
-
 SIZING_CHOICES = (
     MenuChoice("Fixed count — keep the requested particle count and box dimensions", "fixed_count"),
     MenuChoice("Fixed box fraction — infer the particle count for a fixed box", "fixed_box_fraction"),

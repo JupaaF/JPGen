@@ -3,11 +3,12 @@
 import secrets
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..configuration_values import integer, mapping, number, vector
 from ..errors import ConfigurationError
 from .distributions import ExplicitDistribution, build_distribution
-from .domain import Box
+from .domain import Box, ParticlePacking
 from .exporters import PACKING_EXPORTER_TYPES
 from .placement import PLACEMENT_STRATEGIES, PlacementConstraints, PlacementStrategy
 from .sizing import PACKING_SIZING_STRATEGIES, PackingSizingStrategy
@@ -22,6 +23,17 @@ class PackingPlan:
     placement_strategy: PlacementStrategy
     placement_constraints: PlacementConstraints
     exports: tuple[str, ...]
+
+    @property
+    def seed(self) -> int:
+        return self.config["seed"]
+
+    @property
+    def box(self) -> Box:
+        return self.config["box"]
+
+    def to_pipeline_config(self) -> dict:
+        return {"packing": self.to_config()}
 
     def to_config(self):
         result = deepcopy(self.config)
@@ -47,6 +59,29 @@ class PackingPlan:
         result = self.to_config()
         del result["exports"]
         return result
+
+
+@dataclass(frozen=True)
+class PackingSourcePlan:
+    packing: ParticlePacking
+    configuration: dict
+    path: Path
+    sha256: str
+    exports: tuple[str, ...]
+
+    @property
+    def seed(self) -> int:
+        return self.packing.metadata.seed
+
+    @property
+    def box(self) -> Box:
+        return self.packing.box
+
+    def to_pipeline_config(self) -> dict:
+        return {"packing_source": self.to_config()}
+
+    def to_config(self):
+        return {"file": str(self.path), "sha256": self.sha256, "exports": list(self.exports)}
 
 
 def normalized_exports(raw, available):

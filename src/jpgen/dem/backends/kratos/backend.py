@@ -14,7 +14,7 @@ import numpy as np
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
 from ...domain import DemState
-from ...ports import ExecutionReport, PreparedDemCase
+from ..base import ExecutionReport, PreparedDemCase
 from .case_writer import CONTACT_LAWS, write_case
 
 

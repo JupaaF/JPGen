@@ -1,4 +1,4 @@
-"""DEM stage orchestration and default-independent persistence port."""
+"""DEM stage orchestration."""
 
 from dataclasses import dataclass
 
@@ -6,7 +6,7 @@ import numpy as np
 
 from ..errors import DemExecutionError
 from .configuration import build_dem_plan
-from .ports import DemResultStore
+from .persistence import DemResultStore
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ....packing.exporters.kratos import KratosExporter
 
-
 CONTACT_LAWS = {"hertz_viscous_coulomb": "DEM_D_Hertz_viscous_Coulomb"}
 
 

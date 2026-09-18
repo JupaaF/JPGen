@@ -1,48 +1,29 @@
-"""Packing stage orchestration and ports."""
+"""Packing stage orchestration."""
 
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Mapping
 
 from ..configuration_values import mapping
 from ..errors import ConfigurationError
-from .configuration import PackingPlan, build_packing_plan, normalized_exports
+from .configuration import (
+    PackingPlan,
+    PackingSourcePlan,
+    build_packing_plan,
+    normalized_exports,
+)
 from .domain import ParticlePacking
 from .exporters.base import PackingExporter
-
-
-class PackingStore(Protocol):
-    filename: str
-
-    def save(self, path, packing, configuration) -> None:
-        """Persist a packing and its effective configuration."""
-
-    def load(self, path):
-        """Restore a packing and its effective configuration."""
-
-
-class PackingGenerationService(Protocol):
-    def generate(self, plan, observer=None) -> ParticlePacking:
-        """Build a validated particle packing from an executable plan."""
+from .generator import PackingGenerationService
+from .persistence import PackingStore
 
 
 @dataclass(frozen=True)
 class PackingStageResult:
     packing: ParticlePacking
     filenames: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class PackingSourcePlan:
-    packing: ParticlePacking
-    configuration: dict
-    path: Path
-    sha256: str
-    exports: tuple[str, ...]
-
-    def to_config(self):
-        return {"file": str(self.path), "sha256": self.sha256, "exports": list(self.exports)}
+    summary: dict
 
 
 def _sha256(path):
@@ -59,10 +40,18 @@ class PackingApplication:
     store: PackingStore
     exporters: Mapping[str, PackingExporter]
 
+    def prepare(self, raw) -> PackingPlan | PackingSourcePlan:
+        """Select and validate the packing input before a run is created."""
+        if ("packing" in raw) == ("packing_source" in raw):
+            raise ConfigurationError("Provide exactly one of packing or packing_source.")
+        if "packing_source" in raw:
+            return self.build_source_plan(raw["packing_source"])
+        return self.build_plan(raw["packing"])
+
     def build_plan(self, raw) -> PackingPlan:
         return build_packing_plan(raw, self.exporters)
 
-    def build_source_plan(self, raw):
+    def build_source_plan(self, raw) -> PackingSourcePlan:
         mapping(raw, "packing_source", {"file", "sha256", "exports"}, {"file"})
         if not isinstance(raw["file"], str) or not raw["file"].strip():
             raise ConfigurationError("packing_source.file must be a path to packing.h5.")
@@ -76,15 +65,27 @@ class PackingApplication:
         exports = normalized_exports(raw.get("exports", []), self.exporters)
         return PackingSourcePlan(packing, configuration, path, digest, exports)
 
-    def import_source(self, plan, workspace):
-        return self._publish(plan.packing, plan.configuration, plan.exports, workspace)
-
-    def execute(self, plan, workspace, versions, observer=None) -> PackingStageResult:
-        packing = self.generator.generate(plan, observer)
-        packing = packing.with_metadata(packing.metadata.with_versions(versions))
-        return self._publish(
-            packing, {"packing": plan.to_packing_config()}, plan.exports, workspace
+    def execute(
+        self, plan: PackingPlan | PackingSourcePlan, workspace, versions, observer=None
+    ) -> PackingStageResult:
+        if isinstance(plan, PackingSourcePlan):
+            packing = plan.packing
+            effective = plan.configuration
+        else:
+            packing = self.generator.generate(plan, observer)
+            packing = packing.with_metadata(packing.metadata.with_versions(versions))
+            effective = {"packing": plan.to_packing_config()}
+        restored, filenames = self._publish(packing, effective, plan.exports, workspace)
+        summary = restored.metadata.to_dict()
+        summary.update(
+            status="complete",
+            box_origin=restored.box.origin.tolist(),
+            box_lengths=restored.box.lengths.tolist(),
+            periodic=restored.box.periodic,
         )
+        if isinstance(plan, PackingSourcePlan):
+            summary["source"] = plan.to_config()
+        return PackingStageResult(restored, filenames, summary)
 
     def _publish(self, packing, effective, export_formats, workspace):
         exporters = tuple(self.exporters[name] for name in export_formats)
@@ -95,4 +96,4 @@ class PackingApplication:
             for exporter in exporters:
                 exporter.export(staging / exporter.filename, restored)
             workspace.publish(staging, filenames)
-        return PackingStageResult(restored, filenames)
+        return restored, filenames

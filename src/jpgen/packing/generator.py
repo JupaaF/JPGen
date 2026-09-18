@@ -1,5 +1,7 @@
 """Generate a particle packing from sizing and placement strategies."""
 
+from typing import Protocol
+
 import numpy as np
 
 from ..errors import PackingGenerationError
@@ -14,6 +16,11 @@ from .placement import PlacementRequest
 from .placement.geometry import audit_placement
 from .sampling import stream, vectors
 from .sizing import solid_volume
+
+
+class PackingGenerationService(Protocol):
+    def generate(self, plan, observer=None) -> ParticlePacking:
+        """Build a validated particle packing from an executable plan."""
 
 
 class PackingGenerator:

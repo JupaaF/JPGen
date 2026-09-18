@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import asdict
+from typing import Protocol
 
 import h5py
 import numpy as np
@@ -10,6 +11,12 @@ from .domain import DemState
 
 
 UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angular_velocities": "rad/s"}
+
+
+class DemResultStore(Protocol):
+    filename: str
+
+    def save(self, path, state, case, configuration, report) -> None: ...
 
 
 class Hdf5DemResultStore:

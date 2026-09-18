@@ -7,7 +7,13 @@ from pathlib import Path
 from .dem import DemStageWizard
 from .output import GeneratedConfiguration, render_yaml
 from .packing import PackingStageWizard
-from .questions import InteractiveTerminal, MenuChoice, Navigation, Question, run_questions
+from .questions import (
+    InteractiveTerminal,
+    MenuChoice,
+    Navigation,
+    Question,
+    run_questions,
+)
 
 
 class ConfigurationWizard:
