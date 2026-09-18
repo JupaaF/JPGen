@@ -1,11 +1,27 @@
 # JPGen
 
-JPGen is a particle simulation pipeline. Its first implemented stage creates reproducible packings of 3D spheres in axis-aligned rectangular boxes; a DEM resolution stage will consume those packings in the future. All physical quantities use SI units. Packing generation and export do not require a Kratos installation.
+JPGen is a particle simulation pipeline. It creates reproducible packings of 3D spheres in axis-aligned rectangular boxes and optionally simulates them with a DEM engine. Kratos is the first implemented engine; the DEM stage uses an engine-independent case and backend contract. All physical quantities use SI units. Packing generation and export do not require a Kratos installation.
 
 ```bash
 python -m pip install -e .
 jpgen examples/fixed_count.yaml
 ```
+
+The CLI prints progress directly by default. Select standard-library logging or
+disable progress output without changing the reproducible YAML configuration:
+
+```bash
+jpgen examples/fixed_count.yaml --progress logging
+jpgen examples/fixed_count.yaml --progress none
+```
+
+The `logging` mode writes to standard error and to `jpgen.log` inside the
+created run directory. The file handler is closed when the run completes or
+fails.
+
+Programmatic callers can pass any `ProgressObserver` to
+`JPGenApplication.run(..., observer=...)`; omitting it is silent. The CLI alone
+chooses `ConsoleProgressObserver` as its default.
 
 Installation builds optional C++17 placement kernels when a compiler is
 available. They accelerate contact evaluation and sequential insertion while
@@ -21,22 +37,27 @@ At runtime, `JPGEN_PLACEMENT_BACKEND=python` forces Python and
 for measurements and reproducibility commands.
 
 Run `jpgen` without a file in an interactive terminal to create a complete YAML
-configuration with the guided wizard and immediately execute it. The wizard
-explains every value, accepts selectable input units, converts physical values
-to SI, validates the complete packing configuration and shows a preview before
-saving. It writes a timestamped `.yaml` file in the current directory by
-default. If generation fails, a newly created file is removed or a replaced
-file is restored.
+configuration with the guided wizard and immediately execute it. The wizard can
+generate a new packing or reuse an existing `packing.h5`, asks which optional
+packing formats to export, explains every value, accepts selectable input units,
+converts physical values to SI, validates the complete configuration and shows a
+preview before saving. It writes a timestamped `.yaml` file in the current
+directory by default. If generation fails, a newly created file is removed or a
+replaced file is restored.
 
 Each invocation creates a unique directory under `runs/`:
 
 - `configuration.yaml`: normalized pipeline configuration, defaults and actual seed; usable for replay.
 - `summary.json`: run status, dependency versions, final box and packing statistics.
 - `packing.h5`: versioned packing dataset with geometry, initial velocities, configuration and metadata.
-- `particlesDEM.mdpa`: Kratos DEM sphere model part with an empty properties placeholder.
-- `particles.vtp`: VTK XML PolyData for visualization.
+- `particlesDEM.mdpa`: optional Kratos packing export, produced by `exports: [kratos]`.
+- `particles.vtp`: optional VTK XML PolyData, produced by `exports: [vtk]`.
 
-Invalid configuration fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Outputs are published only after generation and HDF5 readback succeed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
+When DEM is enabled, `dem/input/` contains the runnable engine case,
+`dem/logs/` captures the solver output, `dem/native_results/` retains native
+artifacts and `dem/results.h5` stores the validated final particle state.
+
+Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
 
 ## Pipeline boundaries
 
@@ -59,20 +80,33 @@ Invalid configuration fails before a run directory is created. Packing failures 
 | `jpgen/packing/generator.py` | Restarts, random streams, placement audit and packing assembly |
 | `jpgen/packing/persistence.py` | Versioned `Hdf5PackingStore` |
 | `jpgen/packing/exporters/` | `PackingExporter` and the Kratos and VTK adapters |
+| `jpgen/dem/application.py` | Prepare, execute, collect and persist a DEM stage |
+| `jpgen/dem/configuration.py` | Validate physical inputs and retain the backend in a `DemPlan` |
+| `jpgen/dem/domain.py` | Engine-independent material, contact, case and final state |
+| `jpgen/dem/ports.py` | `DemBackend`, execution report and result-store contracts |
+| `jpgen/dem/backends/kratos/` | Kratos case translation, isolated runtime and result collection |
+| `jpgen/dem/persistence.py` | Versioned common DEM results |
 
-`JPGenApplication.run` owns the complete run. It currently executes the packing stage; the future DEM stage will be added after it without redefining packing classes as application-level concepts. `RunStarted`, `RunCompleted` and `RunFailed` describe the whole pipeline. Events such as `PackingAttemptStarted` and `PackingCompleted` describe only the packing stage.
+`JPGenApplication.run` owns the complete run. It generates or imports a packing,
+then executes DEM when configured. `RunStarted`, `RunCompleted` and `RunFailed`
+describe the whole pipeline. Packing and DEM have separate progress events and
+summary states. A successful DEM run means the requested time was reached, not
+that mechanical equilibrium was established.
 
 Configuration names are stage-specific and are consumed without aliases or migration logic.
 
 ## Configuration
 
-The current root configuration requires `packing`. A future `dem` section may coexist at the same level.
+The root configuration requires exactly one of `packing` or `packing_source`.
+An optional `dem` section enables simulation; omitted or null means packing only.
+Unknown root keys are rejected.
 
 ```yaml
 packing:
   sizing_method: fixed_count
   count: 8000
   seed: 20260916
+  exports: [vtk]
   box:
     origin: [0.0, 0.0, 0.0]
     lengths: [0.1, 0.1, 0.1]
@@ -89,7 +123,13 @@ packing:
     position_attempts: 1000
 ```
 
-Unknown options inside `packing` or `packing.placement` are rejected.
+`exports` is a list containing `vtk`, `kratos`, both, or neither. Names are
+case-insensitive, duplicate values are removed while preserving their first
+occurrence, and the normalized configuration records lowercase names. Omitting
+the field is equivalent to `exports: []`; `packing.h5` is always produced and
+does not embed this publication choice. Unknown formats are rejected with the
+list of available formats. Unknown options inside `packing` or
+`packing.placement` are rejected.
 
 ### Packing sizing
 
@@ -139,13 +179,100 @@ The relaxation-based methods accept `max_iterations`, `step_size`, `max_displace
 
 These methods are geometric heuristics. They do not guarantee convergence, calculate forces, establish mechanical equilibrium or run DEM.
 
-## DEM boundary
+## DEM simulation
 
-`ParticlePacking` contains IDs, geometry, initial velocities, its box and `PackingMetadata`. It intentionally contains no material properties, masses, contact laws or solver state. Those belong to the future `jpgen.dem` stage.
+`ParticlePacking` contains IDs, geometry, initial velocities, its box and `PackingMetadata`. It intentionally contains no material properties, masses, contact laws or solver state. Those belong to `jpgen.dem`. `DemState` represents the final state separately because particles may leave the initial packing box through open boundaries.
 
-`examples/future/packing_with_dem.yaml` shows the intended top-level separation. Its `dem` section is currently ignored and is not persisted in run configuration.
+Run the complete example with the local Kratos build:
 
-The MDPA exporter writes `SphericParticle3D` elements and free nodal velocities. Its empty `Properties 1` block is a structural placeholder, not a material assignment. The exported file is not a runnable DEM case: materials, contact laws, time stepping, walls and periodic-domain behavior must be configured by the DEM stage.
+```bash
+source ./activate_kratos.sh
+jpgen examples/packing_with_dem.yaml
+```
+
+Alternatively set `dem.backend_options.installation: Kratos/bin/Release`.
+This directory must contain `KratosMultiphysics/` and the build's `libs/`.
+Without it, the worker inherits the current environment. `python` selects an
+alternative interpreter (defaults to the current interpreter); `threads` defaults
+to 1; `timeout_seconds` defaults to null (no timeout). Paths are relative to the
+launch directory and are normalized to absolute paths in the run configuration.
+No shell activation script is executed by JPGen.
+
+The supported first version uses one material assigned to all particles, spheres
+with rotation, fixed time steps, and symplectic Euler translation with direct
+rotational integration. `end_time` must be a positive integer multiple of
+`time_step`. The user selects a step small enough to resolve contact dynamics;
+JPGen does not estimate a stable step automatically.
+
+```yaml
+dem:
+  engine: kratos
+  material:
+    density: 2500.0       # kg/m³
+    young_modulus: 1.0e+7 # Pa
+    poisson_ratio: 0.25
+  contact:
+    model: hertz_viscous_coulomb
+    static_friction: 0.5
+    dynamic_friction: 0.4
+    friction_decay: 500.0 # s/m; default 500
+    restitution: 0.8
+  boundary: open
+  gravity: [0.0, 0.0, -9.81] # m/s²; default zero
+  time_step: 1.0e-6
+  end_time: 0.001
+```
+
+`hertz_viscous_coulomb` maps to Kratos `DEM_D_Hertz_viscous_Coulomb`:
+Hertz normal elasticity, viscous contact damping derived from restitution,
+and tangential elasticity limited by Coulomb friction. The friction coefficient
+transitions exponentially from static to dynamic with slip speed and the
+specified decay coefficient. Global damping and rolling resistance are disabled.
+This mapping does not promise identical behavior in future engines; another
+adapter must implement and document the requested physics or reject the case.
+
+`boundary: periodic` uses the packing's final box and requires
+`packing.box.periodic: true`. `boundary: open` requires a nonperiodic packing;
+the placement box creates no physical walls and particles may leave it. Walls,
+multiple materials, equilibrium stopping, trajectories and restart checkpoints
+are not implemented. Existing geometric overlaps are passed unchanged to DEM;
+geometric relaxation is not mechanical equilibration.
+
+The backend writes a standalone `dem/input/run.py`. It can be rerun manually
+with the configured interpreter and environment. It preserves particle IDs,
+captures the state before Kratos deletes its model parts, and records the actual
+solver version and resolved Kratos parameters. Failed runs retain diagnostic
+artifacts; timeout and interruption terminate the worker. `results.h5` is only
+published after successful execution and result validation. Periodic final
+positions are mapped into the primary box, including crossings on the last step.
+
+Reuse an existing packing by replacing the complete `packing` section with:
+
+```yaml
+packing_source:
+  file: runs/<previous-run>/packing.h5
+  exports: [vtk]
+# dem: ... use the same DEM section as above
+```
+
+The source is validated before creating the run. Its absolute path and SHA-256
+are recorded; replay rejects a changed source. The new run also stores a packing
+snapshot and only the fresh geometry exports selected by `packing_source.exports`;
+the source run's export selection is ignored. This initializes a new DEM
+simulation from the packing's velocities, not from a previous simulation's
+contact history.
+
+To add an engine, implement `DemBackend` (`validate`, `prepare`, `run`, `collect`,
+`to_config`) and register its configuration factory in `DEM_BACKENDS`. Plans
+retain the resolved backend, following the packing strategy pattern. Backend
+objects never cross into the particle domain or common result format.
+
+The optional packing-only MDPA exporter writes `SphericParticle3D` elements and
+free nodal velocities. Its empty `Properties 1` block is a structural
+placeholder, not a material assignment. That file alone is not a runnable DEM
+case. When `dem.engine: kratos` is selected, the backend always creates its own
+`dem/input/particlesDEM.mdpa` regardless of `exports`; it also supplies
+materials, contact laws, time stepping and domain behavior.
 
 ## ParaView
 
@@ -154,6 +281,13 @@ Open `particles.vtp`, apply a **Glyph** filter, choose **Sphere**, set **Scale A
 ## Persistence and reproducibility
 
 HDF5 schema `JPGen.packing`, version `3.0`, stores float64 positions, radii and velocities; int64 particle IDs; SI unit attributes; domain data; effective configuration; and `PackingMetadata`. Older schemas are rejected without conversion. Arrays are gzip-compressed and every export is produced from an HDF5 readback.
+
+DEM results use schema `JPGen.dem`, version `1.0`, with IDs, positions, radii,
+linear and angular velocities, material IDs, final time, initial domain,
+effective DEM configuration and execution provenance. Use
+`Hdf5DemResultStore.load(path)` to read the common final state. These are results,
+not restart checkpoints. The run summary includes final kinetic energy (J),
+elapsed wall time, step count and the `end_time` stop reason.
 
 Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed from the system random source. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, placement=1, speed=2, linear direction=3, angular speed=4 and angular direction=5. Run names do not influence generation.
 

@@ -3,6 +3,7 @@ packing:
   sizing_method: variable_box_fraction
   count: 8000
   #seed: 20260916
+  exports: [vtk]
   box:
     origin:
     - 0.0

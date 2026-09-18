@@ -11,14 +11,19 @@ import scipy
 import yaml
 
 from . import __version__
+from .configuration_values import mapping
+from .dem.application import DemApplication
+from .dem.backends import DEM_BACKENDS
+from .dem.persistence import Hdf5DemResultStore
 from .errors import ConfigurationError
 from .packing.application import PackingApplication
-from .packing.exporters.kratos import KratosExporter
-from .packing.exporters.vtk import VtkExporter
+from .packing.exporters import build_packing_exporters
 from .packing.generator import PackingGenerator
 from .packing.persistence import Hdf5PackingStore
 from .progress import (
-    ConsoleProgressObserver,
+    DemCompleted,
+    DemFailed,
+    DemStarted,
     PackingCompleted,
     PackingFailed,
     PackingStarted,
@@ -48,28 +53,45 @@ class JPGenApplication:
     packing: PackingApplication
     runs: RunRepository
     version_provider: Callable[[], dict]
+    dem: DemApplication | None = None
 
     def run(self, raw, observer=None):
         """Execute the configured pipeline and publish one run."""
-        if observer is None:
-            observer = ConsoleProgressObserver()
-        if "packing" not in raw:
-            raise ConfigurationError("Missing required configuration section: packing.")
-        plan = self.packing.build_plan(raw["packing"])
-        cfg = plan.config
-        effective = {"packing": plan.to_config()}
+        
+        mapping(raw, "pipeline", {"packing", "packing_source", "dem"})
+
+        if ("packing" in raw) == ("packing_source" in raw):
+            raise ConfigurationError("Provide exactly one of packing or packing_source.")
+        
+        imported = "packing_source" in raw
+        plan = (self.packing.build_source_plan(raw["packing_source"]) if imported
+                else self.packing.build_plan(raw["packing"]))
+        seed = plan.packing.metadata.seed if imported else plan.config["seed"]
+        effective = {"packing_source" if imported else "packing": plan.to_config()}
+        dem_plan = None
+        if raw.get("dem") is not None:
+            if self.dem is None:
+                raise ConfigurationError("DEM stage is not configured in this application.")
+            dem_plan = self.dem.build_plan(raw["dem"])
+            dem_plan.validate_box(plan.packing.box if imported else plan.config["box"])
+            dem_plan.backend.validate(dem_plan)
+            effective["dem"] = dem_plan.to_config()
         versions = self.version_provider()
         status = {
             "status": "running",
             "versions": versions,
-            "packing": {"status": "running", "seed": cfg["seed"]},
+            "packing": {"status": "running", "seed": seed},
         }
+        if dem_plan is not None:
+            status["dem"] = {"status": "pending", "engine": dem_plan.backend.name}
         workspace = self.runs.create(effective, status)
 
         emit(observer, RunStarted(workspace.directory))
-        emit(observer, PackingStarted(cfg["seed"]))
+        emit(observer, PackingStarted(seed))
+        active_stage = "packing"
         try:
-            result = self.packing.execute(plan, workspace, versions, observer)
+            result = (self.packing.import_source(plan, workspace) if imported
+                      else self.packing.execute(plan, workspace, versions, observer))
             packing = result.packing
             packing_status = packing.metadata.to_dict()
             packing_status.update(
@@ -78,7 +100,9 @@ class JPGenApplication:
                 box_lengths=packing.box.lengths.tolist(),
                 periodic=packing.box.periodic,
             )
-            status.update(status="complete", packing=packing_status)
+            if imported:
+                packing_status["source"] = plan.to_config()
+            status.update(packing=packing_status)
             workspace.save_summary(status)
             emit(
                 observer,
@@ -89,14 +113,33 @@ class JPGenApplication:
                     filenames=result.filenames,
                 ),
             )
+            if dem_plan is not None:
+                active_stage = "dem"
+                status["dem"]["status"] = "running"
+                workspace.save_summary(status)
+                emit(observer, DemStarted(dem_plan.backend.name))
+                dem_result = self.dem.execute(dem_plan, packing, workspace, observer)
+                status["dem"] = dem_result.summary
+                workspace.save_summary(status)
+                emit(observer, DemCompleted(workspace.directory, dem_result.summary["time"], dem_result.filenames))
+            active_stage = None
+            status["status"] = "complete"
+            workspace.save_summary(status)
             emit(observer, RunCompleted(workspace.directory))
             return workspace.directory
-        except Exception as error:
-            status.update(status="failed", error=str(error))
-            status["packing"].update(status="failed", error=str(error))
+        except (Exception, KeyboardInterrupt) as error:
+            message = str(error) or "Run interrupted."
+            status.update(status="failed", error=message)
+            if active_stage is not None:
+                status[active_stage].update(status="failed", error=message)
+            if active_stage == "packing" and dem_plan is not None:
+                status["dem"]["status"] = "skipped"
             workspace.save_summary(status)
-            emit(observer, PackingFailed(workspace.directory, str(error)))
-            emit(observer, RunFailed(workspace.directory, str(error)))
+            if active_stage == "packing":
+                emit(observer, PackingFailed(workspace.directory, message))
+            elif active_stage == "dem":
+                emit(observer, DemFailed(workspace.directory, message))
+            emit(observer, RunFailed(workspace.directory, message))
             raise
 
 
@@ -106,8 +149,9 @@ def build_application():
         packing=PackingApplication(
             generator=PackingGenerator(),
             store=Hdf5PackingStore(),
-            exporters=(KratosExporter(), VtkExporter()),
+            exporters=build_packing_exporters(),
         ),
         runs=FileRunRepository(PROJECT_ROOT / "runs"),
         version_provider=runtime_versions,
+        dem=DemApplication(store=Hdf5DemResultStore(), backends=DEM_BACKENDS),
     )

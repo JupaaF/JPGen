@@ -2,6 +2,7 @@
 packing:
   sizing_method: fixed_box_fraction
   seed: 20260916
+  exports: [vtk]
   box:
     origin:
     - 0.0

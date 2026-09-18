@@ -1,5 +1,6 @@
-"""Structured progress events and the command-line presentation adapter."""
+"""Structured progress events and console and logging observers."""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -69,6 +70,24 @@ class PackingFailed(ProgressEvent):
 
 
 @dataclass(frozen=True)
+class DemStarted(ProgressEvent):
+    engine: str
+
+
+@dataclass(frozen=True)
+class DemCompleted(ProgressEvent):
+    directory: Path
+    time: float
+    filenames: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DemFailed(ProgressEvent):
+    directory: Path
+    error: str
+
+
+@dataclass(frozen=True)
 class RunCompleted(ProgressEvent):
     directory: Path
 
@@ -87,6 +106,97 @@ class ProgressObserver(Protocol):
 def emit(observer, event):
     if observer is not None:
         observer(event)
+
+
+class LoggingProgressObserver:
+    """Log progress events, optionally adding a handler inside each run.
+
+    Uses this module's logger unless the caller supplies one and emits the
+    same descriptive messages as the console observer.
+    """
+
+    def __init__(
+        self,
+        logger: logging.Logger | None = None,
+        run_filename: str | None = None,
+    ) -> None:
+        self.logger = logger if logger is not None else logging.getLogger(__name__)
+        self.run_filename = run_filename
+        self._run_handler = None
+
+    def __call__(self, event: ProgressEvent) -> None:
+        if isinstance(event, RunStarted) and self.run_filename is not None:
+            self._open_run_log(event.directory)
+        if isinstance(event, RunStarted):
+            self.logger.info("Run directory: %s", event.directory)
+        elif isinstance(event, PackingStarted):
+            self.logger.info("Random seed: %s", event.seed)
+        elif isinstance(event, PackingAttemptStarted):
+            self.logger.info("Packing attempt %s/%s", event.attempt, event.total)
+        elif isinstance(event, ExpectedParticleCount):
+            self.logger.info("Expected particle count: %s", event.count)
+        elif isinstance(event, PackingAttemptFailed):
+            self.logger.warning("Attempt failed: %s", event.error)
+        elif isinstance(event, RelaxationProgress):
+            self.logger.debug(
+                "Relaxation iteration %s: maximum overlap excess %.6g",
+                event.iteration,
+                event.max_overlap_excess,
+            )
+        elif isinstance(event, GrowthStageStarted):
+            self.logger.info(
+                "Growth stage %s: radius scale %.6g", event.stage, event.radius_scale
+            )
+        elif isinstance(event, GrowthStageRejected):
+            self.logger.warning(
+                "Growth stage rejected; restoring scale %.6g, next increment %.6g",
+                event.restored_scale,
+                event.next_increment,
+            )
+        elif isinstance(event, PackingCompleted):
+            self.logger.info(
+                "Packing contains %s particles; solid fraction: %.9g",
+                event.particle_count,
+                event.solid_fraction,
+            )
+            self.logger.info(
+                "Saved %s to %s", ", ".join(event.filenames), event.directory
+            )
+        elif isinstance(event, PackingFailed):
+            self.logger.error("Packing failed: %s", event.error)
+        elif isinstance(event, RunCompleted):
+            self.logger.info("Run completed: %s", event.directory)
+        elif isinstance(event, DemStarted):
+            self.logger.info(
+                "DEM started with %s; solver output is saved under dem/logs.",
+                event.engine,
+            )
+        elif isinstance(event, DemCompleted):
+            self.logger.info(
+                "DEM reached %.9g s; saved %s", event.time, ", ".join(event.filenames)
+            )
+        elif isinstance(event, DemFailed):
+            self.logger.error("DEM failed: %s", event.error)
+        elif isinstance(event, RunFailed):
+            self.logger.error("Run failed: %s", event.error)
+        if isinstance(event, (RunCompleted, RunFailed)):
+            self._close_run_log()
+
+    def _open_run_log(self, directory):
+        self._close_run_log()
+        handler = logging.FileHandler(directory / self.run_filename, encoding="utf-8")
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        ))
+        self.logger.addHandler(handler)
+        self._run_handler = handler
+
+    def _close_run_log(self):
+        if self._run_handler is None:
+            return
+        self.logger.removeHandler(self._run_handler)
+        self._run_handler.close()
+        self._run_handler = None
 
 
 class ConsoleProgressObserver:
@@ -123,5 +233,11 @@ class ConsoleProgressObserver:
             print(f"Packing failed: {event.error}")
         elif isinstance(event, RunCompleted):
             print(f"Run completed: {event.directory}")
+        elif isinstance(event, DemStarted):
+            print(f"DEM started with {event.engine}; solver output is saved under dem/logs.")
+        elif isinstance(event, DemCompleted):
+            print(f"DEM reached {event.time:.9g} s; saved {', '.join(event.filenames)}")
+        elif isinstance(event, DemFailed):
+            print(f"DEM failed: {event.error}")
         elif isinstance(event, RunFailed):
             print(f"Run failed: {event.error}")

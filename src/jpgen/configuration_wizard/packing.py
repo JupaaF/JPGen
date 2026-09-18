@@ -3,8 +3,12 @@
 import math
 import re
 import secrets
+from dataclasses import replace
 
-from ..packing.configuration import build_packing_plan
+from ..packing.application import PackingApplication
+from ..packing.exporters import build_packing_exporters
+from ..packing.generator import PackingGenerator
+from ..packing.persistence import Hdf5PackingStore
 from .questions import MenuChoice, Question
 from .units import (
     ANGULAR_SPEED_FACTORS,
@@ -41,11 +45,31 @@ VECTOR_MODE_CHOICES = (
     MenuChoice("Components — answer separate X, Y and Z questions", "components"),
 )
 
+PACKING_INPUT_CHOICES = (
+    MenuChoice("Generate a new packing", "generate"),
+    MenuChoice("Reuse an existing packing.h5", "source"),
+)
+
+EXPORT_CHOICES = (
+    MenuChoice("VTK — particles.vtp for visualization", "vtk"),
+    MenuChoice("Kratos — particlesDEM.mdpa", "kratos"),
+)
+
 
 class PackingStageWizard:
     """Collect and validate every option owned by the packing stage."""
 
     name = "packing"
+
+    def __init__(self, source_application=None):
+        self.source_application = source_application or PackingApplication(
+            generator=PackingGenerator(),
+            store=Hdf5PackingStore(),
+            exporters=build_packing_exporters(),
+        )
+
+    def section_name(self, answers):
+        return "packing_source" if answers["packing.input"] == "source" else "packing"
 
     def questions(self, answers, terminal):
         return self._questions(answers, terminal)
@@ -54,7 +78,9 @@ class PackingStageWizard:
         return self._build_configuration(answers)
 
     def validate(self, configuration):
-        return build_packing_plan(configuration).to_config()
+        if "file" in configuration:
+            return self.source_application.build_source_plan(configuration).to_config()
+        return self.source_application.build_plan(configuration).to_config()
 
     def _questions(self, _answers, terminal):
         questions = [
@@ -221,7 +247,43 @@ class PackingStageWizard:
             )
         )
         questions.extend(self._placement_questions())
-        return questions
+        generation_questions = [
+            replace(
+                question,
+                visible=lambda answers, visible=question.visible: (
+                    answers.get("packing.input") == "generate" and visible(answers)
+                ),
+            )
+            for question in questions
+        ]
+        return [
+            _select(
+                "packing.input",
+                "Select the packing input",
+                "Generate a new particle packing or reuse a validated JPGen packing.h5 file.",
+                "Choose reuse to start from particles stored by an earlier run.",
+                PACKING_INPUT_CHOICES,
+                default="generate",
+            ),
+            Question(
+                key="packing_source.plan",
+                message="Path to packing.h5",
+                explanation="Existing JPGen packing file. The wizard resolves its absolute path, validates it and records its SHA-256.",
+                example="runs/20260918T120000_000000Z_example/packing.h5",
+                parser=lambda value, _answers: self._source_plan(value),
+                visible=lambda answers: answers.get("packing.input") == "source",
+            ),
+            Question(
+                key="packing.exports",
+                message="Select additional packing export formats",
+                explanation="packing.h5 is always saved. Leave every option unchecked to create no additional packing exports.",
+                example="Select VTK for ParaView and/or Kratos for a standalone MDPA export.",
+                kind="checkbox",
+                default=[],
+                choices=EXPORT_CHOICES,
+            ),
+            *generation_questions,
+        ]
 
     def _distribution_questions(self, prefix, label, unit_key, factors, allow_explicit):
         choices = DISTRIBUTION_CHOICES
@@ -478,6 +540,14 @@ class PackingStageWizard:
         return value
 
     def _build_configuration(self, answers):
+        exports = answers["packing.exports"]
+        if answers["packing.input"] == "source":
+            plan = answers["packing_source.plan"]
+            return {
+                "file": str(plan.path),
+                "sha256": plan.sha256,
+                "exports": exports,
+            }
         packing = {
             "sizing_method": answers["sizing_method"],
             "seed": answers["seed"],
@@ -492,6 +562,7 @@ class PackingStageWizard:
             "solid_fraction_tolerance": answers["solid_fraction_tolerance"],
             "velocity": _distribution_from_answers(answers, "velocity"),
             "angular_velocity": _distribution_from_answers(answers, "angular_velocity"),
+            "exports": exports,
         }
         if answers["sizing_method"] in {"fixed_count", "variable_box_fraction"}:
             packing["count"] = answers["count"]
@@ -516,6 +587,15 @@ class PackingStageWizard:
                     placement[field] = answers[f"placement.{field}"]
         packing["placement"] = placement
         return packing
+
+    def _source_plan(self, value):
+        path = value.strip()
+        if not path:
+            raise ValueError("Enter a path to packing.h5.")
+        try:
+            return self.source_application.build_source_plan({"file": path})
+        except (OSError, ValueError, KeyError) as error:
+            raise ValueError(f"Cannot load packing source: {error}") from error
 
 
 def _select(key, message, explanation, example, choices, default=None, visible=lambda _a: True):

@@ -53,6 +53,8 @@ class InteractiveTerminal:
         self.print(f"Example: {question.example}", style="italic")
         if question.kind == "select":
             result = self._select(question, answers, can_go_back)
+        elif question.kind == "checkbox":
+            result = self._checkbox(question, answers, can_go_back)
         else:
             result = self._text(question, answers, can_go_back)
         if isinstance(result, Navigation) or question.after_answer is None:
@@ -112,6 +114,33 @@ class InteractiveTerminal:
         if token == ":cancel":
             return Navigation.CANCEL
         return parser(value, answers)
+
+    def _checkbox(self, question, answers, can_go_back):
+        selected = set(question.resolved_default(answers) or [])
+        choices = [
+            Choice(choice.title, value=choice.value, checked=choice.value in selected)
+            for choice in question.resolved_choices(answers)
+        ]
+        if can_go_back:
+            choices.append(Choice("← Back", value=self.BACK_VALUE))
+        choices.append(Choice("✕ Cancel", value=self.CANCEL_VALUE))
+
+        def validate(values):
+            navigation = {self.BACK_VALUE, self.CANCEL_VALUE}.intersection(values)
+            if navigation and len(values) != 1:
+                return "Back or Cancel must be selected without export formats."
+            return True
+
+        values = questionary.checkbox(
+            question.message,
+            choices=choices,
+            validate=validate,
+        ).unsafe_ask()
+        if self.CANCEL_VALUE in values:
+            return Navigation.CANCEL
+        if self.BACK_VALUE in values:
+            return Navigation.BACK
+        return values
 
     def _navigation(self, value):
         if value == self.BACK_VALUE:

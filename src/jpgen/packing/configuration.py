@@ -8,6 +8,7 @@ from ..configuration_values import integer, mapping, number, vector
 from ..errors import ConfigurationError
 from .distributions import ExplicitDistribution, build_distribution
 from .domain import Box
+from .exporters import PACKING_EXPORTER_TYPES
 from .placement import PLACEMENT_STRATEGIES, PlacementConstraints, PlacementStrategy
 from .sizing import PACKING_SIZING_STRATEGIES, PackingSizingStrategy
 
@@ -20,6 +21,7 @@ class PackingPlan:
     sizing_strategy: PackingSizingStrategy
     placement_strategy: PlacementStrategy
     placement_constraints: PlacementConstraints
+    exports: tuple[str, ...]
 
     def to_config(self):
         result = deepcopy(self.config)
@@ -37,10 +39,41 @@ class PackingPlan:
             "max_overlap": self.placement_constraints.max_overlap,
             **placement,
         }
+        result["exports"] = list(self.exports)
+        return result
+
+    def to_packing_config(self):
+        """Return only the inputs that define the persisted packing."""
+        result = self.to_config()
+        del result["exports"]
         return result
 
 
-def build_packing_plan(raw):
+def normalized_exports(raw, available):
+    """Validate, normalize and de-duplicate requested export formats."""
+    if raw is None:
+        raw = []
+    if not isinstance(raw, list):
+        raise ConfigurationError("exports must be a list of format names.")
+    available = tuple(available)
+    available_set = set(available)
+    result = []
+    for value in raw:
+        if not isinstance(value, str) or not value.strip():
+            raise ConfigurationError(
+                f"exports entries must be format names; available formats: {', '.join(available)}."
+            )
+        name = value.strip().lower()
+        if name not in available_set:
+            raise ConfigurationError(
+                f"Unknown packing export format {value!r}; available formats: {', '.join(available)}."
+            )
+        if name not in result:
+            result.append(name)
+    return tuple(result)
+
+
+def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     """Build one executable plan from the packing section."""
     cfg = deepcopy(raw)
     if not isinstance(cfg, dict):
@@ -53,7 +86,7 @@ def build_packing_plan(raw):
     sizing_strategy = PACKING_SIZING_STRATEGIES[sizing_method]()
     common_options = {
         "sizing_method", "placement", "solid_fraction_tolerance", "box", "radii", "velocity",
-        "angular_velocity", "seed", "restarts", "max_particles",
+        "angular_velocity", "seed", "restarts", "max_particles", "exports",
     }
     mapping(
         cfg,
@@ -61,6 +94,7 @@ def build_packing_plan(raw):
         common_options | sizing_strategy.config_options,
         {"sizing_method", "box", "radii"},
     )
+    exports = normalized_exports(cfg.pop("exports", []), available_exports)
     cfg["solid_fraction_tolerance"] = number(cfg.get("solid_fraction_tolerance", 0.001), "solid_fraction_tolerance", 0)
     cfg["restarts"] = integer(cfg.get("restarts", 10), "restarts", 0)
     cfg["max_particles"] = integer(cfg.get("max_particles", 1_000_000), "max_particles")
@@ -97,4 +131,4 @@ def build_packing_plan(raw):
     strategy_config = {key: value for key, value in placement.items() if key != "max_overlap"}
     placement_strategy = PLACEMENT_STRATEGIES[method].from_config(strategy_config)
     del cfg["placement"]
-    return PackingPlan(cfg, sizing_strategy, placement_strategy, constraints)
+    return PackingPlan(cfg, sizing_strategy, placement_strategy, constraints, exports)

@@ -90,7 +90,10 @@ class ConfigurationWizard:
     def _validated_configuration(self, answers):
         configuration = {}
         for stage in self.stages:
-            configuration[stage.name] = stage.validate(stage.build(answers))
+            value = stage.validate(stage.build(answers))
+            if value is not None:
+                name = stage.section_name(answers) if hasattr(stage, "section_name") else stage.name
+                configuration[name] = value
         return configuration
 
     def _output_path(self, value, default_name):

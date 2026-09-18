@@ -10,7 +10,7 @@ import yaml
 
 
 class WizardYamlDumper(yaml.SafeDumper):
-    """Render an intentionally empty future stage as ``stage:``."""
+    """Render optional null settings as empty YAML values."""
 
 
 def _represent_empty_none(dumper, _value):
