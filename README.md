@@ -321,8 +321,7 @@ protocol:
         type: stress_servo
         mode: isotropic
         target_pressure: 100000.0
-        gain: 0.0001
-        max_strain_rate: 1.0
+        max_velocity: 0.05
       until:
         observable: pressure
         op: near
@@ -343,15 +342,19 @@ experiment. Every stage runs on the same live solver, preserving contact history
 | Controller | Parameters | Behavior |
 | --- | --- | --- |
 | `free_evolution` | None | Integrate particles with the current cell fixed |
-| `stress_servo` | `mode: isotropic`, `target_pressure` | Control mean normal contact stress |
-| `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]` | Independently control three normal stresses |
+| `stress_servo` | `mode: isotropic`, `target_pressure`, `max_velocity` | Control mean normal contact stress |
+| `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]`, `max_velocity` | Independently control three normal stresses |
 | `strain_rate` | `rate: [x, y, z]` | Prescribe logarithmic cell strain rates in 1/s; expansion positive |
 
-Servo `gain` defaults to `1e-4` in 1/(Pa s), and `max_strain_rate` defaults to
-`1.0` in 1/s. The strain rate is `gain * (measured - target)`, clipped to the
-rate limit. Isotropic control applies the same strain rate on all axes. Tune
-gain, rate limit, tolerances and time step for the material and sample; a target
-may be physically unreachable and convergence is not guaranteed.
+The portable JPGen servo follows Kratos' wall-velocity definition without its
+additional loading factor. For each controlled axis it commands
+`(target - measured) * D50 / (time_step * particle_Young_modulus)`, clipped by
+`max_velocity` (default `0.05` m/s). `D50` is the median particle diameter by
+count. Positive velocity moves both opposing faces inward; negative velocity
+moves them outward. Isotropic control applies the same face velocity on all
+axes. Tune the velocity limit, tolerances and time step for the material and
+sample; a target may be physically unreachable and convergence is not
+guaranteed.
 
 A target can be a nonnegative constant or a time signal:
 
@@ -368,9 +371,10 @@ each integration step; for time-driven cycles use a `stage_time` stop condition.
 A repeated pair of constant-target stages instead switches at measured stress
 thresholds and has no imposed frequency.
 
-Cell control currently requires periodic boundaries. The Kratos adapter moves
-opposite faces symmetrically and applies the corresponding affine displacement
-to particles, without resetting their velocities or contact history. A following
+Cell control currently requires periodic boundaries. The Kratos adapter receives
+an explicit solver-independent actuator command, moves opposite faces
+symmetrically and applies the corresponding affine displacement to particles,
+without resetting their velocities or contact history. A following
 free evolution stage preserves the attained cell. Deformation above 1% per step
 or a cell width at most twice the largest particle diameter is rejected.
 Walls and shear deformation are not provided by these controllers.
@@ -434,11 +438,21 @@ geometries; final particle positions are wrapped using the final cell. Failed
 protocols retain native final state, report and history for diagnosis.
 
 `jpgen/dem/protocol.py` contains solver-independent validation, conditions,
-signals, controller functions and the lazy `ProtocolRunner`. To introduce a new
-controller, add its validator and register its function in `CONTROLLERS`; the
-current actuation contract returns three cell strain rates. New observables need
-a name in the validator and a measurement in the backend adapter. Controllers
-requiring other actuators need an explicit adapter contract extension.
-`backends/kratos/protocol_adapter.py` implements cell operations and measurements;
-`runner.py` connects these to solver lifecycle hooks. The standalone case copies
-these modules alongside `run.py` and requires no JPGen import at execution time.
+signals, controller functions and the lazy `ProtocolRunner`. Controllers emit
+explicit commands (`cell_strain_rate` or `symmetric_wall_velocity`) rather than
+calling solver APIs. To introduce a new controller, add its validator and
+register its function in `CONTROLLERS`; a new actuator requires an explicit
+adapter-contract extension. New observables need a name in the validator and a
+measurement in the backend adapter.
+
+Every backend declares boundaries, controllers, observables, adaptive stepping
+and actuator commands through `DemCapabilities`; unsupported protocols are
+rejected before execution. The protocol and controller remain owned by JPGen so
+their meaning is stable across engines. A backend may advertise native controls,
+but using one requires an explicit backend-specific implementation rather than a
+silent semantic change.
+
+`backends/kratos/protocol_adapter.py` translates portable commands into Kratos
+cell operations and measurements; `runner.py` connects these to solver lifecycle
+hooks. The standalone case copies these modules alongside `run.py` and requires
+no JPGen import at execution time.

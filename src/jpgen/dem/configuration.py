@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from ..configuration_values import mapping, number, vector
 from ..errors import ConfigurationError
 from .domain import Contact, DemCase, Material
-from .protocol import validate_protocol, protocol_duration, duration_steps
+from .protocol import validate_protocol, protocol_duration, duration_steps, maximum_servo_velocity
 from .timestep import validate_time_step
 from .backends.base import DemBackend
 
@@ -37,6 +37,11 @@ class DemPlan:
     def validate_box(self, box):
         if box.periodic != (self.boundary == "periodic"):
             raise ConfigurationError("DEM boundary must agree with packing.box.periodic.")
+        if self.protocol and not self.adaptive:
+            velocity = maximum_servo_velocity(self.protocol["stages"])
+            if velocity and 2 * velocity * self.time_step / min(box.lengths) > 0.01:
+                raise ConfigurationError("Stress servo permits more than 1% cell strain per step; "
+                                         "reduce time_step or max_velocity.")
 
     def create_case(self, packing):
         packing.validate()

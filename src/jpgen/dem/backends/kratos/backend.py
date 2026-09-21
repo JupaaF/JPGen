@@ -14,10 +14,10 @@ import numpy as np
 
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
-from ...protocol import STRESS_OBSERVABLES, required_observables, iter_stages, control_types
+from ...protocol import OBSERVABLES, STRESS_OBSERVABLES, required_observables, iter_stages, control_types
 from ...domain import DemState
 from ....packing.domain.box import Box
-from ..base import ExecutionReport, PreparedDemCase
+from ..base import DemCapabilities, ExecutionReport, PreparedDemCase
 from .case_writer import CONTACT_LAWS, write_case
 
 
@@ -29,6 +29,14 @@ class KratosBackend:
     timeout_seconds: float | None
 
     name = "kratos"
+    capabilities = DemCapabilities(
+        boundaries=frozenset({"open", "periodic"}),
+        controls=frozenset({"free_evolution", "strain_rate", "stress_servo"}),
+        observables=frozenset(OBSERVABLES),
+        adaptive_time_step=True,
+        actuator_commands=frozenset({"cell_strain_rate", "symmetric_wall_velocity"}),
+        native_controls=frozenset({"stress_servo"}),
+    )
 
     @classmethod
     def from_config(cls, raw):
@@ -66,6 +74,7 @@ class KratosBackend:
         return environment
 
     def validate(self, plan):
+        self.capabilities.validate(plan)
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
         probe_code = "from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
@@ -157,7 +166,7 @@ class KratosBackend:
                     raise ValueError("Incomplete protocol history.")
             return ExecutionReport(return_code, elapsed, result["versions"], result["steps"],
                                    result["stop_reason"], result["history"], result["observables"],
-                                   final_time, result.get("time_step", {}))
+                                   final_time, result.get("time_step", {}), result.get("control", {}))
         except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
             if isinstance(error, DemExecutionError):
                 raise

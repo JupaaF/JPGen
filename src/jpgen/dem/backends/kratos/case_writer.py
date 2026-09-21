@@ -4,6 +4,8 @@ import json
 import shutil
 from pathlib import Path
 
+import numpy as np
+
 from ....packing.exporters.kratos import KratosExporter
 from ...protocol import required_observables, STRESS_OBSERVABLES
 
@@ -36,6 +38,7 @@ def write_case(case, directory):
     }
     needs_stress = bool(case.protocol and required_observables(case.protocol["stages"]) & STRESS_OBSERVABLES)
     needs_contacts = needs_stress or bool(case.adaptive)
+    particle_diameter_d50 = float(2 * np.median(case.packing.radii))
     parameters = {
         "problem_name": "particles", "FinalTime": case.end_time,
         "MaxTimeStep": case.time_step, "AutomaticTimestep": False,
@@ -65,6 +68,7 @@ def write_case(case, directory):
     for name, value in (("ProjectParametersDEM.json", parameters), ("MaterialsDEM.json", materials),
                         ("execution.json", {"steps": case.steps, "protocol": case.protocol,
                                              "density": case.material.density, "boundary": case.boundary,
+                                             "particle_diameter_d50": particle_diameter_d50,
                                              "young_modulus": material.young_modulus, "poisson_ratio": material.poisson_ratio,
                                              "restitution": contact.restitution, "adaptive": case.adaptive, "gravity": list(case.gravity),
                                              "end_time": case.end_time})):

@@ -122,7 +122,7 @@ def _stage_questions(answers, prefix, periodic, depth=0):
         control = answers.get(key + '.control', 'free_evolution')
         if control == 'stress_servo':
             questions.append(_question(key + '.mode', 'Stress control mode', 'isotropic', choices=[('Isotropic pressure', 'isotropic'), ('Normal stresses X Y Z', 'anisotropic')],
-                                   explanation='Isotropic control tracks mean normal contact stress using the same strain rate on all axes. Anisotropic control tracks separate normal stress targets along X, Y and Z by adjusting each cell dimension independently.'))
+                                   explanation='Isotropic control tracks mean normal contact stress using the same symmetric face velocity on all axes. Anisotropic control tracks separate normal stress targets along X, Y and Z by adjusting each cell dimension independently.'))
             if answers.get(key + '.mode', 'isotropic') == 'anisotropic':
                 questions.append(_question(key + '.target_stress', 'Target normal stresses X Y Z (Pa, compression positive)', '100000 100000 100000', _vector,
                                    explanation='Enter the target normal contact stresses along X, Y and Z in Pa. Compression is positive; all three targets must be nonnegative. These are controller targets; the stopping condition is configured separately.'))
@@ -136,10 +136,8 @@ def _stage_questions(answers, prefix, periodic, depth=0):
                 for field, label, default in fields:
                     questions.append(_question(key + '.target.' + field, label, default,
                                    explanation=TARGET_EXPLANATIONS[field]))
-            questions.extend([_question(key + '.gain', 'Servo gain (1/(Pa s))', 1e-4,
-                                   explanation='Converts the difference between measured and target stress into a cell strain rate. Larger gains react faster but can cause oscillations; smaller gains respond more slowly. Enter a positive value in 1/(Pa s).'),
-                              _question(key + '.max_strain_rate', 'Maximum absolute strain rate (1/s)', 1.0,
-                                   explanation='Positive limit on the magnitude of the strain rate commanded by the servo on each axis, in 1/s. It caps both compression and expansion. With manual stepping, this limit times the step must not exceed 0.01. Adaptive stepping limits the actual cell strain increment.')])
+            questions.append(_question(key + '.max_velocity', 'Maximum wall velocity (m/s)', 0.05,
+                                   explanation='Positive limit on the absolute velocity of each opposing cell face. The servo otherwise uses error × D50 / (time step × particle Young modulus), matching the Kratos definition without its extra loading factor.'))
         elif control == 'strain_rate':
             questions.append(_question(key + '.rate', 'Cell strain rates X Y Z (1/s; compression negative)', '-0.1 -0.1 -0.1', _vector,
                                    explanation='Enter the imposed logarithmic strain rates along X, Y and Z in 1/s. Negative values compress, positive values expand, and zero keeps that dimension fixed. Cell dimensions and particle positions deform together; manual steps must keep each strain increment at most 0.01; adaptive stepping limits the increment automatically.'))
@@ -184,7 +182,7 @@ def build_protocol(answers, prefix='dem.protocol'):
             if control['type'] == 'strain_rate':
                 control['rate'] = answers[key + '.rate']
             elif control['type'] == 'stress_servo':
-                control.update({field: answers[key + '.' + field] for field in ('mode', 'gain', 'max_strain_rate')})
+                control.update({field: answers[key + '.' + field] for field in ('mode', 'max_velocity')})
                 if control['mode'] == 'anisotropic':
                     control['target_stress'] = answers[key + '.target_stress']
                 else:

@@ -1,7 +1,9 @@
 """Declarative protocol validation and execution, using only the standard library.
 
 This module is also copied into standalone solver cases. Compression is positive;
-controllers return logarithmic cell strain rates (expansion positive).
+controllers return explicit actuator commands. Prescribed strain rates use
+logarithmic cell strain (expansion positive); stress servos use symmetric wall
+velocities (compression positive), matching Kratos' servo convention.
 """
 import copy
 import math
@@ -97,7 +99,10 @@ def validate_control(control):
         for value in control['rate']:
             _number(value)
     elif kind == 'stress_servo':
-        _mapping(control, {'type', 'mode', 'target_pressure', 'target_stress', 'gain', 'max_strain_rate'}, {'type', 'mode'})
+        legacy = set(control) & {'gain', 'max_strain_rate'}
+        if legacy:
+            raise ValueError('stress_servo now uses max_velocity (m/s); remove gain and max_strain_rate.')
+        _mapping(control, {'type', 'mode', 'target_pressure', 'target_stress', 'max_velocity'}, {'type', 'mode'})
         mode = control['mode']
         if mode == 'isotropic' and 'target_pressure' in control and 'target_stress' not in control:
             _target(control['target_pressure'])
@@ -109,8 +114,7 @@ def validate_control(control):
                 _target(value)
         else:
             raise ValueError('Use isotropic/target_pressure or anisotropic/target_stress.')
-        _number(control.setdefault('gain', 1e-4), 0, True)
-        _number(control.setdefault('max_strain_rate', 1.0), 0, True)
+        _number(control.setdefault('max_velocity', 0.05), 0, True)
     else:
         raise ValueError(f'Unknown controller: {kind!r}')
 
@@ -136,7 +140,7 @@ def validate_protocol(raw, dt, boundary, adaptive=False):
             _mapping(stage, {'name', 'control', 'until', 'max_duration'}, {'control', 'until', 'max_duration'})
             validate_control(stage['control'])
             control = stage['control']
-            rates = control.get('rate', [control.get('max_strain_rate', 0)])
+            rates = control.get('rate', [])
             if not adaptive and any(abs(rate * dt) > 0.01 for rate in rates):
                 raise ValueError('Controller permits more than 1% cell strain per step; reduce time_step or rate.')
             validate_condition(stage['until'])
@@ -200,6 +204,24 @@ def control_types(stages):
     return result
 
 
+def required_actuator_commands(stages):
+    commands = {'stress_servo': 'symmetric_wall_velocity',
+                'free_evolution': 'cell_strain_rate',
+                'strain_rate': 'cell_strain_rate'}
+    return {commands[kind] for kind in control_types(stages)}
+
+
+def maximum_servo_velocity(stages):
+    """Largest configured symmetric face velocity in a nested protocol."""
+    result = 0.0
+    for stage in stages:
+        if 'stages' in stage:
+            result = max(result, maximum_servo_velocity(stage['stages']))
+        elif stage['control']['type'] == 'stress_servo':
+            result = max(result, stage['control']['max_velocity'])
+    return result
+
+
 class Condition:
     def __init__(self, specification):
         self.spec = specification
@@ -255,22 +277,29 @@ def target_value(target, elapsed):
     return target['mean'] + target['amplitude'] * math.sin(2 * math.pi * target['frequency'] * elapsed + target.get('phase', 0))
 
 
-def free_evolution(control, values, elapsed):
-    return [0.0] * 3
+def free_evolution(control, values, elapsed, context):
+    return {'type': 'cell_strain_rate', 'values': [0.0] * 3}
 
 
-def strain_rate(control, values, elapsed):
-    return control['rate']
+def strain_rate(control, values, elapsed, context):
+    return {'type': 'cell_strain_rate', 'values': list(control['rate'])}
 
 
-def stress_servo(control, values, elapsed):
+def stress_servo(control, values, elapsed, context):
+    if not isinstance(context, dict):
+        raise ValueError('Stress servo requires actuator context.')
+    dt = _number(context.get('dt'), 0, True)
+    diameter = _number(context.get('particle_diameter_d50'), 0, True)
+    young = _number(context.get('young_modulus'), 0, True)
     if control['mode'] == 'isotropic':
-        errors = [values['pressure'] - target_value(control['target_pressure'], elapsed)] * 3
+        errors = [target_value(control['target_pressure'], elapsed) - values['pressure']] * 3
     else:
-        errors = [values['stress_' + axis] - target_value(target, elapsed)
+        errors = [target_value(target, elapsed) - values['stress_' + axis]
                   for axis, target in zip(('xx', 'yy', 'zz'), control['target_stress'])]
-    limit = control['max_strain_rate']
-    return [max(-limit, min(limit, control['gain'] * error)) for error in errors]
+    coefficient = diameter / (dt * young)
+    limit = control['max_velocity']
+    velocities = [max(-limit, min(limit, coefficient * error)) for error in errors]
+    return {'type': 'symmetric_wall_velocity', 'values': velocities}
 
 
 CONTROLLERS = {'free_evolution': free_evolution, 'strain_rate': strain_rate, 'stress_servo': stress_servo}
@@ -301,9 +330,9 @@ class ProtocolRunner:
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
 
-    def act(self, values):
+    def act(self, values, context=None):
         control = self.stage['control']
-        return CONTROLLERS[control['type']](control, values, self.time - self.start_time)
+        return CONTROLLERS[control['type']](control, values, self.time - self.start_time, context)
 
     def remaining_time(self):
         elapsed = self.time - self.start_time

@@ -4,7 +4,66 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from ...errors import ConfigurationError
 from ..domain import DemCase, DemState
+
+
+@dataclass(frozen=True)
+class DemCapabilities:
+    """Solver-independent features required by a portable JPGen protocol."""
+
+    boundaries: frozenset[str]
+    controls: frozenset[str]
+    observables: frozenset[str]
+    adaptive_time_step: bool = False
+    actuator_commands: frozenset[str] = frozenset()
+    native_controls: frozenset[str] = frozenset()
+
+    def validate(self, plan) -> None:
+        from ..protocol import control_types, required_actuator_commands, required_observables
+
+        if plan.boundary not in self.boundaries:
+            raise ConfigurationError(f"Backend {plan.backend.name} does not support {plan.boundary} boundaries.")
+        if plan.adaptive and not self.adaptive_time_step:
+            raise ConfigurationError(f"Backend {plan.backend.name} does not support adaptive time stepping.")
+        if not plan.protocol:
+            return
+        unsupported_controls = control_types(plan.protocol["stages"]) - self.controls
+        if unsupported_controls:
+            raise ConfigurationError(f"Backend {plan.backend.name} does not support controls: "
+                                     f"{', '.join(sorted(unsupported_controls))}.")
+        unsupported_observables = required_observables(plan.protocol["stages"]) - self.observables
+        if unsupported_observables:
+            raise ConfigurationError(f"Backend {plan.backend.name} cannot measure: "
+                                     f"{', '.join(sorted(unsupported_observables))}.")
+        unsupported_commands = required_actuator_commands(plan.protocol["stages"]) - self.actuator_commands
+        if unsupported_commands:
+            raise ConfigurationError(f"Backend {plan.backend.name} cannot apply actuator commands: "
+                                     f"{', '.join(sorted(unsupported_commands))}.")
+
+    def to_config(self) -> dict:
+        return {
+            "boundaries": sorted(self.boundaries),
+            "controls": sorted(self.controls),
+            "observables": sorted(self.observables),
+            "adaptive_time_step": self.adaptive_time_step,
+            "actuator_commands": sorted(self.actuator_commands),
+            "native_controls": sorted(self.native_controls),
+        }
+
+
+class DemControlPort(Protocol):
+    """Live solver operations consumed by the engine-independent protocol."""
+
+    def control_context(self, dt: float) -> dict: ...
+
+    def apply(self, command: dict, dt: float) -> None: ...
+
+    def observe(self) -> dict: ...
+
+    def box(self) -> dict: ...
+
+    def timestep_limits(self, command: dict, control: dict, dt: float) -> dict: ...
 
 
 @dataclass(frozen=True)
@@ -24,10 +83,12 @@ class ExecutionReport:
     observables: dict = field(default_factory=dict)
     time: float | None = None
     time_step: dict = field(default_factory=dict)
+    control: dict = field(default_factory=dict)
 
 
 class DemBackend(Protocol):
     name: str
+    capabilities: DemCapabilities
 
     def to_config(self) -> dict: ...
 

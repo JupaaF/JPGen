@@ -33,7 +33,7 @@ def main():
             self.adaptive = None
             self.step_info = {}
             self.current_dt = execution.get("adaptive", {}).get("initial", 0) if execution.get("adaptive") else 0
-            self.rates = [0.0, 0.0, 0.0]
+            self.command = {"type": "cell_strain_rate", "values": [0.0, 0.0, 0.0]}
             super().__init__(model, parameters)
             self.mdpas_folder_path = str(inputs)
 
@@ -48,8 +48,10 @@ def main():
 
         def _AdvanceTime(self):
             if self.adaptive is not None:
-                self.rates = self.protocol.act(self.observables)
-                limits = self.adapter.timestep_limits(self.rates, self.protocol.stage['control'])
+                self.command = self.protocol.act(
+                    self.observables, self.adapter.control_context(self.current_dt))
+                limits = self.adapter.timestep_limits(
+                    self.command, self.protocol.stage['control'], self.current_dt)
                 try:
                     self.current_dt, self.step_info = self.adaptive.choose(limits, self.protocol.remaining_time())
                 except ValueError as error:
@@ -59,6 +61,10 @@ def main():
                         "limits": {k: v for k, v in limits.items() if math.isfinite(v)},
                         "time_step": self.adaptive.summary()}, allow_nan=False, indent=2))
                     raise
+                # Kratos-style stress control contains 1/dt. Refresh it after
+                # choosing the actual adaptive step.
+                self.command = self.protocol.act(
+                    self.observables, self.adapter.control_context(self.current_dt))
                 self._GetSolver().SetDt(self.current_dt)
                 return self._GetSolver().AdvanceInTime(self.protocol.time)
             # Avoid cumulative rounding causing a spurious extra/missing step.
@@ -91,8 +97,10 @@ def main():
             if self.protocol is not None:
                 if self.adapter.needs_stress or self.adapter.needs_contacts:
                     self.UpdateIsTimeToUpdateContactElementForServo(True)
-                self.adapter.apply(self.rates if self.adaptive else self.protocol.act(self.observables),
-                                   self.current_dt if self.adaptive else self.protocol.dt)
+                dt = self.current_dt if self.adaptive else self.protocol.dt
+                command = self.command if self.adaptive else self.protocol.act(
+                    self.observables, self.adapter.control_context(dt))
+                self.adapter.apply(command, dt)
 
         def FinalizeSolutionStep(self):
             super().FinalizeSolutionStep()
@@ -137,6 +145,8 @@ def main():
         "time_step": analysis.adaptive.summary() if analysis.adaptive else {"mode": "fixed", "value": execution["end_time"] / execution["steps"]},
         "history": analysis.protocol.history if analysis.protocol else [],
         "observables": analysis.observables,
+        "control": {"implementation": "jpgen_portable",
+                    "actuators": ["cell_strain_rate", "symmetric_wall_velocity"]},
         "versions": {"kratos": KM.Kernel.Version(), "python": platform.python_version()},
     }, indent=2), encoding="utf-8")
 

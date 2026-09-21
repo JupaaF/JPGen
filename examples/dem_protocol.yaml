@@ -62,8 +62,7 @@ dem:
         type: stress_servo
         mode: isotropic
         target_pressure: 1000.0
-        gain: 0.01
-        max_strain_rate: 10.0
+        max_velocity: 0.1
       until:
         observable: pressure
         op: near
@@ -79,8 +78,7 @@ dem:
           type: stress_servo
           mode: isotropic
           target_pressure: 2000.0
-          gain: 0.01
-          max_strain_rate: 10.0
+          max_velocity: 0.1
         until:
           observable: pressure
           op: near
@@ -93,8 +91,7 @@ dem:
           type: stress_servo
           mode: isotropic
           target_pressure: 1000.0
-          gain: 0.01
-          max_strain_rate: 10.0
+          max_velocity: 0.1
         until:
           observable: pressure
           op: near

@@ -24,23 +24,48 @@ class KratosProtocolAdapter:
         lengths = [getattr(self.analysis, f'BoundingBoxMax{axis}_update') - low for axis, low in zip('XYZ', origin)]
         return {'origin': origin, 'lengths': lengths, 'periodic': self.periodic}
 
-    def apply(self, rates, dt):
-        if not any(rates):
+    def control_context(self, dt):
+        return {'dt': dt, 'particle_diameter_d50': self.execution['particle_diameter_d50'],
+                'young_modulus': self.execution['young_modulus']}
+
+    def _cell_kinematics(self, command, dt):
+        if not isinstance(command, dict) or set(command) != {'type', 'values'}:
+            raise ValueError(f'Invalid cell actuator command: {command!r}')
+        values = command['values']
+        if not isinstance(values, list) or len(values) != 3 or any(not math.isfinite(value) for value in values):
+            raise ValueError(f'Cell actuator command requires three finite values: {command!r}')
+        lengths = self.box()['lengths']
+        if command['type'] == 'cell_strain_rate':
+            scales = [math.exp(rate * dt) for rate in values]
+            velocities = [(length - length * scale) / (2 * dt)
+                          for length, scale in zip(lengths, scales)]
+        elif command['type'] == 'symmetric_wall_velocity':
+            velocities = values
+            scales = [(length - 2 * velocity * dt) / length
+                      for length, velocity in zip(lengths, velocities)]
+        else:
+            raise ValueError(f'Unsupported cell actuator command: {command["type"]!r}')
+        if any(scale <= 0 or not math.isfinite(scale) for scale in scales):
+            raise ValueError('Cell actuator command collapses or inverts the periodic cell.')
+        rates = [math.log(scale) / dt for scale in scales]
+        return velocities, scales, rates
+
+    def apply(self, command, dt):
+        velocities, scales, rates = self._cell_kinematics(command, dt)
+        if not any(command['values']):
             return
         if not self.periodic:
             raise ValueError('Cell deformation requires periodic boundaries.')
-        if any(not math.isfinite(rate) or abs(rate * dt) > 0.01 for rate in rates):
-            raise ValueError('Cell strain per step exceeds 1%; reduce time_step or strain rate.')
+        if any(abs(rate * dt) > 0.01 for rate in rates):
+            raise ValueError('Cell strain per step exceeds 1%; reduce time_step or the controller limit.')
         box = self.box()
         lengths = box['lengths']
-        scales = [math.exp(rate * dt) for rate in rates]
         new_lengths = [length * scale for length, scale in zip(lengths, scales)]
         max_radius = max(node.GetSolutionStepValue(KM.RADIUS) for node in self.analysis.spheres_model_part.Nodes)
         if min(new_lengths) <= 4 * max_radius:
             raise ValueError('Periodic cell must remain larger than twice the largest particle diameter.')
         centers = [low + length / 2 for low, length in zip(box['origin'], lengths)]
         # Move both faces symmetrically, keeping one live C++ strategy and contact history.
-        velocities = [(old - new) / (2 * dt) for old, new in zip(lengths, new_lengths)]
         self.analysis.UpdateSearchStartegyAndCPlusPlusStrategy(velocities)
         self.analysis.procedures.UpdateBoundingBox(self.analysis.spheres_model_part,
                                                   self.analysis.creator_destructor, velocities)
@@ -80,7 +105,7 @@ class KratosProtocolAdapter:
         return result
 
 
-    def timestep_limits(self, rates, control):
+    def timestep_limits(self, command, control, dt):
         """Re-evaluate Rayleigh, Hertz network, motion and imposed-strain estimates.
 
         Contact geometry comes from Kratos' most recent neighbour search. The
@@ -89,6 +114,7 @@ class KratosProtocolAdapter:
         This is an estimator, not a mathematical error/stability guarantee.
         """
         settings = self.execution['adaptive']
+        _, _, rates = self._cell_kinematics(command, dt)
         safety = settings['safety_factor']
         nodes = list(self.analysis.spheres_model_part.Nodes)
         indices = {node.Id: index for index, node in enumerate(nodes)}
