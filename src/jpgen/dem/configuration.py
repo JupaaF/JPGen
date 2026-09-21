@@ -5,7 +5,8 @@ from dataclasses import asdict, dataclass
 
 from ..configuration_values import mapping, number, vector
 from ..errors import ConfigurationError
-from .domain import Contact, DemCase, Material
+from .contacts import build_contact
+from .domain import Contact, DemCase, Material, Integration
 from .protocol import validate_protocol, protocol_duration, duration_steps, maximum_servo_velocity
 from .timestep import validate_time_step
 from .backends.base import DemBackend
@@ -23,12 +24,14 @@ class DemPlan:
     protocol: dict | None = None
     adaptive: dict | None = None
     duration: float | None = None
+    integration: Integration = Integration()
 
     def to_config(self):
         return {
             "engine": self.backend.name,
             "backend_options": self.backend.to_config(),
-            "material": asdict(self.material), "contact": asdict(self.contact),
+            "material": asdict(self.material), "contact": self.contact.to_config(),
+            "integration": asdict(self.integration),
             "boundary": self.boundary, "gravity": list(self.gravity),
             "time_step": self.adaptive or self.time_step,
             **({"end_time": self.duration if self.duration is not None else self.time_step * self.steps} if self.protocol is None else {"protocol": self.protocol}),
@@ -47,7 +50,7 @@ class DemPlan:
         packing.validate()
         self.validate_box(packing.box)
         return DemCase(packing, self.material, self.contact, self.boundary,
-                       self.gravity, self.time_step, self.steps, self.protocol, self.adaptive, self.duration)
+                       self.gravity, self.time_step, self.steps, self.protocol, self.adaptive, self.duration, self.integration)
 
 
 def build_dem_plan(raw, backends=None):
@@ -55,7 +58,7 @@ def build_dem_plan(raw, backends=None):
         from .backends import DEM_BACKENDS
         backends = DEM_BACKENDS
     mapping(raw, "dem", {"engine", "backend_options", "material", "contact", "boundary",
-                         "gravity", "time_step", "end_time", "protocol"},
+                         "gravity", "time_step", "end_time", "protocol", "integration"},
             {"engine", "material", "contact", "boundary", "time_step"})
     engine = raw["engine"]
     if not isinstance(engine, str) or engine not in backends:
@@ -70,20 +73,12 @@ def build_dem_plan(raw, backends=None):
     )
     if material.poisson_ratio >= 0.5:
         raise ConfigurationError("poisson_ratio must be less than 0.5.")
-    contact = raw["contact"]
-    mapping(contact, "dem.contact", {"model", "static_friction", "dynamic_friction",
-                                     "friction_decay", "restitution"},
-            {"model", "static_friction", "dynamic_friction", "restitution"})
-    if not isinstance(contact["model"], str):
-        raise ConfigurationError("dem.contact.model must be a string.")
-    contact = Contact(
-        contact["model"], number(contact["static_friction"], "static_friction", 0),
-        number(contact["dynamic_friction"], "dynamic_friction", 0),
-        number(contact.get("friction_decay", 500.0), "friction_decay", 0),
-        number(contact["restitution"], "restitution", 0, 1),
-    )
-    if contact.dynamic_friction > contact.static_friction:
-        raise ConfigurationError("dynamic_friction must not exceed static_friction.")
+    contact = build_contact(raw["contact"])
+    integration_raw = raw.get("integration", {})
+    mapping(integration_raw, "dem.integration", {"translation", "rotation"})
+    integration = Integration(**integration_raw)
+    if any(not isinstance(value, str) or not value for value in (integration.translation, integration.rotation)):
+        raise ConfigurationError("Integration schemes must be nonempty strings.")
     boundary = raw["boundary"]
     if boundary not in ("open", "periodic"):
         raise ConfigurationError("dem.boundary must be open or periodic; walls are not yet supported.")
@@ -114,5 +109,7 @@ def build_dem_plan(raw, backends=None):
             steps = duration_steps(end, budget_dt)
         elif not math.isclose(ratio, steps, rel_tol=0, abs_tol=1e-8):
             raise ConfigurationError("dem.end_time must be an integer multiple of dem.time_step.")
-    return DemPlan(backends[engine](raw.get("backend_options", {})), material, contact,
-                   boundary, tuple(vector(raw.get("gravity", [0, 0, 0]), "dem.gravity")), dt, steps, protocol, adaptive, duration)
+    plan = DemPlan(backends[engine](raw.get("backend_options", {})), material, contact,
+                   boundary, tuple(vector(raw.get("gravity", [0, 0, 0]), "dem.gravity")), dt, steps, protocol, adaptive, duration, integration)
+    plan.backend.capabilities.validate(plan)
+    return plan

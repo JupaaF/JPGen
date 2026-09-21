@@ -6,6 +6,7 @@ import KratosMultiphysics as KM
 import KratosMultiphysics.DEMApplication as DEM
 
 from timestep import rayleigh_time
+from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 from protocol import STRESS_OBSERVABLES, required_observables
 
@@ -14,6 +15,9 @@ class KratosProtocolAdapter:
     def __init__(self, analysis, execution):
         self.analysis = analysis
         self.density = execution['density']
+        self.physics = DEM.SphericElementGlobalPhysicsCalculator(analysis.spheres_model_part)
+        # Current cases preserve particle population and radii throughout the run.
+        self.solid_volume = self.physics.CalculateTotalVolume(analysis.spheres_model_part)
         self.execution = execution
         self.needs_contacts = bool(execution.get('adaptive'))
         self.periodic = execution['boundary'] == 'periodic'
@@ -28,31 +32,29 @@ class KratosProtocolAdapter:
         return {'dt': dt, 'particle_diameter_d50': self.execution['particle_diameter_d50'],
                 'young_modulus': self.execution['young_modulus']}
 
-    def _cell_kinematics(self, command, dt):
-        if not isinstance(command, dict) or set(command) != {'type', 'values'}:
-            raise ValueError(f'Invalid cell actuator command: {command!r}')
-        values = command['values']
-        if not isinstance(values, list) or len(values) != 3 or any(not math.isfinite(value) for value in values):
-            raise ValueError(f'Cell actuator command requires three finite values: {command!r}')
+    def _cell_kinematics(self, command: ActuatorCommand, dt: float):
+        if isinstance(command, NoActuation):
+            return [0.0] * 3, [1.0] * 3, [0.0] * 3
+        if not isinstance(command, (CellStrainRate, SymmetricWallVelocity)):
+            raise ValueError(f'Unsupported actuator command: {command!r}')
+        values = command.values
         lengths = self.box()['lengths']
-        if command['type'] == 'cell_strain_rate':
+        if isinstance(command, CellStrainRate):
             scales = [math.exp(rate * dt) for rate in values]
             velocities = [(length - length * scale) / (2 * dt)
                           for length, scale in zip(lengths, scales)]
-        elif command['type'] == 'symmetric_wall_velocity':
+        elif isinstance(command, SymmetricWallVelocity):
             velocities = values
             scales = [(length - 2 * velocity * dt) / length
                       for length, velocity in zip(lengths, velocities)]
-        else:
-            raise ValueError(f'Unsupported cell actuator command: {command["type"]!r}')
         if any(scale <= 0 or not math.isfinite(scale) for scale in scales):
             raise ValueError('Cell actuator command collapses or inverts the periodic cell.')
         rates = [math.log(scale) / dt for scale in scales]
         return velocities, scales, rates
 
-    def apply(self, command, dt):
+    def apply(self, command: ActuatorCommand, dt: float) -> None:
         velocities, scales, rates = self._cell_kinematics(command, dt)
-        if not any(command['values']):
+        if isinstance(command, NoActuation) or not any(command.values):
             return
         if not self.periodic:
             raise ValueError('Cell deformation requires periodic boundaries.')
@@ -80,19 +82,12 @@ class KratosProtocolAdapter:
             node.SetSolutionStepValue(KM.DISPLACEMENT, displacement)
 
     def observe(self):
-        energy = 0.0
-        solid_volume = 0.0
-        for node in self.analysis.spheres_model_part.Nodes:
-            radius = node.GetSolutionStepValue(KM.RADIUS)
-            volume = 4 * math.pi / 3 * radius**3
-            mass = self.density * volume
-            velocity = node.GetSolutionStepValue(KM.VELOCITY)
-            spin = node.GetSolutionStepValue(KM.ANGULAR_VELOCITY)
-            energy += .5 * mass * sum(v*v for v in velocity) + .2 * mass * radius**2 * sum(w*w for w in spin)
-            solid_volume += volume
+        particles = self.analysis.spheres_model_part
+        energy = (self.physics.CalculateTranslationalKinematicEnergy(particles)
+                  + self.physics.CalculateRotationalKinematicEnergy(particles))
         result = {'kinetic_energy': energy}
         if self.periodic:
-            fraction = solid_volume / math.prod(self.box()['lengths'])
+            fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
         if self.needs_stress:
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
@@ -105,7 +100,7 @@ class KratosProtocolAdapter:
         return result
 
 
-    def timestep_limits(self, command, control, dt):
+    def timestep_limits(self, command: ActuatorCommand, control: dict, dt: float) -> dict:
         """Re-evaluate Rayleigh, Hertz network, motion and imposed-strain estimates.
 
         Contact geometry comes from Kratos' most recent neighbour search. The

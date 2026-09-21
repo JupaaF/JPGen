@@ -9,6 +9,9 @@ import numpy as np
 from ....packing.exporters.kratos import KratosExporter
 from ...protocol import required_observables, STRESS_OBSERVABLES
 
+TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
+ROTATION_SCHEMES = {"direct": "Direct_Integration"}
+
 CONTACT_LAWS = {"hertz_viscous_coulomb": "DEM_D_Hertz_viscous_Coulomb"}
 
 
@@ -42,8 +45,8 @@ def write_case(case, directory):
     parameters = {
         "problem_name": "particles", "FinalTime": case.end_time,
         "MaxTimeStep": case.time_step, "AutomaticTimestep": False,
-        "TranslationalIntegrationScheme": "Symplectic_Euler",
-        "RotationalIntegrationScheme": "Direct_Integration",
+        "TranslationalIntegrationScheme": TRANSLATION_SCHEMES[case.integration.translation],
+        "RotationalIntegrationScheme": ROTATION_SCHEMES[case.integration.rotation],
         "RotationOption": True, "RollingFrictionOption": False,
         "GlobalDamping": 0.0, "dem_inlet_option": False,
         "ElementType": "SphericParticle3D",
@@ -78,3 +81,4 @@ def write_case(case, directory):
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
     shutil.copyfile(Path(__file__).parents[2] / "timestep.py", inputs / "timestep.py")
+    shutil.copyfile(Path(__file__).parents[2] / "commands.py", inputs / "commands.py")

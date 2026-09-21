@@ -64,7 +64,7 @@ def _question(key, message, default, parser=_float, choices=None, *, explanation
                     explanation=explanation, example=str(default))
 
 
-def protocol_questions(answers, periodic):
+def protocol_questions(answers, periodic, capabilities=None):
     choices = [('Fixed final time', 'time'), ('Build stages and repeat blocks', 'builder'), ('Load protocol from YAML file', 'file')]
     questions = [_question('dem.execution', 'DEM execution', 'time', choices=choices,
                                    explanation='Choose how the simulation ends: free evolution up to a fixed time, a sequence of configurable stages and repeat blocks, or a protocol imported from a YAML file.')]
@@ -89,11 +89,11 @@ def protocol_questions(answers, periodic):
     else:
         questions.append(_question('dem.protocol.sample_every', 'Record observables every N steps', 100, _positive_integer,
                                    explanation='Save measured observables and cell geometry every N integration steps. Larger values produce fewer output records. Stopping conditions are still checked every step, and stage exits are always recorded.'))
-        questions.extend(_stage_questions(answers, 'dem.protocol', periodic))
+        questions.extend(_stage_questions(answers, 'dem.protocol', periodic, capabilities=capabilities))
     return questions
 
 
-def _stage_questions(answers, prefix, periodic, depth=0):
+def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
     if depth > 20:
         raise ValueError('Maximum repeat nesting depth is 20.')
     def count(value, current):
@@ -112,14 +112,18 @@ def _stage_questions(answers, prefix, periodic, depth=0):
         if answers.get(key + '.kind') == 'repeat':
             questions.append(_question(key + '.repeat', 'Number of repetitions', 10, _positive_integer,
                                    explanation='Number of times to execute the entire nested sequence, including the first pass. Each pass keeps the physical state from the previous one, while stage time and condition timers restart.'))
-            questions.extend(_stage_questions(answers, key + '.children', periodic, depth + 1))
+            questions.extend(_stage_questions(answers, key + '.children', periodic, depth + 1, capabilities))
             continue
         controllers = [('Free evolution (fixed current cell)', 'free_evolution')]
         if periodic:
             controllers += [('Stress servo', 'stress_servo'), ('Prescribed cell strain rate', 'strain_rate')]
-        questions.append(_question(key + '.control', 'Controller', 'free_evolution', choices=controllers,
+        if capabilities is not None:
+            controllers = [(label, kind) for label, kind in controllers if kind in capabilities.controls]
+        if not controllers:
+            raise ValueError('This engine has no supported controller for the selected boundary.')
+        questions.append(_question(key + '.control', 'Controller', controllers[0][1], choices=controllers,
                                    explanation='Choose how to drive the particles during this stage. Free evolution applies no cell deformation. In a periodic domain, the stress servo adjusts cell dimensions to track a stress target, while prescribed strain rate deforms the cell at a fixed rate.'))
-        control = answers.get(key + '.control', 'free_evolution')
+        control = answers.get(key + '.control', controllers[0][1])
         if control == 'stress_servo':
             questions.append(_question(key + '.mode', 'Stress control mode', 'isotropic', choices=[('Isotropic pressure', 'isotropic'), ('Normal stresses X Y Z', 'anisotropic')],
                                    explanation='Isotropic control tracks mean normal contact stress using the same symmetric face velocity on all axes. Anisotropic control tracks separate normal stress targets along X, Y and Z by adjusting each cell dimension independently.'))
@@ -137,7 +141,7 @@ def _stage_questions(answers, prefix, periodic, depth=0):
                     questions.append(_question(key + '.target.' + field, label, default,
                                    explanation=TARGET_EXPLANATIONS[field]))
             questions.append(_question(key + '.max_velocity', 'Maximum wall velocity (m/s)', 0.05,
-                                   explanation='Positive limit on the absolute velocity of each opposing cell face. The servo otherwise uses error × D50 / (time step × particle Young modulus), matching the Kratos definition without its extra loading factor.'))
+                                   explanation='Positive limit on the absolute velocity of each opposing cell face. The servo otherwise uses error × D50 / (time step × particle Young modulus), using the portable JPGen servo definition.'))
         elif control == 'strain_rate':
             questions.append(_question(key + '.rate', 'Cell strain rates X Y Z (1/s; compression negative)', '-0.1 -0.1 -0.1', _vector,
                                    explanation='Enter the imposed logarithmic strain rates along X, Y and Z in 1/s. Negative values compress, positive values expand, and zero keeps that dimension fixed. Cell dimensions and particle positions deform together; manual steps must keep each strain increment at most 0.01; adaptive stepping limits the increment automatically.'))
@@ -148,6 +152,8 @@ def _stage_questions(answers, prefix, periodic, depth=0):
             questions.append(_question(key + '.conditions', 'Number of conditions', 2, count,
                                    explanation='Number of stopping conditions to combine with the all/any choice above. Each condition has its own observable, comparison and threshold. Enter an integer from 1 to 100.'))
         available = OBSERVABLES if periodic else OBSERVABLES - STRESS_OBSERVABLES - {'solid_fraction', 'bulk_density'}
+        if capabilities is not None:
+            available = available & (capabilities.observables | {'time', 'stage_time'})
         for c in range(1 if group == 'single' else answers.get(key + '.conditions', 2)):
             ck = f'{key}.condition.{c}'
             questions.append(_question(ck + '.observable', f'Condition {c + 1}: observable', 'stage_time', choices=[(v, v) for v in sorted(available)],

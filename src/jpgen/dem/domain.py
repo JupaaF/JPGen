@@ -1,6 +1,7 @@
 """Physical inputs and final particle state, independent of solver objects."""
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 
@@ -15,13 +16,18 @@ class Material:
     poisson_ratio: float
 
 
+class Contact(Protocol):
+    """A portable contact specification with model-specific parameters."""
+    @property
+    def model(self) -> str: ...
+
+    def to_config(self) -> dict: ...
+
+
 @dataclass(frozen=True)
-class Contact:
-    model: str
-    static_friction: float
-    dynamic_friction: float
-    friction_decay: float
-    restitution: float
+class Integration:
+    translation: str = "symplectic_euler"
+    rotation: str = "direct"
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,7 @@ class DemCase:
     protocol: dict | None = None
     adaptive: dict | None = None
     duration: float | None = None
+    integration: Integration = Integration()
 
     @property
     def end_time(self):

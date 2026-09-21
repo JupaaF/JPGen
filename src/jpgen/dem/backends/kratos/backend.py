@@ -14,10 +14,11 @@ import numpy as np
 
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
-from ...protocol import OBSERVABLES, STRESS_OBSERVABLES, required_observables, iter_stages, control_types
+from ...protocol import STRESS_OBSERVABLES, required_observables, iter_stages, control_types
 from ...domain import DemState
 from ....packing.domain.box import Box
-from ..base import DemCapabilities, ExecutionReport, PreparedDemCase
+from ..base import ExecutionReport, PreparedDemCase
+from .definition import CAPABILITIES
 from .case_writer import CONTACT_LAWS, write_case
 
 
@@ -29,14 +30,7 @@ class KratosBackend:
     timeout_seconds: float | None
 
     name = "kratos"
-    capabilities = DemCapabilities(
-        boundaries=frozenset({"open", "periodic"}),
-        controls=frozenset({"free_evolution", "strain_rate", "stress_servo"}),
-        observables=frozenset(OBSERVABLES),
-        adaptive_time_step=True,
-        actuator_commands=frozenset({"cell_strain_rate", "symmetric_wall_velocity"}),
-        native_controls=frozenset({"stress_servo"}),
-    )
+    capabilities = CAPABILITIES
 
     @classmethod
     def from_config(cls, raw):
@@ -78,6 +72,10 @@ class KratosBackend:
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
         probe_code = "from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
+        if plan.protocol or plan.adaptive:
+            probe_code += "\nfrom KratosMultiphysics.DEMApplication import SphericElementGlobalPhysicsCalculator as Physics"
+            for method in ("CalculateTranslationalKinematicEnergy", "CalculateRotationalKinematicEnergy", "CalculateTotalVolume"):
+                probe_code += f"\nassert hasattr(Physics, '{method}'), 'Kratos lacks {method}'"
         if plan.protocol:
             # These hooks are not available in every Kratos distribution.
             if control_types(plan.protocol["stages"]) - {"free_evolution"}:

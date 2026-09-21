@@ -6,6 +6,7 @@ from typing import Protocol
 
 from ...errors import ConfigurationError
 from ..domain import DemCase, DemState
+from ..commands import ActuatorCommand
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,8 @@ class DemCapabilities:
     boundaries: frozenset[str]
     controls: frozenset[str]
     observables: frozenset[str]
+    contact_models: frozenset[str] = frozenset()
+    integration_schemes: frozenset[tuple[str, str]] = frozenset()
     adaptive_time_step: bool = False
     actuator_commands: frozenset[str] = frozenset()
     native_controls: frozenset[str] = frozenset()
@@ -22,6 +25,11 @@ class DemCapabilities:
     def validate(self, plan) -> None:
         from ..protocol import control_types, required_actuator_commands, required_observables
 
+        if plan.contact.model not in self.contact_models:
+            raise ConfigurationError(f"Backend {plan.backend.name} does not support contact model {plan.contact.model}.")
+        schemes = (plan.integration.translation, plan.integration.rotation)
+        if schemes not in self.integration_schemes:
+            raise ConfigurationError(f"Backend {plan.backend.name} does not support integration schemes {schemes}.")
         if plan.boundary not in self.boundaries:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support {plan.boundary} boundaries.")
         if plan.adaptive and not self.adaptive_time_step:
@@ -32,7 +40,7 @@ class DemCapabilities:
         if unsupported_controls:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support controls: "
                                      f"{', '.join(sorted(unsupported_controls))}.")
-        unsupported_observables = required_observables(plan.protocol["stages"]) - self.observables
+        unsupported_observables = required_observables(plan.protocol["stages"]) - self.observables - {"time", "stage_time"}
         if unsupported_observables:
             raise ConfigurationError(f"Backend {plan.backend.name} cannot measure: "
                                      f"{', '.join(sorted(unsupported_observables))}.")
@@ -43,6 +51,8 @@ class DemCapabilities:
 
     def to_config(self) -> dict:
         return {
+            "contact_models": sorted(self.contact_models),
+            "integration_schemes": [{"translation": t, "rotation": r} for t, r in sorted(self.integration_schemes)],
             "boundaries": sorted(self.boundaries),
             "controls": sorted(self.controls),
             "observables": sorted(self.observables),
@@ -57,13 +67,13 @@ class DemControlPort(Protocol):
 
     def control_context(self, dt: float) -> dict: ...
 
-    def apply(self, command: dict, dt: float) -> None: ...
+    def apply(self, command: ActuatorCommand, dt: float) -> None: ...
 
     def observe(self) -> dict: ...
 
     def box(self) -> dict: ...
 
-    def timestep_limits(self, command: dict, control: dict, dt: float) -> dict: ...
+    def timestep_limits(self, command: ActuatorCommand, control: dict, dt: float) -> dict: ...
 
 
 @dataclass(frozen=True)

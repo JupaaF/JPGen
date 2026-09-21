@@ -1,5 +1,4 @@
-"""Backend factories; plans retain the selected adapter after validation."""
+"""Register engine metadata without importing optional execution dependencies."""
+from .kratos.definition import DEFINITION
 
-from .kratos.backend import KratosBackend
-
-DEM_BACKENDS = {"kratos": KratosBackend.from_config}
+DEM_BACKENDS = {"kratos": DEFINITION}

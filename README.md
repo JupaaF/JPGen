@@ -199,10 +199,14 @@ launch directory and are normalized to absolute paths in the run configuration.
 No shell activation script is executed by JPGen.
 
 The supported first version uses one material assigned to all particles, spheres
-with rotation, fixed time steps, and symplectic Euler translation with direct
-rotational integration. `end_time` must be a positive integer multiple of
-`time_step`. The user selects a step small enough to resolve contact dynamics;
-JPGen does not estimate a stable step automatically.
+with rotation and symplectic Euler translation with direct rotational integration.
+The normalized configuration records this as
+`integration: {translation: symplectic_euler, rotation: direct}`; supported pairs
+are declared by each backend. With a fixed `time_step`, `end_time` must be a
+positive integer multiple of it. Alternatively, `time_step` accepts
+`{mode: adaptive, initial: 1.0e-6, min: 1.0e-8, max: 4.0e-5}`; Kratos estimates
+limits from material, contacts, motion and cell deformation. These are stability
+estimates, not an error guarantee.
 
 ```yaml
 dem:
@@ -263,9 +267,13 @@ simulation from the packing's velocities, not from a previous simulation's
 contact history.
 
 To add an engine, implement `DemBackend` (`validate`, `prepare`, `run`, `collect`,
-`to_config`) and register its configuration factory in `DEM_BACKENDS`. Plans
-retain the resolved backend, following the packing strategy pattern. Backend
-objects never cross into the particle domain or common result format.
+`to_config`) and register a `BackendDefinition` in `DEM_BACKENDS`. Its metadata
+declares capabilities and lazy references to the backend factory and its specific
+wizard questions. The common wizard uses this registry to select the engine,
+contact law and integration pair. Contact specifications have their own validators
+in `CONTACT_MODELS`. Plans retain the resolved backend; backend objects never
+cross into the particle domain or common result format. See the
+[engine extension guide](docs/dem-backends.md) for contracts and physics semantics.
 
 The optional packing-only MDPA exporter writes `SphericParticle3D` elements and
 free nodal velocities. Its empty `Properties 1` block is a structural
@@ -277,6 +285,8 @@ materials, contact laws, time stepping and domain behavior.
 ## ParaView
 
 Open `particles.vtp`, apply a **Glyph** filter, choose **Sphere**, set **Scale Array** to `diameter`, **Scale Factor** to `1`, **Glyph Mode** to **All Points**, and source sphere radius to `0.5`. The file stores centers and attributes rather than tessellated sphere surfaces.
+VTK ASCII arrays are streamed in blocks of 4096 particles, including derived
+diameters and vertex indices, keeping temporary serialization memory bounded.
 
 ## Persistence and reproducibility
 
@@ -438,15 +448,16 @@ geometries; final particle positions are wrapped using the final cell. Failed
 protocols retain native final state, report and history for diagnosis.
 
 `jpgen/dem/protocol.py` contains solver-independent validation, conditions,
-signals, controller functions and the lazy `ProtocolRunner`. Controllers emit
-explicit commands (`cell_strain_rate` or `symmetric_wall_velocity`) rather than
-calling solver APIs. To introduce a new controller, add its validator and
+signals, controller functions and the lazy `ProtocolRunner`. Controllers emit typed commands (`NoActuation`, `CellStrainRate` or
+`SymmetricWallVelocity`) rather than calling solver APIs. Free evolution requires
+no deformation actuator capability. To introduce a new controller, add its validator and
 register its function in `CONTROLLERS`; a new actuator requires an explicit
 adapter-contract extension. New observables need a name in the validator and a
 measurement in the backend adapter.
 
-Every backend declares boundaries, controllers, observables, adaptive stepping
-and actuator commands through `DemCapabilities`; unsupported protocols are
+Every backend declares contact models, supported integration pairs, boundaries,
+controllers, observables, adaptive stepping and actuator commands through
+`DemCapabilities`; unsupported protocols are
 rejected before execution. The protocol and controller remain owned by JPGen so
 their meaning is stable across engines. A backend may advertise native controls,
 but using one requires an explicit backend-specific implementation rather than a
@@ -456,3 +467,7 @@ silent semantic change.
 cell operations and measurements; `runner.py` connects these to solver lifecycle
 hooks. The standalone case copies these modules alongside `run.py` and requires
 no JPGen import at execution time.
+
+Kratos measures total kinetic energy at every protocol step through its native
+translational and rotational energy calculators (C++/OpenMP). The sum retains
+the same stopping-criterion meaning. `sample_every` only controls output frequency.

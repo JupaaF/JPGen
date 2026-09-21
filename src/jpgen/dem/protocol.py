@@ -8,6 +8,11 @@ velocities (compression positive), matching Kratos' servo convention.
 import copy
 import math
 
+if __package__:
+    from .commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
+else:
+    from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
+
 OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'solid_fraction', 'bulk_density',
                'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz'}
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
@@ -206,9 +211,8 @@ def control_types(stages):
 
 def required_actuator_commands(stages):
     commands = {'stress_servo': 'symmetric_wall_velocity',
-                'free_evolution': 'cell_strain_rate',
                 'strain_rate': 'cell_strain_rate'}
-    return {commands[kind] for kind in control_types(stages)}
+    return {commands[kind] for kind in control_types(stages) if kind != 'free_evolution'}
 
 
 def maximum_servo_velocity(stages):
@@ -278,11 +282,11 @@ def target_value(target, elapsed):
 
 
 def free_evolution(control, values, elapsed, context):
-    return {'type': 'cell_strain_rate', 'values': [0.0] * 3}
+    return NoActuation()
 
 
 def strain_rate(control, values, elapsed, context):
-    return {'type': 'cell_strain_rate', 'values': list(control['rate'])}
+    return CellStrainRate(tuple(control['rate']))
 
 
 def stress_servo(control, values, elapsed, context):
@@ -299,7 +303,7 @@ def stress_servo(control, values, elapsed, context):
     coefficient = diameter / (dt * young)
     limit = control['max_velocity']
     velocities = [max(-limit, min(limit, coefficient * error)) for error in errors]
-    return {'type': 'symmetric_wall_velocity', 'values': velocities}
+    return SymmetricWallVelocity(tuple(velocities))
 
 
 CONTROLLERS = {'free_evolution': free_evolution, 'strain_rate': strain_rate, 'stress_servo': stress_servo}
@@ -330,7 +334,7 @@ class ProtocolRunner:
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
 
-    def act(self, values, context=None):
+    def act(self, values, context=None) -> ActuatorCommand:
         control = self.stage['control']
         return CONTROLLERS[control['type']](control, values, self.time - self.start_time, context)
 

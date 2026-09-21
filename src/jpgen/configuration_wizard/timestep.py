@@ -3,10 +3,10 @@ from ..dem.timestep import validate_time_step
 from .questions import MenuChoice, Question
 
 
-def time_step_questions(answers):
+def time_step_questions(answers, *, adaptive_supported=True):
     questions = [Question(
         key='dem.time_step_mode', message='Time step selection', kind='select', default='manual',
-        choices=(MenuChoice('Manual fixed step', 'manual'), MenuChoice('Adaptive conservative step', 'adaptive')),
+        choices=(MenuChoice('Manual fixed step', 'manual'),) + ((MenuChoice('Adaptive conservative step', 'adaptive'),) if adaptive_supported else ()),
         explanation='A manual step stays fixed. Adaptive stepping recalculates limits from particle size, material stiffness, contacts, motion and imposed cell deformation. It controls stability estimates, not numerical error.',
         example='Choose adaptive to let the step change during loading and unloading.',
     )]

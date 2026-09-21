@@ -1,0 +1,119 @@
+# Adding a DEM engine
+
+The application owns the physical case, protocol and common results. Engines
+translate that case, execute it and collect `DemState`; they must reject physics
+they cannot represent. Adding an engine does not require editing the DEM wizard.
+
+## Registration and optional imports
+
+Add an adapter package under `jpgen/dem/backends/` and a lightweight description:
+
+```python
+from jpgen.dem.backends.base import DemCapabilities
+from jpgen.dem.backends.registry import BackendDefinition
+
+CAPABILITIES = DemCapabilities(
+    boundaries=frozenset({"open"}),
+    controls=frozenset({"free_evolution"}),
+    observables=frozenset({"kinetic_energy"}),
+    contact_models=frozenset({"hertz_viscous_coulomb"}),
+    integration_schemes=frozenset({("symplectic_euler", "direct")}),
+)
+
+DEFINITION = BackendDefinition(
+    label="Example engine",
+    factory="my_engine.backend:Backend.from_config",
+    capabilities=CAPABILITIES,
+    wizard="my_engine.wizard:EngineWizard",
+    physics="Describe the actual contact, integration and observable semantics here.",
+)
+```
+
+These capabilities are illustrative: advertise them only if the engine actually
+implements the requested physics. Register the definition in `DEM_BACKENDS`.
+The description and package `__init__.py` must not import the engine runtime,
+execution adapter or interactive dependencies. Factories and wizard providers
+are imported only when used. The backend class should reuse `CAPABILITIES`.
+
+Implement `DemBackend` (`to_config`, `validate`, `prepare`, `run`, `collect`).
+`validate` checks runtime availability and any additional engine restrictions.
+Portable capability validation runs during plan construction, before execution.
+Programmatic callers can still inject a mapping of backend factories into
+`DemApplication`/`build_dem_plan`; the interactive wizard needs descriptions.
+
+An `EngineWizard` implements `questions(answers)` and `build(answers)` using the
+existing `Question` API. Namespace its answer keys, e.g. `dem.example.python`.
+`build` returns only `backend_options`. For an engine without special options,
+return an empty question list and an empty options mapping. `DemStageWizard`
+handles engine selection, material, contact, integration, gravity and protocols.
+It filters engines by boundary, and choices by declared capabilities; final
+validation also rejects unsupported options in imported protocols.
+
+## Physics and configuration
+
+`Material` currently represents one isotropic elastic material for all spheres.
+`CONTACT_MODELS` registers each portable contact law separately: its configuration
+factory, numeric wizard parameters and physical meaning. A specification implements
+`Contact` (`model` and `to_config`) and can have its own fields; the common parser
+no longer forces every law to accept Hertz viscous Coulomb parameters. The factory
+must validate its model-specific fields. Registering another model makes it
+available to engines that explicitly advertise it.
+
+The current `hertz_viscous_coulomb` law requests Hertz normal elasticity,
+restitution-derived viscous contact damping and elastic tangential response
+limited by Coulomb friction. Friction transitions exponentially with slip speed
+from static to dynamic using `friction_decay` in s/m. Rolling resistance and global
+damping are disabled. A similar native law is not sufficient if it changes these
+semantics: reject the case or introduce a separately named portable model.
+
+Integration is an explicit pair, preserved in normalized configurations:
+
+```yaml
+integration:
+  translation: symplectic_euler
+  rotation: direct
+```
+
+Omitting it selects this pair for compatibility with existing configurations.
+Capabilities declare supported pairs, rather than two independent lists that
+could permit an unsupported combination. Kratos maps this pair to
+`Symplectic_Euler` and `Direct_Integration`.
+
+Document damping, integration and observable definitions in the engine's
+`physics` description. Portable kinetic energy includes translation and rotation.
+Stress is contact force/branch stress, compression positive, without kinetic
+stress. Pressure is its trace divided by three. Different engines need not produce
+identical trajectories, but must implement the requested meaning or reject it.
+Adaptive stepping is a separate capability; Kratos uses conservative stability
+and motion estimates, not local error control.
+
+## Protocol actuation
+
+Controllers return immutable commands from `dem/commands.py`:
+
+- `NoActuation`: advance without changing the current cell; no actuator capability
+  is required, including for open-boundary evolution.
+- `CellStrainRate`: three logarithmic strain rates in 1/s, expansion positive;
+  requires `cell_strain_rate`.
+- `SymmetricWallVelocity`: three opposing-face velocities in m/s, compression
+  positive; requires `symmetric_wall_velocity`.
+
+The latter commands validate three finite values at construction. Adapters
+translate these commands to their engine API and reject unknown commands.
+`DemControlPort` documents the live interface. `time` and `stage_time` are supplied
+by `ProtocolRunner`, so engines need not implement their measurement.
+
+Kratos copies `protocol.py`, `commands.py`, `timestep.py` and its adapter into the
+standalone case. Other process-based engines must also ship their required portable
+modules, or arrange an explicit runtime dependency on JPGen.
+
+## Kratos observations
+
+Each completed protocol step still evaluates stopping conditions. The adapter
+uses `SphericElementGlobalPhysicsCalculator.CalculateTranslationalKinematicEnergy`
+and `CalculateRotationalKinematicEnergy`, summed in joules. These run reductions
+in Kratos C++/OpenMP rather than visiting nodes in Python. The runtime preflight
+checks these methods. The fixed sphere volume is obtained once through
+`CalculateTotalVolume`; current cases do not add/remove particles or change radii.
+Any future support for those operations must invalidate that cached volume.
+`sample_every` controls output only; it does not reduce condition evaluation.

@@ -20,6 +20,7 @@ def main():
     execution = json.loads((inputs / "execution.json").read_text(encoding="utf-8"))
 
     from protocol import ProtocolRunner
+    from commands import NoActuation
     from protocol_adapter import KratosProtocolAdapter
     from timestep import AdaptiveTimeStep
 
@@ -33,7 +34,7 @@ def main():
             self.adaptive = None
             self.step_info = {}
             self.current_dt = execution.get("adaptive", {}).get("initial", 0) if execution.get("adaptive") else 0
-            self.command = {"type": "cell_strain_rate", "values": [0.0, 0.0, 0.0]}
+            self.command = NoActuation()
             super().__init__(model, parameters)
             self.mdpas_folder_path = str(inputs)
 
