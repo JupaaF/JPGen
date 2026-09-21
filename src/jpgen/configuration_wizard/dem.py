@@ -65,7 +65,7 @@ class DemStageWizard:
             explanation="Choose an integration pair supported by this engine.", example=" / ".join(schemes[0]),
             choices=tuple(MenuChoice(" / ".join(pair), pair) for pair in schemes),
         ))
-        questions.extend(time_step_questions(answers, adaptive_supported=capabilities.adaptive_time_step))
+        questions.extend(time_step_questions(answers))
         questions.append(Question(
             key="dem.gravity", message="Gravity X Y Z (m/s²)", default="0 0 0",
             explanation="Constant acceleration applied to every particle in SI units.", example="0 0 -9.81", parser=_gravity,

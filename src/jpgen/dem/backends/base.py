@@ -18,7 +18,6 @@ class DemCapabilities:
     observables: frozenset[str]
     contact_models: frozenset[str] = frozenset()
     integration_schemes: frozenset[tuple[str, str]] = frozenset()
-    adaptive_time_step: bool = False
     actuator_commands: frozenset[str] = frozenset()
     native_controls: frozenset[str] = frozenset()
 
@@ -32,8 +31,6 @@ class DemCapabilities:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support integration schemes {schemes}.")
         if plan.boundary not in self.boundaries:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support {plan.boundary} boundaries.")
-        if plan.adaptive and not self.adaptive_time_step:
-            raise ConfigurationError(f"Backend {plan.backend.name} does not support adaptive time stepping.")
         if not plan.protocol:
             return
         unsupported_controls = control_types(plan.protocol["stages"]) - self.controls
@@ -56,7 +53,6 @@ class DemCapabilities:
             "boundaries": sorted(self.boundaries),
             "controls": sorted(self.controls),
             "observables": sorted(self.observables),
-            "adaptive_time_step": self.adaptive_time_step,
             "actuator_commands": sorted(self.actuator_commands),
             "native_controls": sorted(self.native_controls),
         }
@@ -69,11 +65,9 @@ class DemControlPort(Protocol):
 
     def apply(self, command: ActuatorCommand, dt: float) -> None: ...
 
-    def observe(self) -> dict: ...
+    def observe(self, observables: set[str]) -> dict: ...
 
     def box(self) -> dict: ...
-
-    def timestep_limits(self, command: ActuatorCommand, control: dict, dt: float) -> dict: ...
 
 
 @dataclass(frozen=True)

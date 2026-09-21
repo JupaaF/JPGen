@@ -72,7 +72,7 @@ class KratosBackend:
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
         probe_code = "from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
-        if plan.protocol or plan.adaptive:
+        if plan.protocol:
             probe_code += "\nfrom KratosMultiphysics.DEMApplication import SphericElementGlobalPhysicsCalculator as Physics"
             for method in ("CalculateTranslationalKinematicEnergy", "CalculateRotationalKinematicEnergy", "CalculateTotalVolume"):
                 probe_code += f"\nassert hasattr(Physics, '{method}'), 'Kratos lacks {method}'"
@@ -80,11 +80,12 @@ class KratosBackend:
             # These hooks are not available in every Kratos distribution.
             if control_types(plan.protocol["stages"]) - {"free_evolution"}:
                 probe_code += "\nassert hasattr(DEMAnalysisStage, 'UpdateSearchStartegyAndCPlusPlusStrategy'), 'Kratos lacks periodic cell control'"
+                probe_code += "\nfrom KratosMultiphysics import VariableUtils"
+                for method in ("GetCurrentPositionsVector", "SetCurrentPositionsVector",
+                               "GetSolutionStepValuesVector", "SetSolutionStepValuesVector"):
+                    probe_code += f"\nassert hasattr(VariableUtils, '{method}'), 'Kratos lacks {method}'"
             if required_observables(plan.protocol["stages"]) & STRESS_OBSERVABLES:
                 probe_code += "\nassert hasattr(DEMAnalysisStage, 'MeasureSphereForGettingGlobalStressTensor'), 'Kratos lacks contact stress measurement'"
-        if plan.adaptive:
-            probe_code += "\nfrom KratosMultiphysics.DEMApplication.sphere_strategy import ExplicitStrategy"
-            probe_code += "\nassert hasattr(ExplicitStrategy, 'SetDt'), 'Kratos lacks variable time-step support'"
         command = [self.python, "-c", probe_code]
         try:
             probe = subprocess.run(command, env=self.environment(), capture_output=True, text=True, timeout=60)
@@ -135,7 +136,7 @@ class KratosBackend:
             if prepared.case.protocol is None:
                 time_matches = math.isclose(final_time, prepared.case.end_time, rel_tol=1e-12,
                                             abs_tol=prepared.case.time_step * 1e-7)
-                if ((not prepared.case.adaptive and result["steps"] != prepared.case.steps)
+                if ((result["steps"] != prepared.case.steps)
                         or not time_matches or result["stop_reason"] != "end_time"):
                     raise ValueError("Kratos did not complete the requested steps.")
             else:
@@ -143,7 +144,7 @@ class KratosBackend:
                     stage = result["history"][-1]["path"]
                     raise DemExecutionError(f"Stage {stage} exhausted max_duration before its condition was met; see native_results/protocol_history.json.")
                 if (result["stop_reason"] != "protocol_complete"
-                        or (not prepared.case.adaptive and result["steps"] > prepared.case.steps)
+                        or (result["steps"] > prepared.case.steps)
                         or final_time > prepared.case.end_time + prepared.case.time_step * 1e-7):
                     raise ValueError("Kratos did not complete the requested protocol.")
                 expected = iter_stages(prepared.case.protocol["stages"])

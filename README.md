@@ -203,10 +203,8 @@ with rotation and symplectic Euler translation with direct rotational integratio
 The normalized configuration records this as
 `integration: {translation: symplectic_euler, rotation: direct}`; supported pairs
 are declared by each backend. With a fixed `time_step`, `end_time` must be a
-positive integer multiple of it. Alternatively, `time_step` accepts
-`{mode: adaptive, initial: 1.0e-6, min: 1.0e-8, max: 4.0e-5}`; Kratos estimates
-limits from material, contacts, motion and cell deformation. These are stability
-estimates, not an error guarantee.
+positive integer multiple of it. `time_step` must be a finite positive number;
+adaptive time-step configurations are not supported.
 
 ```yaml
 dem:
@@ -440,9 +438,13 @@ until: {observable: solid_fraction, op: above, value: 0.64}
 ### Results and extension points
 
 `dem/native_results/observables.jsonl` records sampled observables and current
-cell geometry, including every stage exit. `protocol_history.json` records each
+cell geometry, including every stage exit. `protocol_history.jsonl` appends each
 completed or timed-out stage, its repeat path, times, step indices and exit
-measurements. Execution reports include the real step count and stop reason.
+measurements, without rewriting previous stages. `protocol_history.json` is
+published atomically once execution exits, including on Python exceptions.
+If the worker is forcibly terminated, use the completed records in the JSONL
+journal; the JSON summary may not have been finalized. Execution reports include
+the real step count and stop reason.
 Successful HDF5 results retain that history, final observations and both domain
 geometries; final particle positions are wrapped using the final cell. Failed
 protocols retain native final state, report and history for diagnosis.
@@ -456,7 +458,7 @@ adapter-contract extension. New observables need a name in the validator and a
 measurement in the backend adapter.
 
 Every backend declares contact models, supported integration pairs, boundaries,
-controllers, observables, adaptive stepping and actuator commands through
+controllers, observables and actuator commands through
 `DemCapabilities`; unsupported protocols are
 rejected before execution. The protocol and controller remain owned by JPGen so
 their meaning is stable across engines. A backend may advertise native controls,
@@ -468,6 +470,16 @@ cell operations and measurements; `runner.py` connects these to solver lifecycle
 hooks. The standalone case copies these modules alongside `run.py` and requires
 no JPGen import at execution time.
 
-Kratos measures total kinetic energy at every protocol step through its native
+Kratos measures total kinetic energy when required by the active condition or
+output sample through its native
 translational and rotational energy calculators (C++/OpenMP). The sum retains
-the same stopping-criterion meaning. `sample_every` only controls output frequency.
+the same stopping-criterion meaning. `sample_every` only controls output frequency. Active stopping conditions are
+still evaluated on every completed step. Output samples and stage exits retain
+kinetic energy, periodic density/fraction, and the stress tensor when requested
+anywhere in the protocol. Between samples, only active-stage measurements are
+computed. Contact data remain updated when stress output is enabled, so an
+unscheduled stage exit can record current stress.
+
+Cell deformation uses Kratos bulk position/displacement operations and NumPy
+array arithmetic instead of a Python loop over particles. The maximum radius
+and solid volume are cached for the fixed particle population.

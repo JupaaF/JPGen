@@ -84,8 +84,7 @@ Document damping, integration and observable definitions in the engine's
 Stress is contact force/branch stress, compression positive, without kinetic
 stress. Pressure is its trace divided by three. Different engines need not produce
 identical trajectories, but must implement the requested meaning or reject it.
-Adaptive stepping is a separate capability; Kratos uses conservative stability
-and motion estimates, not local error control.
+Time stepping is fixed; configurations must supply a finite positive scalar.
 
 ## Protocol actuation
 
@@ -103,13 +102,16 @@ translate these commands to their engine API and reject unknown commands.
 `DemControlPort` documents the live interface. `time` and `stage_time` are supplied
 by `ProtocolRunner`, so engines need not implement their measurement.
 
-Kratos copies `protocol.py`, `commands.py`, `timestep.py` and its adapter into the
+Kratos copies `protocol.py`, `commands.py` and its adapter into the
 standalone case. Other process-based engines must also ship their required portable
 modules, or arrange an explicit runtime dependency on JPGen.
 
 ## Kratos observations
 
-Each completed protocol step still evaluates stopping conditions. The adapter
+Each completed protocol step still evaluates stopping conditions. `observe` accepts
+the set of requested observables; adapters must return current measurements for
+those names. Controllers request only the measurements they use: pressure for
+isotropic stress control, and normal stresses for anisotropic control. The adapter
 uses `SphericElementGlobalPhysicsCalculator.CalculateTranslationalKinematicEnergy`
 and `CalculateRotationalKinematicEnergy`, summed in joules. These run reductions
 in Kratos C++/OpenMP rather than visiting nodes in Python. The runtime preflight
@@ -117,3 +119,10 @@ checks these methods. The fixed sphere volume is obtained once through
 `CalculateTotalVolume`; current cases do not add/remove particles or change radii.
 Any future support for those operations must invalidate that cached volume.
 `sample_every` controls output only; it does not reduce condition evaluation.
+
+Energy and stress reductions run only when required by the active stage or by
+an output sample/stage exit. Contact updates remain enabled for protocols with
+stress output so exit measurements remain current. Cell deformation uses
+`VariableUtils` bulk reads/writes with NumPy array arithmetic. The maximum
+particle radius is cached alongside solid volume; both require invalidation if
+future features change radii or particle population.

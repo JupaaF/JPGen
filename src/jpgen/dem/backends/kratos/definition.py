@@ -9,7 +9,6 @@ CAPABILITIES = DemCapabilities(
     observables=frozenset(OBSERVABLES),
     contact_models=frozenset({"hertz_viscous_coulomb"}),
     integration_schemes=frozenset({("symplectic_euler", "direct")}),
-    adaptive_time_step=True,
     actuator_commands=frozenset({"cell_strain_rate", "symmetric_wall_velocity"}),
     native_controls=frozenset({"stress_servo"}),
 )
@@ -22,6 +21,5 @@ DEFINITION = BackendDefinition(
     physics="Hertz viscous Coulomb maps to DEM_D_Hertz_viscous_Coulomb, without rolling "
             "resistance or global damping. Symplectic Euler translation and direct rotation. "
             "Stress is contact force/branch stress, compression positive, without kinetic stress. "
-            "Cell deformation is affine and preserves contact history. Adaptive steps use "
-            "Rayleigh, Hertz-network, motion and imposed-strain estimates, not an error estimator.",
+            "Cell deformation is affine and preserves contact history. Time stepping is fixed.",
 )
