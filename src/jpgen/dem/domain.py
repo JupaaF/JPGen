@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..packing.domain import ParticlePacking
+from ..packing.domain.box import Box
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class DemCase:
     gravity: tuple[float, float, float]
     time_step: float
     steps: int
+    protocol: dict | None = None
 
     @property
     def end_time(self):
@@ -48,8 +50,11 @@ class DemState:
     velocities: np.ndarray
     angular_velocities: np.ndarray
     time: float
+    box: Box | None = None
 
     def __post_init__(self):
+        if self.box is not None and not isinstance(self.box, Box):
+            raise ValueError("DEM state box must be a Box.")
         ids = np.asarray(self.ids)
         if ids.ndim != 1 or not len(ids) or not np.issubdtype(ids.dtype, np.integer):
             raise ValueError("DEM particle IDs must be a nonempty integer vector.")

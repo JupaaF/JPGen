@@ -41,8 +41,9 @@ class DemApplication:
         temporary.replace(destination)
         return DemStageResult({
             "status": "complete", "engine": plan.backend.name, "time": state.time,
-            "steps": case.steps, "particle_count": len(state.ids),
+            "steps": report.steps, "particle_count": len(state.ids),
             "kinetic_energy": kinetic_energy, "kinetic_energy_units": "J",
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
-            "stop_reason": "end_time", "return_code": report.return_code,
+            "stop_reason": report.stop_reason, "return_code": report.return_code,
+            "protocol_history": report.history, "observables": report.observables,
         }, ("dem/" + self.store.filename,))

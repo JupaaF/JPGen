@@ -90,8 +90,8 @@ Invalid configuration or an unavailable DEM runtime fails before a run directory
 `JPGenApplication.run` owns the complete run. It generates or imports a packing,
 then executes DEM when configured. `RunStarted`, `RunCompleted` and `RunFailed`
 describe the whole pipeline. Packing and DEM have separate progress events and
-summary states. A successful DEM run means the requested time was reached, not
-that mechanical equilibrium was established.
+summary states. A successful DEM run means its time or protocol conditions were
+met. Mechanical equilibrium requires explicitly chosen physical criteria.
 
 Configuration names are stage-specific and are consumed without aliases or migration logic.
 
@@ -234,8 +234,8 @@ adapter must implement and document the requested physics or reject the case.
 `boundary: periodic` uses the packing's final box and requires
 `packing.box.periodic: true`. `boundary: open` requires a nonperiodic packing;
 the placement box creates no physical walls and particles may leave it. Walls,
-multiple materials, equilibrium stopping, trajectories and restart checkpoints
-are not implemented. Existing geometric overlaps are passed unchanged to DEM;
+multiple materials, particle trajectories and restart checkpoints are not implemented.
+Protocols support physical stopping criteria and deformation of periodic cells. Existing geometric overlaps are passed unchanged to DEM;
 geometric relaxation is not mechanical equilibration.
 
 The backend writes a standalone `dem/input/run.py`. It can be rerun manually
@@ -282,13 +282,163 @@ Open `particles.vtp`, apply a **Glyph** filter, choose **Sphere**, set **Scale A
 
 HDF5 schema `JPGen.packing`, version `3.0`, stores float64 positions, radii and velocities; int64 particle IDs; SI unit attributes; domain data; effective configuration; and `PackingMetadata`. Older schemas are rejected without conversion. Arrays are gzip-compressed and every export is produced from an HDF5 readback.
 
-DEM results use schema `JPGen.dem`, version `1.0`, with IDs, positions, radii,
-linear and angular velocities, material IDs, final time, initial domain,
+DEM results use schema `JPGen.dem`, version `1.1` (the reader also accepts `1.0`), with IDs, positions, radii,
+linear and angular velocities, material IDs, final time, initial and final domains,
 effective DEM configuration and execution provenance. Use
 `Hdf5DemResultStore.load(path)` to read the common final state. These are results,
 not restart checkpoints. The run summary includes final kinetic energy (J),
-elapsed wall time, step count and the `end_time` stop reason.
+elapsed wall time, actual step count, stop reason (`end_time` or
+`protocol_complete`), stage history and final measured observables.
 
 Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed from the system random source. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, placement=1, speed=2, linear direction=3, angular speed=4 and angular direction=5. Run names do not influence generation.
 
 Replay requires the same effective configuration, JPGen version and dependency versions recorded in the run. Identical numerical files across library versions or platforms are not guaranteed. Packing HDF5 files are not DEM restart checkpoints.
+
+## DEM protocols
+
+Use `dem.protocol` instead of `dem.end_time` to compose a simulation from stages.
+Both forms remain supported, but cannot appear together. The interactive wizard
+can build stages and nested repeat blocks, or import a protocol from YAML.
+Imported protocols are embedded in the generated configuration, so replay does
+not depend on the imported file. See [dem_protocol.yaml](examples/dem_protocol.yaml)
+for a complete free evolution → consolidation → pressure cycles → relaxation case.
+
+```yaml
+protocol:
+  sample_every: 100
+  stages:
+    - name: relax
+      control: {type: free_evolution}
+      until:
+        observable: kinetic_energy
+        op: below
+        value: 1.0e-8
+        min_duration: 0.001
+        hold_for: 0.001
+      max_duration: 1.0
+    - name: consolidate
+      control:
+        type: stress_servo
+        mode: isotropic
+        target_pressure: 100000.0
+        gain: 0.0001
+        max_strain_rate: 1.0
+      until:
+        observable: pressure
+        op: near
+        value: 100000.0
+        atol: 1000.0
+        hold_for: 0.005
+      max_duration: 2.0
+```
+
+A leaf stage requires `control`, `until` and `max_duration`; `name` is optional.
+A sequence block has `stages` and optional `repeat` (positive integer, default 1)
+and `name`. Blocks can nest up to 20 levels and are traversed lazily; repetitions
+reset stage time, signal phase and condition history. Reorder stages to change the
+experiment. Every stage runs on the same live solver, preserving contact history.
+
+### Controllers and targets
+
+| Controller | Parameters | Behavior |
+| --- | --- | --- |
+| `free_evolution` | None | Integrate particles with the current cell fixed |
+| `stress_servo` | `mode: isotropic`, `target_pressure` | Control mean normal contact stress |
+| `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]` | Independently control three normal stresses |
+| `strain_rate` | `rate: [x, y, z]` | Prescribe logarithmic cell strain rates in 1/s; expansion positive |
+
+Servo `gain` defaults to `1e-4` in 1/(Pa s), and `max_strain_rate` defaults to
+`1.0` in 1/s. The strain rate is `gain * (measured - target)`, clipped to the
+rate limit. Isotropic control applies the same strain rate on all axes. Tune
+gain, rate limit, tolerances and time step for the material and sample; a target
+may be physically unreachable and convergence is not guaranteed.
+
+A target can be a nonnegative constant or a time signal:
+
+```yaml
+# Substitute for target_pressure, or for any target_stress component:
+target_pressure: {type: ramp, start: 50000.0, end: 100000.0, duration: 0.1}
+# Alternatively:
+# target_pressure: {type: sine, mean: 75000.0, amplitude: 25000.0, frequency: 2.0, phase: 0.0}
+```
+
+Ramps hold their final target after `duration`. Sinusoidal frequency is in Hz
+and optional phase in radians. Signals use stage time and are evaluated before
+each integration step; for time-driven cycles use a `stage_time` stop condition.
+A repeated pair of constant-target stages instead switches at measured stress
+thresholds and has no imposed frequency.
+
+Cell control currently requires periodic boundaries. The Kratos adapter moves
+opposite faces symmetrically and applies the corresponding affine displacement
+to particles, without resetting their velocities or contact history. A following
+free evolution stage preserves the attained cell. Deformation above 1% per step
+or a cell width at most twice the largest particle diameter is rejected.
+Walls and shear deformation are not provided by these controllers.
+
+### Observables and conditions
+
+| Observable | Meaning / units |
+| --- | --- |
+| `time` | Global simulation time, s |
+| `stage_time` | Time since entry into this leaf stage, s |
+| `kinetic_energy` | Total translational + rotational particle kinetic energy, J |
+| `solid_fraction` | Sum of sphere volumes / current cell volume, dimensionless |
+| `bulk_density` | Particle mass / current cell volume, kg/m³ |
+| `pressure` | Trace of the contact stress tensor / 3, Pa, compression positive |
+| `stress_xx`, `stress_yy`, `stress_zz`, `stress_xy`, `stress_xz`, `stress_yz` | Components of the contact stress tensor, Pa |
+
+Stress is the contact-force/branch-vector contribution measured by Kratos,
+without a kinetic stress contribution. Density and stress conditions require a
+periodic cell; an open placement box does not define a material sample volume.
+Particle material density remains constant. Sphere volume sums do not subtract
+overlap volumes. Kinetic energy alone is not proof of mechanical equilibrium.
+
+`above` means >= and `below` means <=. `near` means
+`abs(value - target) <= atol + rtol * abs(target)` and requires at least one
+tolerance. `all` and `any` combine nonempty lists of conditions and can nest:
+
+```yaml
+until:
+  all:
+    - {observable: pressure, op: near, value: 100000.0, atol: 1000.0}
+    - {observable: kinetic_energy, op: below, value: 1.0e-8}
+  hold_for: 0.005
+  min_duration: 0.01
+```
+
+`hold_for` requires consecutive successful observations; its timer resets after
+any failed observation. `min_duration` prevents completing a stage too early.
+Both can be applied to a leaf condition or a group. Conditions are evaluated
+after every completed step, independent of the output sampling interval. A dwell
+starts at the first matching observation. All thresholds are evaluated on
+completed steps, not interpolated between them. A stage always executes at least
+one step. A nonintegral `max_duration / time_step` is rounded up to a whole step.
+If the condition becomes true on the last allowed step, it succeeds; otherwise
+the run fails with `max_duration` diagnostics and does not start the next stage.
+
+To stop a servo by density, change only its `until`:
+
+```yaml
+until: {observable: solid_fraction, op: above, value: 0.64}
+# Or: {observable: bulk_density, op: above, value: 1600.0}
+```
+
+### Results and extension points
+
+`dem/native_results/observables.jsonl` records sampled observables and current
+cell geometry, including every stage exit. `protocol_history.json` records each
+completed or timed-out stage, its repeat path, times, step indices and exit
+measurements. Execution reports include the real step count and stop reason.
+Successful HDF5 results retain that history, final observations and both domain
+geometries; final particle positions are wrapped using the final cell. Failed
+protocols retain native final state, report and history for diagnosis.
+
+`jpgen/dem/protocol.py` contains solver-independent validation, conditions,
+signals, controller functions and the lazy `ProtocolRunner`. To introduce a new
+controller, add its validator and register its function in `CONTROLLERS`; the
+current actuation contract returns three cell strain rates. New observables need
+a name in the validator and a measurement in the backend adapter. Controllers
+requiring other actuators need an explicit adapter contract extension.
+`backends/kratos/protocol_adapter.py` implements cell operations and measurements;
+`runner.py` connects these to solver lifecycle hooks. The standalone case copies
+these modules alongside `run.py` and requires no JPGen import at execution time.

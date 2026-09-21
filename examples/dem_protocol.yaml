@@ -1,0 +1,114 @@
+# SI units. Activate Kratos with: source ./activate_kratos.sh
+# A bounded protocol: unmet conditions produce diagnostics, not success.
+packing:
+  sizing_method: fixed_count
+  count: 64
+  seed: 20260917
+  exports: []
+  box:
+    origin:
+    - 0.0
+    - 0.0
+    - 0.0
+    lengths:
+    - 0.02
+    - 0.02
+    - 0.02
+    periodic: true
+  radii:
+    type: constant
+    value: 0.002
+  velocity:
+    type: constant
+    value: 0.0
+  placement:
+    method: random_sequential
+    max_overlap: 0.0
+    position_attempts: 10000
+dem:
+  engine: kratos
+  material:
+    density: 2500.0
+    young_modulus: 10000000.0
+    poisson_ratio: 0.25
+  contact:
+    model: hertz_viscous_coulomb
+    static_friction: 0.5
+    dynamic_friction: 0.4
+    friction_decay: 500.0
+    restitution: 0.2
+  boundary: periodic
+  gravity:
+  - 0.0
+  - 0.0
+  - 0.0
+  time_step: 1.0e-05
+  backend_options:
+    threads: 1
+    timeout_seconds: 120.0
+  protocol:
+    sample_every: 100
+    stages:
+    - name: initial_free
+      control:
+        type: free_evolution
+      until:
+        observable: stage_time
+        op: above
+        value: 0.0001
+      max_duration: 0.0001
+    - name: consolidate
+      control:
+        type: stress_servo
+        mode: isotropic
+        target_pressure: 1000.0
+        gain: 0.01
+        max_strain_rate: 10.0
+      until:
+        observable: pressure
+        op: near
+        value: 1000.0
+        atol: 50.0
+        hold_for: 0.0001
+      max_duration: 0.1
+    - name: pressure_cycles
+      repeat: 3
+      stages:
+      - name: load
+        control:
+          type: stress_servo
+          mode: isotropic
+          target_pressure: 2000.0
+          gain: 0.01
+          max_strain_rate: 10.0
+        until:
+          observable: pressure
+          op: near
+          value: 2000.0
+          atol: 50.0
+          hold_for: 0.0001
+        max_duration: 0.1
+      - name: unload
+        control:
+          type: stress_servo
+          mode: isotropic
+          target_pressure: 1000.0
+          gain: 0.01
+          max_strain_rate: 10.0
+        until:
+          observable: pressure
+          op: near
+          value: 1000.0
+          atol: 50.0
+          hold_for: 0.0001
+        max_duration: 0.1
+    - name: relax
+      control:
+        type: free_evolution
+      until:
+        observable: kinetic_energy
+        op: below
+        value: 1.0e-08
+        min_duration: 0.0001
+        hold_for: 0.0001
+      max_duration: 0.1

@@ -1,6 +1,6 @@
 """Common contract and execution records for DEM engine adapters."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -18,6 +18,10 @@ class ExecutionReport:
     return_code: int
     elapsed_seconds: float
     versions: dict
+    steps: int = 0
+    stop_reason: str = "end_time"
+    history: list = field(default_factory=list)
+    observables: dict = field(default_factory=dict)
 
 
 class DemBackend(Protocol):

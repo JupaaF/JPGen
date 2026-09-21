@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 
 from ....packing.exporters.kratos import KratosExporter
+from ...protocol import required_observables, STRESS_OBSERVABLES
 
 CONTACT_LAWS = {"hertz_viscous_coulomb": "DEM_D_Hertz_viscous_Coulomb"}
 
@@ -33,6 +34,7 @@ def write_case(case, directory):
         }}],
         "material_assignation_table": [["SpheresPart", "particles"]],
     }
+    needs_stress = bool(case.protocol and required_observables(case.protocol["stages"]) & STRESS_OBSERVABLES)
     parameters = {
         "problem_name": "particles", "FinalTime": case.end_time,
         "MaxTimeStep": case.time_step, "AutomaticTimestep": False,
@@ -46,6 +48,9 @@ def write_case(case, directory):
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
         "NeighbourSearchFrequency": 1,
+        "ContactMeshOption": needs_stress, "PostStressStrainOption": needs_stress,
+        "ComputeStressTensorOption": needs_stress,
+        "BoundingBoxMoveOptionDetail": [1, 1, 1, 1, 1, 1],
         "solver_settings": {
             "strategy": "sphere_strategy",
             "model_import_settings": {"input_type": "mdpa", "input_filename": "particles"},
@@ -57,6 +62,10 @@ def write_case(case, directory):
         parameters[f"BoundingBoxMin{letter}"] = float(case.packing.box.origin[axis])
         parameters[f"BoundingBoxMax{letter}"] = float(case.packing.box.origin[axis] + case.packing.box.lengths[axis])
     for name, value in (("ProjectParametersDEM.json", parameters), ("MaterialsDEM.json", materials),
-                        ("execution.json", {"steps": case.steps})):
+                        ("execution.json", {"steps": case.steps, "protocol": case.protocol,
+                                             "density": case.material.density, "boundary": case.boundary})):
         (inputs / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     shutil.copyfile(Path(__file__).with_name("runner.py"), inputs / "run.py")
+
+    shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
+    shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
