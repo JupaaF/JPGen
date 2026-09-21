@@ -34,10 +34,12 @@ class DemCase:
     time_step: float
     steps: int
     protocol: dict | None = None
+    adaptive: dict | None = None
+    duration: float | None = None
 
     @property
     def end_time(self):
-        return self.time_step * self.steps
+        return self.duration if self.duration is not None else self.time_step * self.steps
 
 
 @dataclass(frozen=True)

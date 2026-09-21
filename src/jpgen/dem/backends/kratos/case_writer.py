@@ -35,6 +35,7 @@ def write_case(case, directory):
         "material_assignation_table": [["SpheresPart", "particles"]],
     }
     needs_stress = bool(case.protocol and required_observables(case.protocol["stages"]) & STRESS_OBSERVABLES)
+    needs_contacts = needs_stress or bool(case.adaptive)
     parameters = {
         "problem_name": "particles", "FinalTime": case.end_time,
         "MaxTimeStep": case.time_step, "AutomaticTimestep": False,
@@ -48,7 +49,7 @@ def write_case(case, directory):
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
         "NeighbourSearchFrequency": 1,
-        "ContactMeshOption": needs_stress, "PostStressStrainOption": needs_stress,
+        "ContactMeshOption": needs_contacts, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
         "BoundingBoxMoveOptionDetail": [1, 1, 1, 1, 1, 1],
         "solver_settings": {
@@ -63,9 +64,13 @@ def write_case(case, directory):
         parameters[f"BoundingBoxMax{letter}"] = float(case.packing.box.origin[axis] + case.packing.box.lengths[axis])
     for name, value in (("ProjectParametersDEM.json", parameters), ("MaterialsDEM.json", materials),
                         ("execution.json", {"steps": case.steps, "protocol": case.protocol,
-                                             "density": case.material.density, "boundary": case.boundary})):
+                                             "density": case.material.density, "boundary": case.boundary,
+                                             "young_modulus": material.young_modulus, "poisson_ratio": material.poisson_ratio,
+                                             "restitution": contact.restitution, "adaptive": case.adaptive, "gravity": list(case.gravity),
+                                             "end_time": case.end_time})):
         (inputs / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     shutil.copyfile(Path(__file__).with_name("runner.py"), inputs / "run.py")
 
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
+    shutil.copyfile(Path(__file__).parents[2] / "timestep.py", inputs / "timestep.py")

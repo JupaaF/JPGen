@@ -46,4 +46,5 @@ class DemApplication:
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
             "stop_reason": report.stop_reason, "return_code": report.return_code,
             "protocol_history": report.history, "observables": report.observables,
+            "time_step": report.time_step,
         }, ("dem/" + self.store.filename,))

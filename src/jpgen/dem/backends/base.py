@@ -22,6 +22,8 @@ class ExecutionReport:
     stop_reason: str = "end_time"
     history: list = field(default_factory=list)
     observables: dict = field(default_factory=dict)
+    time: float | None = None
+    time_step: dict = field(default_factory=dict)
 
 
 class DemBackend(Protocol):

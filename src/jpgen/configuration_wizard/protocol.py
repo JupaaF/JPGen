@@ -5,6 +5,8 @@ import yaml
 
 from ..dem.protocol import OBSERVABLES, STRESS_OBSERVABLES, validate_protocol
 from .questions import MenuChoice, Question
+from .timestep import build_time_step
+from ..dem.timestep import validate_time_step
 
 
 TARGET_EXPLANATIONS = {
@@ -69,7 +71,7 @@ def protocol_questions(answers, periodic):
     mode = answers.get('dem.execution', 'time')
     if mode == 'time':
         questions.append(_question('dem.end_time', 'Final time (s)', .001,
-                                   explanation='Total simulated duration of free evolution, in seconds. The simulation ends at this time without checking energy or stress. Must be a positive integer multiple of the fixed time step.'))
+                                   explanation='Total simulated duration of free evolution, in seconds. With a manual step it must be an integer multiple of that step. Adaptive stepping shortens the final step to reach this time.'))
     elif mode == 'file':
         def read(value, current):
             try:
@@ -79,7 +81,8 @@ def protocol_questions(answers, periodic):
             if isinstance(data, dict):
                 data = data.get('dem', data)
                 data = data.get('protocol', data) if isinstance(data, dict) else data
-            protocol, _ = validate_protocol(data, current['dem.time_step'], 'periodic' if periodic else 'open')
+            dt, adaptive = validate_time_step(build_time_step(current))
+            protocol, _ = validate_protocol(data, adaptive['min'] if adaptive else dt, 'periodic' if periodic else 'open', adaptive=bool(adaptive))
             return protocol
         questions.append(_question('dem.protocol_file', 'Protocol YAML path', '', parser=read,
                                    explanation='Read a protocol mapping, protocol: section, or a full JPGen YAML. The protocol is embedded into the generated file.'))
@@ -136,10 +139,10 @@ def _stage_questions(answers, prefix, periodic, depth=0):
             questions.extend([_question(key + '.gain', 'Servo gain (1/(Pa s))', 1e-4,
                                    explanation='Converts the difference between measured and target stress into a cell strain rate. Larger gains react faster but can cause oscillations; smaller gains respond more slowly. Enter a positive value in 1/(Pa s).'),
                               _question(key + '.max_strain_rate', 'Maximum absolute strain rate (1/s)', 1.0,
-                                   explanation='Positive limit on the magnitude of the strain rate commanded by the servo on each axis, in 1/s. It caps both compression and expansion. This limit multiplied by the time step must not exceed 0.01.')])
+                                   explanation='Positive limit on the magnitude of the strain rate commanded by the servo on each axis, in 1/s. It caps both compression and expansion. With manual stepping, this limit times the step must not exceed 0.01. Adaptive stepping limits the actual cell strain increment.')])
         elif control == 'strain_rate':
             questions.append(_question(key + '.rate', 'Cell strain rates X Y Z (1/s; compression negative)', '-0.1 -0.1 -0.1', _vector,
-                                   explanation='Enter the imposed logarithmic strain rates along X, Y and Z in 1/s. Negative values compress, positive values expand, and zero keeps that dimension fixed. Cell dimensions and particle positions deform together; each rate magnitude times the time step must not exceed 0.01.'))
+                                   explanation='Enter the imposed logarithmic strain rates along X, Y and Z in 1/s. Negative values compress, positive values expand, and zero keeps that dimension fixed. Cell dimensions and particle positions deform together; manual steps must keep each strain increment at most 0.01; adaptive stepping limits the increment automatically.'))
         questions.append(_question(key + '.condition_mode', 'Finish this stage when', 'single', choices=[('One condition is met', 'single'), ('All conditions are met', 'all'), ('Any condition is met', 'any')],
                                    explanation='Choose one stopping condition, require all configured conditions to hold at the same observation, or accept any one of them. Conditions are checked after every integration step.'))
         group = answers.get(key + '.condition_mode', 'single')
@@ -165,7 +168,7 @@ def _stage_questions(answers, prefix, periodic, depth=0):
                           _question(key + '.min_duration', 'Minimum stage duration (s)', 0.0,
                                    explanation='Minimum simulated time this stage must run before it may finish, even if its stopping condition is already satisfied. Zero adds no minimum. This does not delay the start of the hold timer.'),
                           _question(key + '.max_duration', 'Maximum stage duration (s)', 1.0,
-                                    explanation='Maximum simulated time allowed for this stage, in seconds, measured from its entry. If the stopping condition is not met by the last allowed step, the run fails and saves diagnostics. Must be at least one time step; nonintegral step counts are rounded up.')])
+                                    explanation='Maximum simulated time allowed for this stage, in seconds, measured from its entry. If the stopping condition is not met by the last allowed step, the run fails and saves diagnostics. With manual stepping, nonintegral step counts are rounded up. Adaptive stepping lands on the time limit and requires a duration at least equal to the configured minimum step.')])
     return questions
 
 

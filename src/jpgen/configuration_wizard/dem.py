@@ -3,6 +3,7 @@
 from ..dem.configuration import build_dem_plan
 from .questions import MenuChoice, Question
 from .protocol import protocol_questions, build_protocol
+from .timestep import time_step_questions, build_time_step
 
 
 class DemStageWizard:
@@ -25,7 +26,6 @@ class DemStageWizard:
             ("dynamic_friction", "Dynamic friction coefficient", 0.4),
             ("friction_decay", "Friction decay coefficient (s/m)", 500.0),
             ("restitution", "Coefficient of restitution", 0.8),
-            ("time_step", "Fixed time step (s)", 1e-6),
         )
         explanations = {
             'density': 'Mass per unit volume of the particle material, not the bulk density of the packing. Together with each radius, this sets particle mass and rotational inertia. Must be positive.',
@@ -35,7 +35,6 @@ class DemStageWizard:
             'dynamic_friction': 'Dimensionless friction coefficient approached at high sliding speeds. Must be nonnegative and no greater than the static friction coefficient.',
             'friction_decay': 'Controls how quickly the friction coefficient decreases from its static value toward its dynamic value as sliding speed increases. Larger values give a faster transition; zero keeps the static coefficient. Must be nonnegative.',
             'restitution': 'Dimensionless coefficient controlling contact damping and rebound. Values closer to 1 represent more elastic collisions; values closer to 0 represent more dissipative collisions. Enter a value from 0 to 1.',
-            'time_step': 'Physical time advanced by each DEM integration step, in seconds. Choose a positive value small enough to resolve particle contacts; smaller or stiffer particles generally require smaller steps. JPGen does not select it automatically.',
         }
         for key, message, default in values:
             questions.append(Question(
@@ -44,6 +43,8 @@ class DemStageWizard:
                 example=str(default), parser=lambda value, _: float(value),
                 visible=lambda current: current.get("dem.enabled", False),
             ))
+        if answers.get("dem.enabled", False):
+            questions.extend(time_step_questions(answers))
         questions.append(Question(
             key="dem.gravity", message="Gravity X Y Z (m/s²)", default="0 0 0",
             explanation="Constant acceleration applied to every particle. Enter the X, Y and Z components in m/s²; the signs set the direction. Use 0 0 0 to disable gravity.",
@@ -71,7 +72,7 @@ class DemStageWizard:
                 key: answers["dem." + key] for key in ("static_friction", "dynamic_friction", "friction_decay", "restitution")}},
             "boundary": "periodic" if _packing_is_periodic(answers) else "open",
             "gravity": answers["dem.gravity"],
-            "time_step": answers["dem.time_step"],
+            "time_step": build_time_step(answers),
             **({"end_time": answers["dem.end_time"]} if answers.get("dem.execution", "time") == "time" else
                {"protocol": answers["dem.protocol_file"] if answers["dem.execution"] == "file" else build_protocol(answers)}),
         }

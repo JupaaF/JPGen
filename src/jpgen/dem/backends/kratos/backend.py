@@ -1,6 +1,7 @@
 """Kratos adapter using an isolated process and inspectable case files."""
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -74,6 +75,9 @@ class KratosBackend:
                 probe_code += "\nassert hasattr(DEMAnalysisStage, 'UpdateSearchStartegyAndCPlusPlusStrategy'), 'Kratos lacks periodic cell control'"
             if required_observables(plan.protocol["stages"]) & STRESS_OBSERVABLES:
                 probe_code += "\nassert hasattr(DEMAnalysisStage, 'MeasureSphereForGettingGlobalStressTensor'), 'Kratos lacks contact stress measurement'"
+        if plan.adaptive:
+            probe_code += "\nfrom KratosMultiphysics.DEMApplication.sphere_strategy import ExplicitStrategy"
+            probe_code += "\nassert hasattr(ExplicitStrategy, 'SetDt'), 'Kratos lacks variable time-step support'"
         command = [self.python, "-c", probe_code]
         try:
             probe = subprocess.run(command, env=self.environment(), capture_output=True, text=True, timeout=60)
@@ -118,27 +122,42 @@ class KratosBackend:
             result = json.loads((directory / "native_results" / "execution_report.json").read_text())
             if type(result["steps"]) is not int:
                 raise ValueError("Invalid completed step count.")
+            final_time = result.get("time", result["steps"] * prepared.case.time_step)
+            if not math.isfinite(final_time) or final_time <= 0 or result['steps'] <= 0:
+                raise ValueError("Invalid final simulation time or completed step count.")
             if prepared.case.protocol is None:
-                if result["steps"] != prepared.case.steps or result["stop_reason"] != "end_time":
+                time_matches = math.isclose(final_time, prepared.case.end_time, rel_tol=1e-12,
+                                            abs_tol=prepared.case.time_step * 1e-7)
+                if ((not prepared.case.adaptive and result["steps"] != prepared.case.steps)
+                        or not time_matches or result["stop_reason"] != "end_time"):
                     raise ValueError("Kratos did not complete the requested steps.")
             else:
                 if result["stop_reason"] == "max_duration":
                     stage = result["history"][-1]["path"]
                     raise DemExecutionError(f"Stage {stage} exhausted max_duration before its condition was met; see native_results/protocol_history.json.")
-                if result["stop_reason"] != "protocol_complete" or not 0 < result["steps"] <= prepared.case.steps:
+                if (result["stop_reason"] != "protocol_complete"
+                        or (not prepared.case.adaptive and result["steps"] > prepared.case.steps)
+                        or final_time > prepared.case.end_time + prepared.case.time_step * 1e-7):
                     raise ValueError("Kratos did not complete the requested protocol.")
                 expected = iter_stages(prepared.case.protocol["stages"])
                 end_step = 0
+                end_time = 0.0
                 for entry in result["history"]:
                     item = next(expected, None)
                     if (item is None or entry["path"] != item[0] or entry["stop_reason"] != "condition_met"
                             or entry["start_step"] != end_step or entry["end_step"] <= end_step):
                         raise ValueError("Invalid protocol stage history.")
+                    if (not math.isclose(entry['start_time'], end_time, rel_tol=1e-12, abs_tol=1e-15)
+                            or not math.isfinite(entry['end_time']) or entry['end_time'] <= end_time):
+                        raise ValueError("Invalid physical times in protocol history.")
                     end_step = entry["end_step"]
-                if next(expected, None) is not None or end_step != result["steps"]:
+                    end_time = entry['end_time']
+                if (next(expected, None) is not None or end_step != result["steps"]
+                        or not math.isclose(end_time, final_time, rel_tol=1e-12, abs_tol=1e-15)):
                     raise ValueError("Incomplete protocol history.")
             return ExecutionReport(return_code, elapsed, result["versions"], result["steps"],
-                                   result["stop_reason"], result["history"], result["observables"])
+                                   result["stop_reason"], result["history"], result["observables"],
+                                   final_time, result.get("time_step", {}))
         except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
             if isinstance(error, DemExecutionError):
                 raise
@@ -157,7 +176,8 @@ class KratosBackend:
                 raise ValueError("Kratos changed particle IDs or particle count.")
             if not np.array_equal(state.radii, initial.radii[order]):
                 raise ValueError("Kratos changed particle radii.")
-            if abs(state.time - report.steps * prepared.case.time_step) > prepared.case.time_step * 1e-5:
+            expected_time = report.time if report.time is not None else report.steps * prepared.case.time_step
+            if not math.isclose(state.time, expected_time, rel_tol=1e-12, abs_tol=prepared.case.time_step * 1e-7):
                 raise ValueError("Kratos did not reach the requested final time.")
             if prepared.case.boundary == "periodic":
                 # Kratos wraps before integration; canonicalize a final-step crossing.

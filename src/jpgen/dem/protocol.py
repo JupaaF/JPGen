@@ -115,7 +115,7 @@ def validate_control(control):
         raise ValueError(f'Unknown controller: {kind!r}')
 
 
-def validate_protocol(raw, dt, boundary):
+def validate_protocol(raw, dt, boundary, adaptive=False):
     protocol = copy.deepcopy(raw)
     _mapping(protocol, {'stages', 'sample_every'}, {'stages'})
     _count(protocol.setdefault('sample_every', 100))
@@ -137,7 +137,7 @@ def validate_protocol(raw, dt, boundary):
             validate_control(stage['control'])
             control = stage['control']
             rates = control.get('rate', [control.get('max_strain_rate', 0)])
-            if any(abs(rate * dt) > 0.01 for rate in rates):
+            if not adaptive and any(abs(rate * dt) > 0.01 for rate in rates):
                 raise ValueError('Controller permits more than 1% cell strain per step; reduce time_step or rate.')
             validate_condition(stage['until'])
             duration = _number(stage['max_duration'], dt)
@@ -153,6 +153,11 @@ def validate_protocol(raw, dt, boundary):
     if steps > 2**53 or not math.isfinite(steps * dt):
         raise ValueError('Protocol step budget is too large.')
     return protocol, steps
+
+
+def protocol_duration(stages):
+    return math.fsum(stage.get('repeat', 1) * protocol_duration(stage['stages'])
+                     if 'stages' in stage else stage['max_duration'] for stage in stages)
 
 
 def duration_steps(duration, dt):
@@ -227,6 +232,21 @@ class Condition:
         return elapsed + epsilon >= spec.get('min_duration', 0) and elapsed - self.since + epsilon >= spec.get('hold_for', 0)
 
 
+    def next_boundary(self, elapsed, global_time):
+        """Time to the next relevant timer/temporal threshold, without state mutation."""
+        candidates = [self.spec.get('min_duration', 0) - elapsed]
+        if self.since is not None:
+            candidates.append(self.since + self.spec.get('hold_for', 0) - elapsed)
+        observable = self.spec.get('observable')
+        if observable in ('time', 'stage_time'):
+            current = global_time if observable == 'time' else elapsed
+            candidates.append(self.spec['value'] - current)
+        candidates.extend(child.next_boundary(elapsed, global_time) for child in self.children)
+        # Ignore roundoff at an already visited boundary.
+        epsilon = 16 * math.ulp(max(abs(elapsed), abs(global_time), 1e-300))
+        return min((value for value in candidates if value > epsilon), default=math.inf)
+
+
 def target_value(target, elapsed):
     if not isinstance(target, dict):
         return target
@@ -258,8 +278,11 @@ CONTROLLERS = {'free_evolution': free_evolution, 'strain_rate': strain_rate, 'st
 
 class ProtocolRunner:
     """Lazy stage traversal; conditions sampled after every completed solver step."""
-    def __init__(self, protocol, dt):
+    def __init__(self, protocol, dt, adaptive=False):
         self.dt = dt
+        self.adaptive = adaptive
+        self.time = 0.0
+        self._time_correction = 0.0
         self.iterator = iter_stages(protocol['stages'])
         self.history = []
         self.steps = 0
@@ -274,22 +297,38 @@ class ProtocolRunner:
             return
         self.path, self.stage = item
         self.start_step = self.steps
+        self.start_time = self.time
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
 
     def act(self, values):
         control = self.stage['control']
-        return CONTROLLERS[control['type']](control, values, (self.steps - self.start_step) * self.dt)
+        return CONTROLLERS[control['type']](control, values, self.time - self.start_time)
 
-    def advance(self, values):
+    def remaining_time(self):
+        elapsed = self.time - self.start_time
+        return min(self.stage['max_duration'] - elapsed, self.condition.next_boundary(elapsed, self.time))
+
+    def advance(self, values, dt=None):
+        step_dt = self.dt if dt is None else dt
+        if not math.isfinite(step_dt) or step_dt <= 0:
+            raise ValueError('Completed time step must be finite and positive.')
         self.steps += 1
-        elapsed = (self.steps - self.start_step) * self.dt
-        values = dict(values, time=self.steps * self.dt, stage_time=elapsed)
-        reached = self.condition.evaluate(values, elapsed, self.dt)
-        expired = self.steps - self.start_step >= self.limit
+        if self.adaptive:
+            increment = step_dt - self._time_correction
+            total = self.time + increment
+            self._time_correction = (total - self.time) - increment
+            self.time = total
+        else:
+            self.time = self.steps * self.dt
+        elapsed = self.time - self.start_time
+        values = dict(values, time=self.time, stage_time=elapsed)
+        reached = self.condition.evaluate(values, elapsed, step_dt)
+        expired = (elapsed + max(step_dt * 1e-7, 16 * math.ulp(self.time)) >= self.stage['max_duration']
+                   if self.adaptive else self.steps - self.start_step >= self.limit)
         if reached or expired:
             self.history.append({'path': self.path, 'start_step': self.start_step, 'end_step': self.steps,
-                                 'start_time': self.start_step * self.dt, 'end_time': self.steps * self.dt,
+                                 'start_time': self.start_time, 'end_time': self.time,
                                  'stop_reason': 'condition_met' if reached else 'max_duration', 'observables': values})
             if not reached:
                 self.failed = self.done = True
