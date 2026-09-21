@@ -80,3 +80,4 @@ def write_case(case, directory):
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
     shutil.copyfile(Path(__file__).parents[2] / "commands.py", inputs / "commands.py")
+    shutil.copyfile(Path(__file__).parents[2] / "state_exchange.py", inputs / "state_exchange.py")

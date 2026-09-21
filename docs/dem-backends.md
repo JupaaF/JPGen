@@ -106,6 +106,19 @@ Kratos copies `protocol.py`, `commands.py` and its adapter into the
 standalone case. Other process-based engines must also ship their required portable
 modules, or arrange an explicit runtime dependency on JPGen.
 
+Kratos also copies the solver-independent `dem/state_exchange.py` module. Its
+`JPGen.dem.state` version `1.0` exchange consists of `final_state.npz` and a small
+`final_state.json` metadata file (schema, version, SI units, time and box).
+The NPZ archive stores `ids` as int64 and `positions`, `radii`, `velocities` and
+`angular_velocities` as float64 NPY members, without compression or pickle.
+`write_state` consumes arrays sequentially in that order and publishes metadata
+after the archive; `read_state` checks the schema, member names and dtypes.
+Adapters remain responsible for constructing and validating `DemState` against
+their case. Other workers can reuse this format without importing Kratos.
+Old particle-valued JSON exchange files are not accepted by the new collector;
+the public `results.h5` format is unchanged. Diagnostic final state on protocol
+timeout uses the same binary exchange.
+
 ## Kratos observations
 
 Each completed protocol step still evaluates stopping conditions. `observe` accepts

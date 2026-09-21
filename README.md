@@ -57,6 +57,14 @@ When DEM is enabled, `dem/input/` contains the runnable engine case,
 `dem/logs/` captures the solver output, `dem/native_results/` retains native
 artifacts and `dem/results.h5` stores the validated final particle state.
 
+Kratos transfers its final particle arrays through `dem/native_results/final_state.npz`
+(uncompressed NumPy arrays, int64 IDs and float64 geometry/velocities).
+`final_state.json` contains only schema/version, SI units, final time and box
+metadata. The worker writes arrays sequentially before releasing the solver
+state, then publishes the metadata after the archive is complete. Reading
+disables pickle and validates the exchange version, array names and dtypes
+before the existing physical consistency checks. `results.h5` is unchanged.
+
 Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
 
 ## Pipeline boundaries

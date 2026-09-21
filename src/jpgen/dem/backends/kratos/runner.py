@@ -8,6 +8,8 @@ import os
 import platform
 from pathlib import Path
 
+import numpy as np
+
 
 def main():
     import KratosMultiphysics as KM
@@ -20,6 +22,7 @@ def main():
 
     from protocol import ProtocolRunner, STRESS_OBSERVABLES, required_observables
     from protocol_adapter import KratosProtocolAdapter
+    from state_exchange import write_state
 
     class JPGenAnalysis(DEMAnalysisStage):
         def __init__(self, model, parameters):
@@ -108,18 +111,28 @@ def main():
         def Finalize(self):
             nodes = sorted(self.spheres_model_part.Nodes, key=lambda node: node.Id)
             self.final_state = {
-                "ids": [node.Id for node in nodes],
-                "positions": [[node.X, node.Y, node.Z] for node in nodes],
-                "radii": [node.GetSolutionStepValue(KM.RADIUS) for node in nodes],
-                "velocities": [list(node.GetSolutionStepValue(KM.VELOCITY)) for node in nodes],
-                "angular_velocities": [list(node.GetSolutionStepValue(KM.ANGULAR_VELOCITY)) for node in nodes],
                 "time": self.time,
                 "box": self.adapter.box() if self.adapter else {
                     "origin": [getattr(self, f"BoundingBoxMin{axis}_update") for axis in "XYZ"],
                     "lengths": [getattr(self, f"BoundingBoxMax{axis}_update") - getattr(self, f"BoundingBoxMin{axis}_update") for axis in "XYZ"],
                     "periodic": execution["boundary"] == "periodic"},
             }
-            # Kratos deletes model parts during Finalize.
+            def arrays():
+                count = len(nodes)
+                yield "ids", np.fromiter((node.Id for node in nodes), dtype=np.int64, count=count)
+                yield "positions", np.fromiter(
+                    (value for node in nodes for value in (node.X, node.Y, node.Z)),
+                    dtype=np.float64, count=3 * count).reshape(count, 3)
+                yield "radii", np.fromiter((node.GetSolutionStepValue(KM.RADIUS) for node in nodes),
+                                           dtype=np.float64, count=count)
+                for name, variable in (("velocities", KM.VELOCITY),
+                                       ("angular_velocities", KM.ANGULAR_VELOCITY)):
+                    yield name, np.fromiter(
+                        (value for node in nodes for value in node.GetSolutionStepValue(variable)),
+                        dtype=np.float64, count=3 * count).reshape(count, 3)
+
+            # Stream numeric arrays before Kratos deletes its model parts.
+            write_state(output, arrays(), **self.final_state)
             super().Finalize()
 
     parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
@@ -135,7 +148,6 @@ def main():
                 json.dump(analysis.protocol.history, stream, indent=2, allow_nan=False)
                 stream.write("\n")
             temporary.replace(output / "protocol_history.json")
-    (output / "final_state.json").write_text(json.dumps(analysis.final_state, allow_nan=False), encoding="utf-8")
     (output / "execution_report.json").write_text(json.dumps({
         "steps": analysis.completed_steps,
         "stop_reason": ("max_duration" if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",

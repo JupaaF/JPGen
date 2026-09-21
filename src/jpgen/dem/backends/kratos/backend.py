@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+from zipfile import BadZipFile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
 from ...protocol import STRESS_OBSERVABLES, required_observables, iter_stages, control_types
 from ...domain import DemState
+from ...state_exchange import read_state
 from ....packing.domain.box import Box
 from ..base import ExecutionReport, PreparedDemCase
 from .definition import CAPABILITIES
@@ -173,7 +175,7 @@ class KratosBackend:
 
     def collect(self, prepared, report):
         try:
-            raw = json.loads((prepared.directory / "native_results" / "final_state.json").read_text())
+            raw = read_state(prepared.directory / "native_results")
             raw["box"] = Box(**raw["box"])
             state = DemState(**raw)
             if state.box.periodic != (prepared.case.boundary == "periodic"):
@@ -193,5 +195,5 @@ class KratosBackend:
                 state = DemState(state.ids, positions, state.radii, state.velocities,
                                  state.angular_velocities, state.time, state.box)
             return state
-        except (OSError, ValueError, TypeError, KeyError) as error:
+        except (OSError, ValueError, TypeError, KeyError, EOFError, BadZipFile) as error:
             raise DemExecutionError(f"Invalid Kratos final state: {error}") from error
