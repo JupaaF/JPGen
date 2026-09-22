@@ -1,0 +1,22 @@
+{
+  "status": "rolled_back",
+  "date_utc": "2026-09-22T12:24:03.120397+00:00",
+  "kratos_commit": "66dbb226f80dc78d5ff3985351effb03798ad2b8",
+  "patch": "patches/kratos-dem-search-optimizations.patch",
+  "restored_build_libraries_sha256": {
+    "libKratosDEMCore.so": "7d0bf09d4da2bc446ddc7b416c77fda9ad819b36e6fdfe5761a083d8af4ec7bd",
+    "KratosDEMApplication.cpython-312-x86_64-linux-gnu.so": "70ad303dcb329d46bc58a4897347541832622e52a2f17f4c170f3c412d20b502"
+  },
+  "invalidated_objects": [
+    "Kratos/build/Release/applications/DEMApplication/CMakeFiles/KratosDEMApplication.dir/custom_python/add_custom_utilities_to_python.cpp.o",
+    "Kratos/build/Release/applications/DEMApplication/CMakeFiles/KratosDEMApplication.dir/custom_python/add_custom_strategies_to_python.cpp.o",
+    "Kratos/build/Release/applications/DEMApplication/CMakeFiles/KratosDEMCore.dir/custom_strategies/strategies/explicit_solver_continuum.cpp.o",
+    "Kratos/build/Release/applications/DEMApplication/CMakeFiles/KratosDEMCore.dir/custom_strategies/strategies/explicit_solver_strategy.cpp.o"
+  ],
+  "archived_runtime": "benchmarks/kratos_cpp/archive/experimental_installation",
+  "original_installation": "Kratos/bin/Release",
+  "results": "docs/kratos-cpp-results.json",
+  "kratos_worktree_clean": true,
+  "original_and_build_libraries_verified": true,
+  "archived_build_script": "benchmarks/kratos_cpp/archive/build.sh"
+}

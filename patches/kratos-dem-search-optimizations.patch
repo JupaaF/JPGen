@@ -1,0 +1,307 @@
+diff --git a/applications/DEMApplication/custom_python/add_custom_strategies_to_python.cpp b/applications/DEMApplication/custom_python/add_custom_strategies_to_python.cpp
+index 940abd046e..d0bb702ff4 100755
+--- a/applications/DEMApplication/custom_python/add_custom_strategies_to_python.cpp
++++ b/applications/DEMApplication/custom_python/add_custom_strategies_to_python.cpp
+@@ -51,7 +51,6 @@ void  AddCustomStrategiesToPython(pybind11::module& m)
+     typedef std::vector<double>                   DistanceType;
+     typedef std::vector<DistanceType>             VectorDistanceType;
+     typedef OMP_DEMSearch                         OmpDemSearchType;
+-    typedef DEMSearch<OmpDemSearchType >          DemSearchType;
+ 
+     py::class_<VectorResultNodesContainerType>(m, "VectorResultNodesContainer")
+         .def(py::init<>())
+@@ -99,10 +98,12 @@ void  AddCustomStrategiesToPython(pybind11::module& m)
+         .def(py::init<>())
+         ;
+ 
+-    py::class_<DemSearchType, DemSearchType::Pointer, SpatialSearch>(m, "OMP_DEMSearch")
++    // Construct the actual CRTP-derived search, including its persistent
++    // buffers. A DEMSearch<OMP_DEMSearch> base alone has no derived storage.
++    py::class_<OmpDemSearchType, OmpDemSearchType::Pointer, SpatialSearch>(m, "OMP_DEMSearch")
+         .def(py::init<>())
+         .def(py::init<const double, const double, const double, const double, const double, const double>(), py::arg("min_x"), py::arg("min_y"), py::arg("min_z"), py::arg("max_x"), py::arg("max_y"), py::arg("max_z"))
+-        .def("SearchNodesInRadiusExclusive", [&](DemSearchType &self,
++        .def("SearchNodesInRadiusExclusive", [&](OmpDemSearchType &self,
+                                                  NodesContainerType & a,
+                                                  NodesContainerType & b,
+                                                  const py::list & radii,
+diff --git a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
+index 347016704c..b0a485aaa5 100644
+--- a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
++++ b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
+@@ -1441,6 +1441,11 @@ namespace Kratos {
+ 
+         mpSpSearch->SearchElementsInRadiusExclusive(r_model_part, this->GetArrayOfAmplifiedRadii(), this->GetResults(), this->GetResultsDistances());
+ 
++        if (mUseIndexedNeighbours) {
++            RebuildNeighboursWithIndexedStorage();
++            return;
++        }
++
+         const int number_of_particles = (int) mListOfSphericParticles.size();
+ 
+         typedef std::map<SphericParticle*,std::vector<SphericParticle*>> ConnectivitiesMap;
+@@ -1490,6 +1495,65 @@ namespace Kratos {
+         KRATOS_CATCH("")
+     }
+ 
++    void ExplicitSolverStrategy::RebuildNeighboursWithIndexedStorage() {
++        const int number_of_particles = static_cast<int>(mListOfSphericParticles.size());
++        // Pointer order, not particle IDs: supports nonconsecutive IDs, removal,
++        // insertion and reordering. Read-only lookup during the parallel region.
++        if (mIndexedParticles != mListOfSphericParticles) {
++            mIndexedParticles = mListOfSphericParticles;
++            mParticleIndices.clear();
++            mParticleIndices.reserve(mIndexedParticles.size());
++            for (std::size_t i = 0; i < mIndexedParticles.size(); ++i) {
++                mParticleIndices.emplace(mIndexedParticles[i], i);
++            }
++        }
++        mIncomingNeighbours.resize(ParallelUtilities::GetNumThreads());
++        for (auto& r_thread_lists : mIncomingNeighbours) {
++            r_thread_lists.resize(number_of_particles);
++            for (auto& r_list : r_thread_lists) {
++                r_list.clear();
++            }
++        }
++        const auto& r_indices = mParticleIndices;
++
++        #pragma omp parallel for schedule(dynamic, 100)
++        for (int i = 0; i < number_of_particles; ++i) {
++            auto* p_particle = mListOfSphericParticles[i];
++            auto& r_neighbours = p_particle->mNeighbourElements;
++            r_neighbours.clear();
++            auto& r_incoming = mIncomingNeighbours[OpenMPUtils::ThisThread()];
++            for (auto& p_element : GetResults()[i]) {
++                auto* p_neighbour = dynamic_cast<SphericParticle*>(p_element.get());
++                if (p_particle->Is(DEMFlags::BELONGS_TO_A_CLUSTER) &&
++                    p_particle->GetClusterId() == p_neighbour->GetClusterId()) continue;
++                if (p_particle->Is(DEMFlags::POLYHEDRON_SKIN)) continue;
++                r_neighbours.push_back(p_neighbour);
++                const auto found = r_indices.find(p_neighbour);
++                // The original reconciliation consumes only local destinations;
++                // ghost neighbours remain in the outgoing neighbour list.
++                if (found != r_indices.end()) {
++                    r_incoming[found->second].push_back(p_particle);
++                }
++            }
++            GetResults()[i].clear();
++            GetResultsDistances()[i].clear();
++        }
++
++        #pragma omp parallel for schedule(dynamic, 100)
++        for (int i = 0; i < number_of_particles; ++i) {
++            auto& r_neighbours = mListOfSphericParticles[i]->mNeighbourElements;
++            // Preserve thread order and insertion order from the original map
++            // algorithm. No sorting or changes to the contact-history update.
++            for (const auto& r_thread_lists : mIncomingNeighbours) {
++                for (auto* p_neighbour : r_thread_lists[i]) {
++                    if (std::find(r_neighbours.begin(), r_neighbours.end(), p_neighbour) == r_neighbours.end()) {
++                        r_neighbours.push_back(p_neighbour);
++                    }
++                }
++            }
++        }
++    }
++
+     void ExplicitSolverStrategy::ComputeNewNeighboursHistoricalData() {
+ 
+         KRATOS_TRY
+diff --git a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.h b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.h
+index f8160c474d..567fdff01b 100644
+--- a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.h
++++ b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.h
+@@ -17,6 +17,7 @@
+ 
+ /* System includes */
+ #include <limits>
++#include <unordered_map>
+ #include <iostream>
+ #include <iomanip>
+ #include <time.h>
+@@ -43,6 +44,7 @@
+ #include "custom_utilities/dem_fem_search.h"
+ #include "custom_utilities/discrete_particle_configure.h"
+ #include "custom_utilities/node_configure.h"
++#include "custom_utilities/dem_search_optimization_flags.h"
+ #include "custom_utilities/rigid_face_geometrical_object_configure.h"
+ 
+ #ifdef USING_CGAL
+@@ -289,6 +291,13 @@ namespace Kratos {
+ 
+     protected:
+ 
++        void RebuildNeighboursWithIndexedStorage();
++        bool mUseIndexedNeighbours = DEMSearchOptimizationEnabled("KRATOS_DEM_INDEXED_NEIGHBOURS");
++        std::vector<SphericParticle*> mIndexedParticles;
++        std::unordered_map<SphericParticle*, std::size_t> mParticleIndices;
++        // [producer thread][local destination particle][incoming neighbours]
++        std::vector<std::vector<std::vector<SphericParticle*>>> mIncomingNeighbours;
++
+         Parameters mParameters;
+         bool mRemoveBallsInitiallyTouchingWallsOption;
+         VectorResultElementsContainerType mResults;
+diff --git a/applications/DEMApplication/custom_utilities/omp_dem_search.h b/applications/DEMApplication/custom_utilities/omp_dem_search.h
+index 89a552da2c..33457ef6ef 100644
+--- a/applications/DEMApplication/custom_utilities/omp_dem_search.h
++++ b/applications/DEMApplication/custom_utilities/omp_dem_search.h
+@@ -19,6 +19,7 @@
+ // Project includes
+ #include "spatial_containers/dem_search.h"
+ #include "utilities/openmp_utils.h"
++#include "dem_search_optimization_flags.h"
+ 
+ // Configures
+ #include "discrete_particle_configure.h"
+@@ -110,8 +111,9 @@ class OMP_DEMSearch : public DEMSearch<OMP_DEMSearch>
+ 
+       OMP_DEMSearch(const double domain_min_x = 0.0, const double domain_min_y = 0.0, const double domain_min_z = 0.0,
+                     const double domain_max_x = -1.0, const double domain_max_y = -1.0, const double domain_max_z = -1.0)
++          : DEMSearch<OMP_DEMSearch>(domain_min_x, domain_min_y, domain_min_z,
++                                    domain_max_x, domain_max_y, domain_max_z)
+       {
+-            mDomainPeriodicity = (domain_min_x <= domain_max_x) ? true : false;
+       }
+ 
+       /// Destructor.
+@@ -188,6 +190,10 @@ class OMP_DEMSearch : public DEMSearch<OMP_DEMSearch>
+           int MaxNumberOfElements = rStructureElements.size();
+           ElementsContainerType::ContainerType& elements_array     = const_cast<ElementsContainerType::ContainerType&>(rElements.GetContainer());
+           ElementsContainerType::ContainerType& elements_ModelPart = const_cast<ElementsContainerType::ContainerType&>(rStructureElements.GetContainer());
++          if (mReuseSearchStorage) {
++              SearchElementsWithReusableStorage(elements_ModelPart, elements_array, rResults, rResultsDistance);
++              return;
++          }
+           BinsUniquePointerType p_bins = GetBins(elements_ModelPart);
+ 
+           #pragma omp parallel
+@@ -758,6 +764,102 @@ class OMP_DEMSearch : public DEMSearch<OMP_DEMSearch>
+       ///@}
+ 
+     private:
++      // Only reuse the periodic grid when its geometry and population size are
++      // unchanged. Occupancy is rebuilt on EVERY search, in the original order.
++      class ReusablePeriodicBins : public BinsTypePeriodic
++      {
++      public:
++          using BinsTypePeriodic::BinsTypePeriodic;
++
++          void Refill(ElementsContainerType::ContainerType& rElements)
++          {
++              this->mObjectsBegin = rElements.begin();
++              this->mObjectsEnd = rElements.end();
++              this->mObjectsSize = rElements.size();
++              for (auto& r_cell : this->mCells) {
++                  r_cell.Clear();
++              }
++              this->GenerateBins();
++          }
++      };
++
++      struct SearchScratch
++      {
++          ResultElementsContainerType results;
++          DistanceType distances;
++      };
++
++      bool mReuseSearchStorage = DEMSearchOptimizationEnabled("KRATOS_DEM_REUSE_SEARCH_STORAGE");
++      std::unique_ptr<ReusablePeriodicBins> mpReusablePeriodicBins;
++      std::size_t mCachedParticleCount = 0;
++      array_1d<double, 3> mCachedDomainMin;
++      array_1d<double, 3> mCachedDomainMax;
++      std::vector<SearchScratch> mSearchScratch;
++
++      void SearchElementsWithReusableStorage(
++          ElementsContainerType::ContainerType& rStructure,
++          ElementsContainerType::ContainerType& rElements,
++          VectorResultElementsContainerType& rResults,
++          VectorDistanceType& rDistances)
++      {
++          // The legacy constructor cannot calculate a grid from an empty range.
++          if (rStructure.empty()) {
++              mpReusablePeriodicBins.reset();
++              mSearchScratch.clear();
++              return;
++          }
++          BinsUniquePointerType fresh_bins;
++          BinsType* p_bins;
++          if (mDomainPeriodicity) {
++              bool rebuild = !mpReusablePeriodicBins || mCachedParticleCount != rStructure.size();
++              for (std::size_t axis = 0; axis < 3 && !rebuild; ++axis) {
++                  rebuild = mCachedDomainMin[axis] != this->mDomainMin[axis] ||
++                            mCachedDomainMax[axis] != this->mDomainMax[axis];
++              }
++              if (rebuild) {
++                  mpReusablePeriodicBins = std::make_unique<ReusablePeriodicBins>(
++                      rStructure.begin(), rStructure.end(), this->mDomainMin, this->mDomainMax);
++                  mCachedParticleCount = rStructure.size();
++                  mCachedDomainMin = this->mDomainMin;
++                  mCachedDomainMax = this->mDomainMax;
++              } else {
++                  mpReusablePeriodicBins->Refill(rStructure);
++              }
++              p_bins = mpReusablePeriodicBins.get();
++          } else {
++              // Open domains retain the original bounding-box calculation.
++              mpReusablePeriodicBins.reset();
++              fresh_bins = GetBins(rStructure);
++              p_bins = fresh_bins.get();
++          }
++
++          mSearchScratch.resize(ParallelUtilities::GetNumThreads());
++          for (auto& r_scratch : mSearchScratch) {
++              r_scratch.results.resize(rStructure.size());
++              r_scratch.distances.resize(rStructure.size());
++          }
++          #pragma omp parallel
++          {
++              auto& r_scratch = mSearchScratch[OpenMPUtils::ThisThread()];
++              #pragma omp for schedule(dynamic, 100)
++              for (int i = 0; i < static_cast<int>(rElements.size()); ++i) {
++                  auto result_it = r_scratch.results.begin();
++                  auto distance_it = r_scratch.distances.begin();
++                  auto* p_particle = dynamic_cast<SphericParticle*>(&*rElements[i]);
++                  const auto count = p_bins->SearchObjectsInRadiusExclusive(
++                      rElements[i], p_particle->GetSearchRadius(), result_it,
++                      distance_it, rStructure.size());
++                  rResults[i].insert(rResults[i].begin(), r_scratch.results.begin(), r_scratch.results.begin() + count);
++                  rDistances[i].insert(rDistances[i].begin(), r_scratch.distances.begin(), r_scratch.distances.begin() + count);
++                  // Release owning pointers while retaining buffer capacity.
++                  // No removed particles remain alive in the scratch buffers.
++                  for (std::size_t j = 0; j < count; ++j) {
++                      r_scratch.results[j].reset();
++                  }
++              }
++          }
++      }
++
+       ///@name Static Member Variables
+       ///@{
+ 
+@@ -861,5 +963,3 @@ class OMP_DEMSearch : public DEMSearch<OMP_DEMSearch>
+ }  // namespace Kratos.
+ 
+ #endif // KRATOS_DEM_SEARCH_H_INCLUDED  defined
+-
+-
+diff --git a/applications/DEMApplication/custom_utilities/dem_search_optimization_flags.h b/applications/DEMApplication/custom_utilities/dem_search_optimization_flags.h
+new file mode 100644
+index 0000000000..4a77c5b1e7
+--- /dev/null
++++ b/applications/DEMApplication/custom_utilities/dem_search_optimization_flags.h
+@@ -0,0 +1,15 @@
++#pragma once
++
++#include <cstdlib>
++
++namespace Kratos {
++
++// Experimental switches, read once per search/strategy instance. Keeping both
++// disabled preserves the reference path in the same binary for paired timings.
++inline bool DEMSearchOptimizationEnabled(const char* pName)
++{
++    const char* p_value = std::getenv(pName);
++    return p_value != nullptr && p_value[0] == '1' && p_value[1] == '\0';
++}
++
++} // namespace Kratos

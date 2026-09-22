@@ -192,6 +192,10 @@ These methods are geometric heuristics. They do not guarantee convergence, calcu
 See the [local Kratos profiling study](docs/kratos-performance.md) for measured
 thread scaling and neighbour-search tradeoffs with 4000 particles at solid
 fraction 0.60, including reproducible inputs and numerical comparisons.
+The archived [C++ optimization study](docs/kratos-cpp-optimizations.md) records
+measurements of reusable search storage and indexed neighbour reconstruction.
+Those experimental changes have been rolled back; the report and patch remain
+available for future incremental work.
 
 `ParticlePacking` contains IDs, geometry, initial velocities, its box and `PackingMetadata`. It intentionally contains no material properties, masses, contact laws or solver state. Those belong to `jpgen.dem`. `DemState` represents the final state separately because particles may leave the initial packing box through open boundaries.
 
