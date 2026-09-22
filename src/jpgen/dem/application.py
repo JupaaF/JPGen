@@ -7,6 +7,7 @@ import numpy as np
 from ..errors import DemExecutionError
 from .configuration import build_dem_plan
 from .persistence import DemResultStore
+from .validation import validate_execution_report, validate_final_state
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,9 @@ class DemApplication:
         case = plan.create_case(packing)
         prepared = plan.backend.prepare(case, workspace.directory / "dem")
         report = plan.backend.run(prepared, observer)
+        validate_execution_report(case, report)
         state = plan.backend.collect(prepared, report)
+        validate_final_state(case, report, state)
         with np.errstate(over="ignore", invalid="ignore"):
             mass = (4.0 * np.pi / 3.0) * state.radii**3 * case.material.density
             translation = 0.5 * mass * np.sum(state.velocities**2, axis=1)

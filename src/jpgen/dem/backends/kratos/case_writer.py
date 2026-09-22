@@ -53,7 +53,7 @@ def write_case(case, directory):
         "BoundingBoxOption": case.boundary == "periodic", "AutomaticBoundingBoxOption": False,
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
-        "NeighbourSearchFrequency": 1,
+        "NeighbourSearchFrequency": 5,
         "ContactMeshOption": needs_stress, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
         "BoundingBoxMoveOptionDetail": [1, 1, 1, 1, 1, 1],

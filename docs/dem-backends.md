@@ -113,8 +113,14 @@ The NPZ archive stores `ids` as int64 and `positions`, `radii`, `velocities` and
 `angular_velocities` as float64 NPY members, without compression or pickle.
 `write_state` consumes arrays sequentially in that order and publishes metadata
 after the archive; `read_state` checks the schema, member names and dtypes.
-Adapters remain responsible for constructing and validating `DemState` against
-their case. Other workers can reuse this format without importing Kratos.
+Adapters remain responsible for constructing `DemState` and normalizing native
+results. `DemApplication` validates every execution report and final state against
+the case through `dem/validation.py`, before publishing results. The shared checks
+cover successful completion, step counts, protocol history, final time, boundary
+type and preservation of particle IDs and radii. Particle ordering may differ
+between engines; radii are compared by ID. An omitted final box means the initial
+box; adapters that deform the domain must provide its final geometry. Other
+workers can reuse this format without importing Kratos.
 Old particle-valued JSON exchange files are not accepted by the new collector;
 the public `results.h5` format is unchanged. Diagnostic final state on protocol
 timeout uses the same binary exchange.

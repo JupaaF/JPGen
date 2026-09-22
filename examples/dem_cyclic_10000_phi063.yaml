@@ -7,8 +7,7 @@
 packing:
   sizing_method: variable_box_fraction
   count: 10000
-  target_solid_fraction: 0.63
-  seed: 20260921
+  target_solid_fraction: 0.66
   exports: [vtk]
   box:
     origin: [0.0, 0.0, 0.0]
@@ -20,7 +19,7 @@ packing:
   angular_velocity: {type: constant, value: 0.0}
   placement:
     method: progressive_growth
-    max_overlap: 0.02
+    max_overlap: 0.05
     relax_all_overlaps: true
     max_iterations: 10000
     overlap_tolerance: 1.0e-05

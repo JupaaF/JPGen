@@ -1,0 +1,1945 @@
+{
+  "provenance": {
+    "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+    "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i7-4790 CPU @ 3.60GHz\nCPU family:                              6\nModel:                                   60\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                3\nCPU(s) scaling MHz:                      91%\nCPU max MHz:                             4000.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7183.69\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid xsaveopt dtherm ida arat pln pts vnmi md_clear flush_l1d\nVirtualization:                          VT-x\nL1d cache:                               128 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                1 MiB (4 instances)\nL3 cache:                                8 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             KVM: Mitigation: Split huge pages\nVulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\nVulnerability Mds:                       Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Meltdown:                  Mitigation; PTI\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; IBPB conditional; IBRS_FW; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Mitigation; Microcode\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+    "kratos_commit": "66dbb226f80dc78d5ff3985351effb03798ad2b8",
+    "source_run": "runs/20260921T143038_160726Z_yh0ejq98",
+    "sha256": {
+      "Kratos/bin/Release/libs/libKratosCore.so": "d4f72f6257080136e408a98ab8bcaddfc218413398801b3d99e9ec07583dfe0d",
+      "runs/20260921T143038_160726Z_yh0ejq98/packing.h5": "37c2fd226bcc7916b2c1c2518f4750f59940396dd95b86f6651ee926dc6c8962",
+      "Kratos/bin/Release/libs/KratosDEMApplication.cpython-312-x86_64-linux-gnu.so": "70ad303dcb329d46bc58a4897347541832622e52a2f17f4c170f3c412d20b502",
+      "Kratos/bin/Release/libs/libKratosDEMCore.so": "7d0bf09d4da2bc446ddc7b416c77fda9ad819b36e6fdfe5761a083d8af4ec7bd"
+    },
+    "/proc/loadavg": "10.10 10.21 8.91 8/1568 4",
+    "/sys/fs/cgroup/cpuset.cpus.effective": "0-7"
+  },
+  "campaigns": {
+    "measurements": {
+      "summary": {
+        "baseline": {
+          "repetitions": 3,
+          "median_seconds": 98.82652316696476,
+          "min_seconds": 75.24347043503076,
+          "max_seconds": 101.55443126091268,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "max_errors": {
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "median_solver_cpu_seconds": 95.438885359
+        },
+        "search10": {
+          "repetitions": 3,
+          "median_seconds": 50.136290546972305,
+          "min_seconds": 48.25424299004953,
+          "max_seconds": 50.185441602021456,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "max_errors": {
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "median_solver_cpu_seconds": 48.384658291
+        },
+        "search10_no_skin": {
+          "repetitions": 3,
+          "median_seconds": 43.453091560979374,
+          "min_seconds": 42.75054175895639,
+          "max_seconds": 49.10247009503655,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975847922291669e-08,
+            "velocity_max_m_s": 0.00013943888103312553,
+            "angular_velocity_max_rad_s": 0.047942972883063054,
+            "velocity_relative_l2": 0.00015574554601577127,
+            "angular_velocity_relative_l2": 0.0002279225377974501,
+            "kinetic_energy_j": 0.007024950867545762,
+            "kinetic_energy_relative_error": 5.823879850441749e-05,
+            "momentum_error_kg_m_s": 4.743568674963723e-16
+          },
+          "max_errors": {
+            "position_max_m": 3.975847922291669e-08,
+            "velocity_max_m_s": 0.00013943888103312553,
+            "angular_velocity_max_rad_s": 0.047942972883063054,
+            "kinetic_energy_relative_error": 5.823879850441749e-05,
+            "momentum_error_kg_m_s": 4.743568674963723e-16
+          },
+          "median_solver_cpu_seconds": 42.41411502
+        },
+        "search20": {
+          "repetitions": 3,
+          "median_seconds": 46.07210954709444,
+          "min_seconds": 45.165640056016855,
+          "max_seconds": 49.67954468191601,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 8.180493182987189e-08,
+            "velocity_max_m_s": 0.00016493128130105466,
+            "angular_velocity_max_rad_s": 0.049807687067777585,
+            "velocity_relative_l2": 0.0003430273418620704,
+            "angular_velocity_relative_l2": 0.0004774209403621145,
+            "kinetic_energy_j": 0.007025516797107003,
+            "kinetic_energy_relative_error": 0.00013880342179772853,
+            "momentum_error_kg_m_s": 2.927869663378228e-16
+          },
+          "max_errors": {
+            "position_max_m": 8.180493182987189e-08,
+            "velocity_max_m_s": 0.00016493128130105466,
+            "angular_velocity_max_rad_s": 0.049807687067777585,
+            "kinetic_energy_relative_error": 0.00013880342179772853,
+            "momentum_error_kg_m_s": 2.927869663378228e-16
+          },
+          "median_solver_cpu_seconds": 44.185579162
+        },
+        "threads2": {
+          "repetitions": 3,
+          "median_seconds": 59.117739796987735,
+          "min_seconds": 58.77994610799942,
+          "max_seconds": 62.89432546298485,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "max_errors": {
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "median_solver_cpu_seconds": 101.924534537
+        },
+        "threads4": {
+          "repetitions": 3,
+          "median_seconds": 55.84208451898303,
+          "min_seconds": 45.0655512670055,
+          "max_seconds": 65.73958889197093,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "max_errors": {
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "median_solver_cpu_seconds": 148.236481469
+        }
+      },
+      "runs": [
+        {
+          "variant": "baseline",
+          "repeat": 0,
+          "threads": 1,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 75.24347043503076,
+          "solver_cpu_seconds": 74.51928320100001,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.03189477103296667
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.4340568194165826
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 71.69482311722822
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.8253433656645939
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.4440232664346695e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.12604996596928686
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.9675255581969395
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.8748175820801407
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.015812243334949017
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.005592326051555574
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 74.65706057101488
+            }
+          }
+        },
+        {
+          "variant": "baseline",
+          "repeat": 1,
+          "threads": 1,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 101.55443126091268,
+          "solver_cpu_seconds": 98.165561812,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06938041094690561
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.079902329831384
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 96.7793919533724
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1124791679903865
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 4.720059223473072e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.23155029502231628
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.700934554100968
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1724581012967974
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018623520154505968
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.012648876989260316
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 100.8029468699824
+            }
+          }
+        },
+        {
+          "variant": "baseline",
+          "repeat": 2,
+          "threads": 1,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 98.82652316696476,
+          "solver_cpu_seconds": 95.438885359,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06619668495841324
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.012247957987711
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 94.14088678744156
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.073735338402912
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 1.810956746339798e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2417918030405417
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.6265349845634773
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.132426756550558
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018579456489533186
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.006245618918910623
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 98.0468252840219
+            }
+          }
+        },
+        {
+          "variant": "search10",
+          "repeat": 0,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 50.185441602021456,
+          "solver_cpu_seconds": 48.641866115,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.0650895619764924
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.07579336874187
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 45.44089001347311
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.084477890864946
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.992921508848667e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2076140521094203
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.710471986560151
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1446894742548466
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.02004287322051823
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.005152379046194255
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 49.44387586391531
+            }
+          }
+        },
+        {
+          "variant": "search10",
+          "repeat": 1,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 48.25424299004953,
+          "solver_cpu_seconds": 46.562856738,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.059691599919460714
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.8476340350462124
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 43.81923441879917
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0299622947350144
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.247048541903496e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.1900830710073933
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.451445662532933
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0858435240807012
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.01746830891352147
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.010732840979471803
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 47.49540045298636
+            }
+          }
+        },
+        {
+          "variant": "search10",
+          "repeat": 2,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 50.136290546972305,
+          "solver_cpu_seconds": 48.384658291,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.04868361505214125
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.0194154215278104
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 45.492500358843245
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.065775461262092
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.134009264409542e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.18958132690750062
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.632534440839663
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.126456908765249
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.019866751390509307
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.0056763519532978535
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 49.39737332100049
+            }
+          }
+        },
+        {
+          "variant": "search10_no_skin",
+          "repeat": 0,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 0.0,
+          "wall_seconds": 49.10247009503655,
+          "solver_cpu_seconds": 47.596607221,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975847922291669e-08,
+            "velocity_max_m_s": 0.00013943888103312553,
+            "angular_velocity_max_rad_s": 0.047942972883063054,
+            "velocity_relative_l2": 0.00015574554601577127,
+            "angular_velocity_relative_l2": 0.0002279225377974501,
+            "kinetic_energy_j": 0.007024950867545762,
+            "kinetic_energy_relative_error": 5.823879850441749e-05,
+            "momentum_error_kg_m_s": 4.743568674963723e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06622389703989029
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.989058093749918
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 44.46332290431019
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0346754839411005
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.672080881893635e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.20708332594949752
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.617074258858338
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1001610559178516
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018229596898891032
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.007739630993455648
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 48.32276550598908
+            }
+          }
+        },
+        {
+          "variant": "search10_no_skin",
+          "repeat": 1,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 0.0,
+          "wall_seconds": 42.75054175895639,
+          "solver_cpu_seconds": 42.041417802,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975847922291669e-08,
+            "velocity_max_m_s": 0.00013943888103312553,
+            "angular_velocity_max_rad_s": 0.047942972883063054,
+            "velocity_relative_l2": 0.00015574554601577127,
+            "angular_velocity_relative_l2": 0.0002279225377974501,
+            "kinetic_energy_j": 0.007024950867545762,
+            "kinetic_energy_relative_error": 5.823879850441749e-05,
+            "momentum_error_kg_m_s": 4.743568674963723e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.034052101080305874
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.5720775584923103
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 38.89911753172055
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9036731221713126
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.2960593923926353e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.1604243339970708
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.124350343365222
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9555437915259972
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.015593653079122305
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.007022246019914746
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 42.103654325939715
+            }
+          }
+        },
+        {
+          "variant": "search10_no_skin",
+          "repeat": 2,
+          "threads": 1,
+          "frequency": 10,
+          "skin": 0.0,
+          "wall_seconds": 43.453091560979374,
+          "solver_cpu_seconds": 42.41411502,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975847922291669e-08,
+            "velocity_max_m_s": 0.00013943888103312553,
+            "angular_velocity_max_rad_s": 0.047942972883063054,
+            "velocity_relative_l2": 0.00015574554601577127,
+            "angular_velocity_relative_l2": 0.0002279225377974501,
+            "kinetic_energy_j": 0.007024950867545762,
+            "kinetic_energy_relative_error": 5.823879850441749e-05,
+            "momentum_error_kg_m_s": 4.743568674963723e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.057745335972867906
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.5513615738600492
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 39.62617486016825
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9028197403531522
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.0980369299650192e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.1981381099903956
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.1159383967751637
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9553337441757321
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.01700853928923607
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.004967528977431357
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 42.82361145596951
+            }
+          }
+        },
+        {
+          "variant": "search20",
+          "repeat": 0,
+          "threads": 1,
+          "frequency": 20,
+          "skin": 5e-05,
+          "wall_seconds": 45.165640056016855,
+          "solver_cpu_seconds": 43.144709719,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 8.180493182987189e-08,
+            "velocity_max_m_s": 0.00016493128130105466,
+            "angular_velocity_max_rad_s": 0.049807687067777585,
+            "velocity_relative_l2": 0.0003430273418620704,
+            "angular_velocity_relative_l2": 0.0004774209403621145,
+            "kinetic_energy_j": 0.007025516797107003,
+            "kinetic_energy_relative_error": 0.00013880342179772853,
+            "momentum_error_kg_m_s": 2.927869663378228e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.040548548102378845
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.8443900753045455
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 40.82194809615612
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0175846335478127
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.408982254564762e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.18599847191944718
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.4439722093520686
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0811049687908962
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.01814448507502675
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.011998265981674194
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 44.48920108994935
+            }
+          }
+        },
+        {
+          "variant": "search20",
+          "repeat": 1,
+          "threads": 1,
+          "frequency": 20,
+          "skin": 5e-05,
+          "wall_seconds": 49.67954468191601,
+          "solver_cpu_seconds": 47.520272111999994,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 8.180493182987189e-08,
+            "velocity_max_m_s": 0.00016493128130105466,
+            "angular_velocity_max_rad_s": 0.049807687067777585,
+            "velocity_relative_l2": 0.0003430273418620704,
+            "angular_velocity_relative_l2": 0.0004774209403621145,
+            "kinetic_energy_j": 0.007025516797107003,
+            "kinetic_energy_relative_error": 0.00013880342179772853,
+            "momentum_error_kg_m_s": 2.927869663378228e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06884796696249396
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.1906034481944516
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 44.67515421519056
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1347535771783441
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 3.5549746826291084e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2237105140229687
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.8536796057596803
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1970080219907686
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.021205596392974257
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.006006308016367257
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 48.88001374399755
+            }
+          }
+        },
+        {
+          "variant": "search20",
+          "repeat": 2,
+          "threads": 1,
+          "frequency": 20,
+          "skin": 5e-05,
+          "wall_seconds": 46.07210954709444,
+          "solver_cpu_seconds": 44.185579162,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 8.180493182987189e-08,
+            "velocity_max_m_s": 0.00016493128130105466,
+            "angular_velocity_max_rad_s": 0.049807687067777585,
+            "velocity_relative_l2": 0.0003430273418620704,
+            "angular_velocity_relative_l2": 0.0004774209403621145,
+            "kinetic_energy_j": 0.007025516797107003,
+            "kinetic_energy_relative_error": 0.00013880342179772853,
+            "momentum_error_kg_m_s": 2.927869663378228e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.05818267306312919
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.9199091410264373
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 41.53964760398958
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0339599390281364
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.2439053282141685e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.22160019201692194
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.533272286062129
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.093828569049947
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018849667394533753
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.0042816519271582365
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 45.30697817495093
+            }
+          }
+        },
+        {
+          "variant": "threads2",
+          "repeat": 0,
+          "threads": 2,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 59.117739796987735,
+          "solver_cpu_seconds": 101.859549621,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.03444160509388894
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.245274470653385
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 54.5529858894879
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.6950673798564821
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.495013177394867e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.18122692604083568
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.8624757777433842
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.7562932912260294
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018241826561279595
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.0058054260443896055
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 58.32761973096058
+            }
+          }
+        },
+        {
+          "variant": "threads2",
+          "repeat": 1,
+          "threads": 2,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 62.89432546298485,
+          "solver_cpu_seconds": 106.795994949,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.031822441960684955
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.3335686075733975
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 58.282661512028426
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.7832115782657638
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 3.0989758670330048e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.1673836070112884
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.8898636476369575
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.840719337342307
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.017623079475015402
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.009944559074938297
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 62.16622740298044
+            }
+          }
+        },
+        {
+          "variant": "threads2",
+          "repeat": 2,
+          "threads": 2,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 58.77994610799942,
+          "solver_cpu_seconds": 101.924534537,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.026917411014437675
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.297689956263639
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 54.20134438981768
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.690435208263807
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 3.7640566006302834e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.17456469300668687
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.9062783224508166
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.7465003131655976
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018569320673123002
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.011976067908108234
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 58.00563403998967
+            }
+          }
+        },
+        {
+          "variant": "threads4",
+          "repeat": 0,
+          "threads": 4,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 45.0655512670055,
+          "solver_cpu_seconds": 131.427502814,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.04268148203846067
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.4635487045161426
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 40.87827587907668
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.6734348573954776
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 1.951935701072216e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.22161843592766672
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.6257551116868854
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.727200037566945
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.015753710875287652
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.006132861948572099
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 44.36718040704727
+            }
+          }
+        },
+        {
+          "variant": "threads4",
+          "repeat": 1,
+          "threads": 4,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 65.73958889197093,
+          "solver_cpu_seconds": 164.153383238,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.024303963989950716
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 3.3892365645151585
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 58.96288615651429
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.071297213085927
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.359040081501007e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.190296922926791
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 4.73061423166655
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.148578284890391
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.019813638762570918
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.01193752302788198
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 64.99932830804028
+            }
+          }
+        },
+        {
+          "variant": "threads4",
+          "repeat": 2,
+          "threads": 4,
+          "frequency": 1,
+          "skin": 0.0,
+          "wall_seconds": 55.84208451898303,
+          "solver_cpu_seconds": 148.236481469,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.03966902894899249
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.324633703334257
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 50.30638102896046
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9101931828772649
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.0350562408566475e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2726672539720312
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 3.5533459935104474
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9747890532016754
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.01895721536129713
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.007516452926211059
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 54.98064132896252
+            }
+          }
+        }
+      ]
+    },
+    "combined": {
+      "summary": {
+        "search10_threads2": {
+          "repetitions": 3,
+          "median_seconds": 28.201013847021386,
+          "min_seconds": 28.034420135081746,
+          "max_seconds": 29.1651690909639,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "max_errors": {
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "median_solver_cpu_seconds": 51.557080783
+        },
+        "search10_threads4": {
+          "repetitions": 3,
+          "median_seconds": 23.028451972990297,
+          "min_seconds": 19.67332064290531,
+          "max_seconds": 24.53759111301042,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "max_errors": {
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "median_solver_cpu_seconds": 66.43610867700001
+        }
+      },
+      "runs": [
+        {
+          "variant": "search10_threads2",
+          "repeat": 0,
+          "threads": 2,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 29.1651690909639,
+          "solver_cpu_seconds": 52.101158702000006,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.031174216070212424
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1384732554433867
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 25.58254827966448
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.717401587869972
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 3.4350669011473656e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.19058686099015176
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.8099032961763442
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.7763874914962798
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018478073528967798
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.012230435037054121
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 28.312640712945722
+            }
+          }
+        },
+        {
+          "variant": "search10_threads2",
+          "repeat": 1,
+          "threads": 2,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 28.034420135081746,
+          "solver_cpu_seconds": 51.557080783,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.03726414998527616
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1594669094774872
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 24.563183190184645
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.6709286036202684
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.3669563233852386e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.1994553729891777
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.8257805466419086
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.728667706483975
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.023481391021050513
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.005312929977662861
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 27.26697802101262
+            }
+          }
+        },
+        {
+          "variant": "search10_threads2",
+          "repeat": 2,
+          "threads": 2,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 28.201013847021386,
+          "solver_cpu_seconds": 51.343528417,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.030729405931197107
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1493900587083772
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 24.72509515983984
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.6938097015954554
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.927030436694622e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.16033401398453861
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.827069670893252
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.7497085542418063
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.018769184593111277
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.008645353955216706
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 27.441059562028386
+            }
+          }
+        },
+        {
+          "variant": "search10_threads4",
+          "repeat": 0,
+          "threads": 4,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 23.028451972990297,
+          "solver_cpu_seconds": 66.43610867700001,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.019025563029572368
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.2479632647009566
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 18.35049679875374
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.8306033819681033
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.3669563233852386e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.15153999102767557
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.9137944992398843
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.8902713860152289
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.016521494835615158
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.009745565010234714
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 22.289175792015158
+            }
+          }
+        },
+        {
+          "variant": "search10_threads4",
+          "repeat": 1,
+          "threads": 4,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 19.67332064290531,
+          "solver_cpu_seconds": 60.43529650799999,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.07471742294728756
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.6166658233851194
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 15.929107096395455
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.5881466615246609
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.5869812816381454e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2413783889496699
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.248428335878998
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.6392469537677243
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.015839618165045977
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.006928603048436344
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 18.94505814893637
+            }
+          }
+        },
+        {
+          "variant": "search10_threads4",
+          "repeat": 2,
+          "threads": 4,
+          "frequency": 10,
+          "skin": 5e-05,
+          "wall_seconds": 24.53759111301042,
+          "solver_cpu_seconds": 68.887359902,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 3.975846197897824e-08,
+            "velocity_max_m_s": 0.00013943877622554332,
+            "angular_velocity_max_rad_s": 0.04794299162067311,
+            "velocity_relative_l2": 0.00015280882153000786,
+            "angular_velocity_relative_l2": 0.00022290540662077315,
+            "kinetic_energy_j": 0.007024935749844462,
+            "kinetic_energy_relative_error": 5.6086672173272234e-05,
+            "momentum_error_kg_m_s": 9.643590804239338e-16
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06353386095725
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.4063200945965946
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 19.49308388051577
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.9379264373565093
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 3.652065061032772e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.24509402201510966
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 3.051810508943163
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.0036245353985578
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.02221013733651489
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.009996143984608352
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 23.702539421035908
+            }
+          }
+        }
+      ]
+    },
+    "control": {
+      "summary": {
+        "skin_only": {
+          "repetitions": 1,
+          "median_seconds": 101.72839114698581,
+          "min_seconds": 101.72839114698581,
+          "max_seconds": 101.72839114698581,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "max_errors": {
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "median_solver_cpu_seconds": 98.352062299
+        }
+      },
+      "runs": [
+        {
+          "variant": "skin_only",
+          "repeat": 0,
+          "threads": 1,
+          "frequency": 1,
+          "skin": 5e-05,
+          "wall_seconds": 101.72839114698581,
+          "solver_cpu_seconds": 98.352062299,
+          "comparison": {
+            "count": 4000,
+            "solid_fraction": 0.6,
+            "position_max_m": 0.0,
+            "velocity_max_m_s": 0.0,
+            "angular_velocity_max_rad_s": 0.0,
+            "velocity_relative_l2": 0.0,
+            "angular_velocity_relative_l2": 0.0,
+            "kinetic_energy_j": 0.007024541766673227,
+            "kinetic_energy_relative_error": 0.0,
+            "momentum_error_kg_m_s": 0.0
+          },
+          "phases": {
+            "ExplicitStrategy.Initialize": {
+              "calls": 1,
+              "seconds": 0.06349504692479968
+            },
+            "ExplicitStrategy.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.133033165242523
+            },
+            "ExplicitStrategy.SolveSolutionStep": {
+              "calls": 1000,
+              "seconds": 96.7772188935196
+            },
+            "ExplicitStrategy.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.1341761796502396
+            },
+            "ExplicitStrategy.Finalize": {
+              "calls": 1,
+              "seconds": 2.6070047169923782e-06
+            },
+            "DEMAnalysisStage.Initialize": {
+              "calls": 1,
+              "seconds": 0.2189140539849177
+            },
+            "DEMAnalysisStage.InitializeSolutionStep": {
+              "calls": 1000,
+              "seconds": 2.757738920277916
+            },
+            "DEMAnalysisStage.FinalizeSolutionStep": {
+              "calls": 1000,
+              "seconds": 1.195936691830866
+            },
+            "DEMAnalysisStage.OutputSolutionStep": {
+              "calls": 1000,
+              "seconds": 0.01825126283802092
+            },
+            "DEMAnalysisStage.Finalize": {
+              "calls": 1,
+              "seconds": 0.00811735203024
+            },
+            "DEMAnalysisStage.RunSolutionLoop": {
+              "calls": 1,
+              "seconds": 100.877762307995
+            }
+          }
+        }
+      ]
+    }
+  }
+}

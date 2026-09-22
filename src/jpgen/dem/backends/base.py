@@ -103,4 +103,9 @@ class DemBackend(Protocol):
 
     def run(self, prepared: PreparedDemCase, observer=None) -> ExecutionReport: ...
 
-    def collect(self, prepared: PreparedDemCase, report: ExecutionReport) -> DemState: ...
+    def collect(self, prepared: PreparedDemCase, report: ExecutionReport) -> DemState:
+        """Translate native results, including final geometry and periodic wrapping.
+
+        The application validates the report and state against the physical case.
+        Particle ordering is unrestricted; IDs must retain their original meaning.
+        """
