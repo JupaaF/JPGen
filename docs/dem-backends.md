@@ -137,11 +137,17 @@ in Kratos C++/OpenMP rather than visiting nodes in Python. The runtime preflight
 checks these methods. The fixed sphere volume is obtained once through
 `CalculateTotalVolume`; current cases do not add/remove particles or change radii.
 Any future support for those operations must invalidate that cached volume.
+The dimensionless `unbalanced_force` observable uses Kratos'
+`ContactElementGlobalPhysicsCalculator.CalculateUnbalancedForceWithinSphere`
+over the complete particle assembly. It is the particle total-force RMS divided
+by the contact-force RMS, and Kratos returns zero when the contact-force RMS is
+zero. Protocols that request it keep contact elements current on every step.
 `sample_every` controls output only; it does not reduce condition evaluation.
 
-Energy and stress reductions run only when required by the active stage or by
-an output sample/stage exit. Contact updates remain enabled for protocols with
-stress output so exit measurements remain current. Cell deformation uses
+Energy, force-balance and stress reductions run only when required by the active
+stage or by an output sample/stage exit. Contact updates remain enabled for
+protocols with force-balance or stress conditions so exit measurements remain
+current. Cell deformation uses
 `VariableUtils` bulk reads/writes with NumPy array arithmetic. The maximum
 particle radius is cached alongside solid volume; both require invalidation if
 future features change radii or particle population.

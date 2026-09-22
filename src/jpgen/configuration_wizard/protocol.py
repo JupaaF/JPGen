@@ -23,6 +23,7 @@ OBSERVABLE_EXPLANATIONS = {
     'time': 'Global simulated time since the DEM run began, in seconds. It does not restart between stages or repetitions.',
     'stage_time': 'Simulated time since entry into this stage, in seconds. It restarts at zero on each repetition.',
     'kinetic_energy': 'Total translational and rotational particle kinetic energy, in joules. A low value indicates little particle motion but does not by itself prove mechanical equilibrium.',
+    'unbalanced_force': 'Dimensionless RMS particle-force imbalance divided by RMS contact force. Values approaching zero indicate mechanical equilibrium; use below with a small threshold.',
     'solid_fraction': 'Sum of particle sphere volumes divided by the current periodic cell volume. This is dimensionless and does not subtract overlap volumes; for example, 0.64 means a nominal solid fraction of 64%.',
     'bulk_density': 'Total particle mass divided by the current periodic cell volume, in kg/m³. This changes as the cell deforms and is different from the fixed particle material density.',
     'pressure': 'Mean normal contact stress (one third of the stress tensor trace), in Pa, with compression positive. It does not include a kinetic stress contribution.',

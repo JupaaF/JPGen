@@ -75,6 +75,9 @@ class KratosBackend:
             probe_code += "\nfrom KratosMultiphysics.DEMApplication import SphericElementGlobalPhysicsCalculator as Physics"
             for method in ("CalculateTranslationalKinematicEnergy", "CalculateRotationalKinematicEnergy", "CalculateTotalVolume"):
                 probe_code += f"\nassert hasattr(Physics, '{method}'), 'Kratos lacks {method}'"
+            if 'unbalanced_force' in required_observables(plan.protocol["stages"]):
+                probe_code += "\nfrom KratosMultiphysics.DEMApplication import ContactElementGlobalPhysicsCalculator as ContactPhysics"
+                probe_code += "\nassert hasattr(ContactPhysics, 'CalculateUnbalancedForceWithinSphere'), 'Kratos lacks unbalanced force measurement'"
         if plan.protocol:
             # These hooks are not available in every Kratos distribution.
             if control_types(plan.protocol["stages"]) - {"free_evolution"}:

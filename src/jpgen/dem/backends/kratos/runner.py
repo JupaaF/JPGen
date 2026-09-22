@@ -20,7 +20,7 @@ def main():
     os.chdir(output)
     execution = json.loads((inputs / "execution.json").read_text(encoding="utf-8"))
 
-    from protocol import ProtocolRunner, STRESS_OBSERVABLES, required_observables
+    from protocol import CONTACT_OBSERVABLES, ProtocolRunner, STRESS_OBSERVABLES, required_observables
     from protocol_adapter import KratosProtocolAdapter
     from state_exchange import write_state
 
@@ -60,9 +60,13 @@ def main():
                     self.output_observables = {'kinetic_energy'}
                     if execution['boundary'] == 'periodic':
                         self.output_observables |= {'solid_fraction', 'bulk_density'}
-                    self.needs_stress = bool(required_observables(specification['stages']) & STRESS_OBSERVABLES)
+                    requested = required_observables(specification['stages'])
+                    self.needs_stress = bool(requested & STRESS_OBSERVABLES)
+                    self.needs_contacts = bool(requested & CONTACT_OBSERVABLES)
                     if self.needs_stress:
                         self.output_observables |= STRESS_OBSERVABLES
+                    if 'unbalanced_force' in requested:
+                        self.output_observables.add('unbalanced_force')
                     self.adapter = KratosProtocolAdapter(self, execution)
                     self.observables = self.adapter.observe(self.protocol.observables)
             finally:
@@ -72,7 +76,7 @@ def main():
         def InitializeSolutionStep(self):
             super().InitializeSolutionStep()
             if self.protocol is not None:
-                if self.needs_stress:
+                if self.needs_contacts:
                     self.UpdateIsTimeToUpdateContactElementForServo(True)
                 dt = self.protocol.dt
                 command = self.protocol.act(

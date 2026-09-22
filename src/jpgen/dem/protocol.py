@@ -13,9 +13,10 @@ if __package__:
 else:
     from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
-OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'solid_fraction', 'bulk_density',
+OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'unbalanced_force', 'solid_fraction', 'bulk_density',
                'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz'}
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
+CONTACT_OBSERVABLES = STRESS_OBSERVABLES | {'unbalanced_force'}
 
 
 def _mapping(value, allowed, required=()):

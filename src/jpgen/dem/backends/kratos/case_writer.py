@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from ....packing.exporters.kratos import KratosExporter
-from ...protocol import required_observables, STRESS_OBSERVABLES
+from ...protocol import CONTACT_OBSERVABLES, STRESS_OBSERVABLES, required_observables
 
 TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
 ROTATION_SCHEMES = {"direct": "Direct_Integration"}
@@ -39,7 +39,9 @@ def write_case(case, directory):
         }}],
         "material_assignation_table": [["SpheresPart", "particles"]],
     }
-    needs_stress = bool(case.protocol and required_observables(case.protocol["stages"]) & STRESS_OBSERVABLES)
+    requested = required_observables(case.protocol["stages"]) if case.protocol else set()
+    needs_contacts = bool(requested & CONTACT_OBSERVABLES)
+    needs_stress = bool(requested & STRESS_OBSERVABLES)
     particle_diameter_d50 = float(2 * np.median(case.packing.radii))
     parameters = {
         "problem_name": "particles", "FinalTime": case.end_time,
@@ -54,7 +56,7 @@ def write_case(case, directory):
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
         "NeighbourSearchFrequency": 5,
-        "ContactMeshOption": needs_stress, "PostStressStrainOption": needs_stress,
+        "ContactMeshOption": needs_contacts, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
         "BoundingBoxMoveOptionDetail": [1, 1, 1, 1, 1, 1],
         "solver_settings": {

@@ -15,6 +15,7 @@ class KratosProtocolAdapter:
         self.analysis = analysis
         self.density = execution['density']
         self.physics = DEM.SphericElementGlobalPhysicsCalculator(analysis.spheres_model_part)
+        self.contact_physics = None
         # Current cases preserve particle population and radii throughout the run.
         self.solid_volume = self.physics.CalculateTotalVolume(analysis.spheres_model_part)
         self.execution = execution
@@ -89,8 +90,14 @@ class KratosProtocolAdapter:
         if self.periodic and observables & {'solid_fraction', 'bulk_density'}:
             fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
-        if observables & STRESS_OBSERVABLES:
+        if 'unbalanced_force' in observables or observables & STRESS_OBSERVABLES:
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
+        if 'unbalanced_force' in observables:
+            if self.contact_physics is None:
+                self.contact_physics = DEM.ContactElementGlobalPhysicsCalculator()
+            result['unbalanced_force'] = self.contact_physics.CalculateUnbalancedForceWithinSphere(
+                particles, self.analysis.contact_model_part, 1e300, [0.0, 0.0, 0.0])
+        if observables & STRESS_OBSERVABLES:
             stress = self.analysis.MeasureSphereForGettingGlobalStressTensor()
             for i, j, suffix in ((0, 0, 'xx'), (1, 1, 'yy'), (2, 2, 'zz'), (0, 1, 'xy'), (0, 2, 'xz'), (1, 2, 'yz')):
                 result['stress_' + suffix] = float(stress[i][j])

@@ -410,6 +410,7 @@ Walls and shear deformation are not provided by these controllers.
 | `time` | Global simulation time, s |
 | `stage_time` | Time since entry into this leaf stage, s |
 | `kinetic_energy` | Total translational + rotational particle kinetic energy, J |
+| `unbalanced_force` | RMS total particle force / RMS contact force, dimensionless |
 | `solid_fraction` | Sum of sphere volumes / current cell volume, dimensionless |
 | `bulk_density` | Particle mass / current cell volume, kg/m³ |
 | `pressure` | Trace of the contact stress tensor / 3, Pa, compression positive |
@@ -419,7 +420,9 @@ Stress is the contact-force/branch-vector contribution measured by Kratos,
 without a kinetic stress contribution. Density and stress conditions require a
 periodic cell; an open placement box does not define a material sample volume.
 Particle material density remains constant. Sphere volume sums do not subtract
-overlap volumes. Kinetic energy alone is not proof of mechanical equilibrium.
+overlap volumes. `unbalanced_force` approaches zero as the force residual falls
+relative to the contact-force scale; Kratos defines it as zero when there are no
+contacts. Kinetic energy alone is not proof of mechanical equilibrium.
 
 `above` means >= and `below` means <=. `near` means
 `abs(value - target) <= atol + rtol * abs(target)` and requires at least one
@@ -430,6 +433,7 @@ until:
   all:
     - {observable: pressure, op: near, value: 100000.0, atol: 1000.0}
     - {observable: kinetic_energy, op: below, value: 1.0e-8}
+    - {observable: unbalanced_force, op: below, value: 1.0e-3}
   hold_for: 0.005
   min_duration: 0.01
 ```
