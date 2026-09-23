@@ -3,7 +3,11 @@ from pathlib import Path
 
 import yaml
 
-from ..dem.protocol import OBSERVABLES, STRESS_OBSERVABLES, validate_protocol
+from ..dem.protocol import (
+    OBSERVABLES, STRESS_OBSERVABLES, validate_protocol,
+    DEFAULT_SERVO_MAX_VELOCITY, DEFAULT_SERVO_LOADING_FACTOR,
+    DEFAULT_SERVO_UPDATE_EVERY_STEPS,
+)
 from .questions import MenuChoice, Question
 from .timestep import build_time_step
 from ..dem.timestep import validate_time_step
@@ -48,6 +52,13 @@ def _float(value, _answers):
     result = float(value)
     if not math.isfinite(result):
         raise ValueError('Enter a finite number.')
+    return result
+
+
+def _positive_float(value, answers):
+    result = _float(value, answers)
+    if result <= 0:
+        raise ValueError('Enter a positive number.')
     return result
 
 
@@ -141,8 +152,12 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
                 for field, label, default in fields:
                     questions.append(_question(key + '.target.' + field, label, default,
                                    explanation=TARGET_EXPLANATIONS[field]))
-            questions.append(_question(key + '.max_velocity', 'Maximum wall velocity (m/s)', 0.05,
-                                   explanation='Positive limit on the absolute velocity of each opposing cell face. The servo otherwise uses error × D50 / (time step × particle Young modulus), using the portable JPGen servo definition.'))
+            questions.append(_question(key + '.max_velocity', 'Maximum wall velocity (m/s)', DEFAULT_SERVO_MAX_VELOCITY, _positive_float,
+                                   explanation='Positive limit on the absolute velocity of each opposing cell face. The servo otherwise uses error × loading factor × D50 / (time step × particle Young modulus).'))
+            questions.append(_question(key + '.loading_factor', 'Servo loading factor', DEFAULT_SERVO_LOADING_FACTOR, _positive_float,
+                                   explanation='Positive dimensionless multiplier on the pressure-error response. Kratos uses 0.8 by default. The commanded wall velocity is error × loading factor × D50 / (time step × particle Young modulus), clipped by the maximum wall velocity.'))
+            questions.append(_question(key + '.update_every_steps', 'Move cell every N steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS, _positive_integer,
+                                   explanation='Positive number of integration steps between cell updates in this stage. 1 moves the cell every step; 50 matches the default frequency of Kratos native servo. The first move is on step N, and the cell remains fixed between moves.'))
         elif control == 'strain_rate':
             questions.append(_question(key + '.rate', 'Cell strain rates X Y Z (1/s; compression negative)', '-0.1 -0.1 -0.1', _vector,
                                    explanation='Enter the imposed logarithmic strain rates along X, Y and Z in 1/s. Negative values compress, positive values expand, and zero keeps that dimension fixed. Cell dimensions and particle positions deform together; each fixed step must keep the strain increment at most 0.01.'))
@@ -189,7 +204,7 @@ def build_protocol(answers, prefix='dem.protocol'):
             if control['type'] == 'strain_rate':
                 control['rate'] = answers[key + '.rate']
             elif control['type'] == 'stress_servo':
-                control.update({field: answers[key + '.' + field] for field in ('mode', 'max_velocity')})
+                control.update({field: answers[key + '.' + field] for field in ('mode', 'max_velocity', 'loading_factor', 'update_every_steps')})
                 if control['mode'] == 'anisotropic':
                     control['target_stress'] = answers[key + '.target_stress']
                 else:

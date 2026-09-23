@@ -353,6 +353,8 @@ protocol:
         mode: isotropic
         target_pressure: 100000.0
         max_velocity: 0.05
+        loading_factor: 0.8
+        update_every_steps: 50
       until:
         observable: pressure
         op: near
@@ -373,19 +375,22 @@ experiment. Every stage runs on the same live solver, preserving contact history
 | Controller | Parameters | Behavior |
 | --- | --- | --- |
 | `free_evolution` | None | Integrate particles with the current cell fixed |
-| `stress_servo` | `mode: isotropic`, `target_pressure`, `max_velocity` | Control mean normal contact stress |
-| `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]`, `max_velocity` | Independently control three normal stresses |
+| `stress_servo` | `mode: isotropic`, `target_pressure`, `max_velocity`, `loading_factor`, `update_every_steps` | Control mean normal contact stress |
+| `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]`, `max_velocity`, `loading_factor`, `update_every_steps` | Independently control three normal stresses |
 | `strain_rate` | `rate: [x, y, z]` | Prescribe logarithmic cell strain rates in 1/s; expansion positive |
 
-The portable JPGen servo follows Kratos' wall-velocity definition without its
-additional loading factor. For each controlled axis it commands
-`(target - measured) * D50 / (time_step * particle_Young_modulus)`, clipped by
-`max_velocity` (default `0.05` m/s). `D50` is the median particle diameter by
-count. Positive velocity moves both opposing faces inward; negative velocity
-moves them outward. Isotropic control applies the same face velocity on all
-axes. Tune the velocity limit, tolerances and time step for the material and
-sample; a target may be physically unreachable and convergence is not
-guaranteed.
+The portable JPGen servo uses Kratos' wall-velocity formula. For each controlled
+axis it commands `(target - measured) * loading_factor * D50 /
+(time_step * particle_Young_modulus)`, clipped by `max_velocity` (default
+`0.05` m/s). `loading_factor` defaults to `0.8`, as in Kratos. `D50` is the median
+particle diameter by count. Positive velocity moves both opposing faces inward;
+negative velocity moves them outward. Isotropic control applies the same face
+velocity on all axes. `update_every_steps` is a positive integer (default `1`):
+JPGen updates the cell on every Nth step of each leaf stage, counting from one,
+and leaves it fixed on the intervening steps. Kratos' native default is 50 steps.
+Tune the loading factor, update interval, velocity limit and tolerances for the
+material and sample; a target may be physically unreachable and convergence is
+not guaranteed.
 
 A target can be a nonnegative constant or a time signal:
 

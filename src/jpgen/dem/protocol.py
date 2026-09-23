@@ -18,6 +18,10 @@ OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'unbalanced_force', 'soli
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
 CONTACT_OBSERVABLES = STRESS_OBSERVABLES | {'unbalanced_force'}
 
+DEFAULT_SERVO_MAX_VELOCITY = 0.05
+DEFAULT_SERVO_LOADING_FACTOR = 0.8
+DEFAULT_SERVO_UPDATE_EVERY_STEPS = 1
+
 
 def _mapping(value, allowed, required=()):
     if not isinstance(value, dict) or set(value) - set(allowed) or set(required) - set(value):
@@ -108,7 +112,7 @@ def validate_control(control):
         legacy = set(control) & {'gain', 'max_strain_rate'}
         if legacy:
             raise ValueError('stress_servo now uses max_velocity (m/s); remove gain and max_strain_rate.')
-        _mapping(control, {'type', 'mode', 'target_pressure', 'target_stress', 'max_velocity'}, {'type', 'mode'})
+        _mapping(control, {'type', 'mode', 'target_pressure', 'target_stress', 'max_velocity', 'loading_factor', 'update_every_steps'}, {'type', 'mode'})
         mode = control['mode']
         if mode == 'isotropic' and 'target_pressure' in control and 'target_stress' not in control:
             _target(control['target_pressure'])
@@ -120,7 +124,9 @@ def validate_control(control):
                 _target(value)
         else:
             raise ValueError('Use isotropic/target_pressure or anisotropic/target_stress.')
-        _number(control.setdefault('max_velocity', 0.05), 0, True)
+        _number(control.setdefault('max_velocity', DEFAULT_SERVO_MAX_VELOCITY), 0, True)
+        _number(control.setdefault('loading_factor', DEFAULT_SERVO_LOADING_FACTOR), 0, True)
+        _count(control.setdefault('update_every_steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS))
     else:
         raise ValueError(f'Unknown controller: {kind!r}')
 
@@ -302,7 +308,7 @@ def stress_servo(control, values, elapsed, context):
     else:
         errors = [target_value(target, elapsed) - values['stress_' + axis]
                   for axis, target in zip(('xx', 'yy', 'zz'), control['target_stress'])]
-    coefficient = diameter / (dt * young)
+    coefficient = control['loading_factor'] * diameter / (dt * young)
     limit = control['max_velocity']
     velocities = [max(-limit, min(limit, coefficient * error)) for error in errors]
     return SymmetricWallVelocity(tuple(velocities))
@@ -357,6 +363,9 @@ class ProtocolRunner:
 
     def act(self, values, context=None) -> ActuatorCommand:
         control = self.stage['control']
+        if (control['type'] == 'stress_servo' and
+                (self.steps - self.start_step + 1) % control['update_every_steps'] != 0):
+            return NoActuation()
         return CONTROLLERS[control['type']](control, values, self.time - self.start_time, context)
 
     def advance(self, values):

@@ -7,7 +7,7 @@
 packing:
   sizing_method: variable_box_fraction
   count: 10000
-  target_solid_fraction: 0.66
+  target_solid_fraction: 0.63
   exports: [vtk]
   box:
     origin: [0.0, 0.0, 0.0]
@@ -19,7 +19,7 @@ packing:
   angular_velocity: {type: constant, value: 0.0}
   placement:
     method: progressive_growth
-    max_overlap: 0.05
+    max_overlap: 0.02
     relax_all_overlaps: true
     max_iterations: 10000
     overlap_tolerance: 1.0e-05
@@ -57,6 +57,8 @@ dem:
           mode: isotropic
           target_pressure: 5000.0
           max_velocity: 0.01
+          loading_factor: 0.8
+          update_every_steps: 50
         until:
           observable: pressure
           op: near
@@ -65,33 +67,37 @@ dem:
           hold_for: 0.001
         max_duration: 2.0
 
-      - name: cycles_5_to_150kPa
-        repeat: 50
-        stages:
-          - name: load_150kPa
-            control:
-              type: stress_servo
-              mode: isotropic
-              target_pressure: 150000.0
-              max_velocity: 0.01
-            until:
-              observable: pressure
-              op: near
-              value: 150000.0
-              rtol: 0.01
-              hold_for: 0.001
-            max_duration: 2.0
+      # - name: cycles_5_to_150kPa
+      #   repeat: 50
+      #   stages:
+      #     - name: load_150kPa
+      #       control:
+      #         type: stress_servo
+      #         mode: isotropic
+      #         target_pressure: 150000.0
+      #         max_velocity: 0.01
+      #         loading_factor: 0.8
+      #         update_every_steps: 50
+      #       until:
+      #         observable: pressure
+      #         op: near
+      #         value: 150000.0
+      #         rtol: 0.01
+      #         hold_for: 0.001
+      #       max_duration: 2.0
 
-          - name: unload_5kPa
-            control:
-              type: stress_servo
-              mode: isotropic
-              target_pressure: 5000.0
-              max_velocity: 0.01
-            until:
-              observable: pressure
-              op: near
-              value: 5000.0
-              rtol: 0.01
-              hold_for: 0.001
-            max_duration: 2.0
+      #     - name: unload_5kPa
+      #       control:
+      #         type: stress_servo
+      #         mode: isotropic
+      #         target_pressure: 5000.0
+      #         max_velocity: 0.01
+      #         loading_factor: 0.8
+      #         update_every_steps: 50
+      #       until:
+      #         observable: pressure
+      #         op: near
+      #         value: 5000.0
+      #         rtol: 0.01
+      #         hold_for: 0.001
+      #       max_duration: 2.0
