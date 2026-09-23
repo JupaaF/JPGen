@@ -21,6 +21,7 @@ class DemCapabilities:
     actuator_commands: frozenset[str] = frozenset()
     native_controls: frozenset[str] = frozenset()
     particle_snapshots: bool = False
+    native_restart_export: bool = False
 
     def validate(self, plan) -> None:
         from ..protocol import control_types, required_actuator_commands, required_observables
@@ -59,6 +60,7 @@ class DemCapabilities:
             "actuator_commands": sorted(self.actuator_commands),
             "native_controls": sorted(self.native_controls),
             "particle_snapshots": self.particle_snapshots,
+            "native_restart_export": self.native_restart_export,
         }
 
 

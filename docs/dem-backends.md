@@ -38,6 +38,15 @@ boundary step under `dem/native_results/snapshots/` and records all boundary
 events in `snapshots.jsonl`. Other engines may use their own storage format but
 must provide equivalent particle and box data and identify the associated events.
 
+`native_restart_export` is a separate optional capability. Kratos advertises it
+and writes the native `SpheresPart.rest` for every unique protocol boundary step,
+using the same `FileSerializer` and pointer serialization flag as its restart
+utility. `restart.json` stores the step, time, box and Kratos version. The
+`snapshots.jsonl` event records the corresponding `.rest` path. This capability
+only promises export of native solver files; it does not advertise a JPGen resume
+or rollback operation. A future backend may produce a different native format,
+and a backend without this capability can still export particle snapshots.
+
 These capabilities are illustrative: advertise them only if the engine actually
 implements the requested physics. Register the definition in `DEM_BACKENDS`.
 The description and package `__init__.py` must not import the engine runtime,

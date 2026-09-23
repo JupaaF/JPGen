@@ -1,8 +1,9 @@
 # Propuesta de protocolo DEM: `density_continuation`
 
 Estado: esquema y máquina de estados portable implementados. La ejecución en Kratos
-permanece deshabilitada: falta verificar una restauración equivalente del integrador
-y de la historia de contactos, y publicar checkpoints nativos reiniciables. El YAML
+permanece deshabilitada: falta implementar y verificar la carga de los `.rest`
+exportados en los límites del protocolo, junto con la restauración del integrador,
+la historia de contactos y el estado del protocolo. El YAML
 se valida, pero Kratos lo rechaza antes de crear un run.
 
 ## Objetivo

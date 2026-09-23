@@ -70,7 +70,10 @@ class KratosBackend:
         self.capabilities.validate(plan)
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
-        probe_code = "from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
+        probe_code = "import KratosMultiphysics\nfrom KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
+        if plan.protocol and self.capabilities.native_restart_export:
+            probe_code += "\nassert hasattr(KratosMultiphysics, 'FileSerializer'), 'Kratos lacks native restart serialization'"
+            probe_code += "\nassert hasattr(KratosMultiphysics.Serializer, 'SHALLOW_GLOBAL_POINTERS_SERIALIZATION'), 'Kratos lacks restart pointer serialization'"
         if plan.protocol:
             probe_code += "\nfrom KratosMultiphysics.DEMApplication import SphericElementGlobalPhysicsCalculator as Physics"
             for method in ("CalculateTranslationalKinematicEnergy", "CalculateRotationalKinematicEnergy", "CalculateTotalVolume"):

@@ -130,6 +130,27 @@ def main():
                     (value for node in nodes for value in node.GetSolutionStepValue(variable)),
                     dtype=np.float64, count=3 * count).reshape(count, 3)
 
+        def _save_native_restart(self, output, stem, box):
+            directory = output / "restarts" / stem
+            directory.mkdir(parents=True, exist_ok=True)
+            model_part = self.spheres_model_part
+            temporary_stem = directory / "SpheresPart.tmp"
+            serializer = KM.FileSerializer(str(temporary_stem), KM.SerializerTraceType.SERIALIZER_NO_TRACE)
+            serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
+            serializer.Save(model_part.Name, model_part)
+            del serializer
+            (directory / "SpheresPart.tmp.rest").replace(directory / "SpheresPart.rest")
+            metadata = {
+                "schema": "JPGen.dem.kratos_restart", "schema_version": "1.0",
+                "model_parts": ["SpheresPart"], "step": self.completed_steps,
+                "time": self.protocol.time, "box": box,
+                "kratos_version": KM.Kernel.Version(),
+            }
+            temporary = directory / "restart.json.tmp"
+            temporary.write_text(json.dumps(metadata, allow_nan=False) + "\n", encoding="utf-8")
+            temporary.replace(directory / "restart.json")
+            return f"restarts/{stem}/SpheresPart.rest"
+
         def _save_boundaries(self, output):
             boundaries = self.protocol.take_boundaries()
             if not boundaries:
@@ -137,12 +158,14 @@ def main():
             snapshots = output / "snapshots"
             snapshots.mkdir(exist_ok=True)
             stem = f"step_{self.completed_steps:012d}"
+            box = self.adapter.box()
             write_state(snapshots, self._particle_arrays(), time=self.protocol.time,
-                        box=self.adapter.box(), stem=stem)
+                        box=box, stem=stem)
+            restart = self._save_native_restart(output, stem, box)
             with (output / "snapshots.jsonl").open("a", encoding="utf-8") as stream:
                 for boundary in boundaries:
-                    stream.write(json.dumps({**boundary, "state": f"snapshots/{stem}"},
-                                            allow_nan=False) + "\n")
+                    stream.write(json.dumps({**boundary, "state": f"snapshots/{stem}",
+                                             "restart": restart}, allow_nan=False) + "\n")
 
         def Finalize(self):
             self.final_state = {

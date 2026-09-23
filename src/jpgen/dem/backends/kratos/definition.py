@@ -12,6 +12,7 @@ CAPABILITIES = DemCapabilities(
     actuator_commands=frozenset({"cell_strain_rate", "symmetric_wall_velocity"}),
     native_controls=frozenset({"stress_servo"}),
     particle_snapshots=True,
+    native_restart_export=True,
 )
 
 DEFINITION = BackendDefinition(

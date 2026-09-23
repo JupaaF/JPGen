@@ -258,7 +258,7 @@ adapter must implement and document the requested physics or reject the case.
 `boundary: periodic` uses the packing's final box and requires
 `packing.box.periodic: true`. `boundary: open` requires a nonperiodic packing;
 the placement box creates no physical walls and particles may leave it. Walls,
-multiple materials, particle trajectories and restart checkpoints are not implemented.
+multiple materials, particle trajectories and automatic restart from saved states are not implemented.
 Protocols support physical stopping criteria and deformation of periodic cells. Existing geometric overlaps are passed unchanged to DEM;
 geometric relaxation is not mechanical equilibration.
 
@@ -470,8 +470,13 @@ blocks. `dem/native_results/snapshots.jsonl` lists each boundary with its `kind`
 path. Each distinct boundary step has one `snapshots/step_<step>.npz` array
 archive and matching `.json` metadata file; simultaneous boundaries refer to
 the same state. These files contain IDs, positions, radii, linear and angular
-velocities, and the current box. They are analysis snapshots, not solver restart
-checkpoints. Backends must declare particle snapshot support to run a protocol.
+velocities, and the current box. Backends must declare particle snapshot support
+to run a protocol. Kratos additionally writes `dem/native_results/restarts/step_<step>/SpheresPart.rest`
+at each distinct boundary step, with a `restart.json` recording the step, time,
+box and Kratos version. The index links each boundary to both files. The `.rest`
+uses Kratos' native `FileSerializer` and contains the sphere `ModelPart`; JPGen
+does not yet load these files or restore its protocol state, so automatic resume
+and rollback are not available.
 
 `dem/native_results/observables.jsonl` records sampled observables and current
 cell geometry, including every stage exit. `protocol_history.jsonl` appends each
