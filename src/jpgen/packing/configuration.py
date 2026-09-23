@@ -39,8 +39,9 @@ class PackingPlan:
         result = deepcopy(self.config)
         for field in ("radii", "velocity", "angular_velocity"):
             result[field] = self.config[field].to_config()
+        origin_mode = result.pop("origin_mode", None)
         result["box"] = {
-            "origin": self.config["box"].origin.tolist(),
+            **({"origin_mode": origin_mode} if origin_mode else {"origin": self.config["box"].origin.tolist()}),
             "lengths": self.config["box"].lengths.tolist(),
             "periodic": self.config["box"].periodic,
         }
@@ -137,9 +138,20 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
         cfg["seed"] = secrets.randbits(128)
     cfg["seed"] = integer(cfg["seed"], "seed", 0)
     box = cfg["box"]
-    mapping(box, "box", {"origin", "lengths", "periodic"}, {"lengths"})
-    box["origin"] = vector(box.get("origin", [0, 0, 0]), "box.origin")
+    mapping(box, "box", {"origin", "origin_mode", "lengths", "periodic"}, {"lengths"})
+    if "origin_mode" in box:
+        if "origin" in box:
+            raise ConfigurationError("box.origin and box.origin_mode cannot be used together.")
+        if not isinstance(box["origin_mode"], str) or box["origin_mode"] not in {"center", "minimum_corner"}:
+            raise ConfigurationError("box.origin_mode must be center or minimum_corner.")
+        cfg["origin_mode"] = box["origin_mode"]
     box["lengths"] = vector(box["lengths"], "box.lengths", positive=True)
+    if box.get("origin_mode") == "center":
+        box["origin"] = [-length / 2 for length in box["lengths"]]
+    elif box.get("origin_mode") == "minimum_corner":
+        box["origin"] = [0, 0, 0]
+    else:
+        box["origin"] = vector(box.get("origin", [0, 0, 0]), "box.origin")
     if not isinstance(box.get("periodic", False), bool):
         raise ConfigurationError("box.periodic must be true or false for all three axes.")
     box["periodic"] = box.get("periodic", False)

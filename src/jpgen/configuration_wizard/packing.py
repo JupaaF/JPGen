@@ -166,35 +166,17 @@ class PackingStageWizard:
                 after_answer=lambda value, _a: self._resolve_seed(value, terminal),
             ),
             _select(
-                "box.origin.mode",
-                "How would you like to enter the box origin?",
-                "Chooses whether the three origin coordinates are entered together or one component at a time.",
-                "One line: 0, 0, 0",
-                VECTOR_MODE_CHOICES,
-                default="vector",
-            ),
-            _vector_question(
-                "box.origin",
-                "Box origin (X, Y, Z)",
-                "Coordinates of the minimum box corner in the selected length unit.",
-                "0, 0, 0",
-                "units.length",
-                LENGTH_FACTORS,
-                default="0, 0, 0",
-                visible=lambda a: a.get("box.origin.mode") == "vector",
+                "box.origin_mode",
+                "Which point of the packing should be at (0, 0, 0)?",
+                "The center or the corner with minimum X, Y and Z coordinates will be placed at the coordinate origin.",
+                "Center: a box with 0.1 m sides spans -0.05 m to 0.05 m on each axis.",
+                (
+                    MenuChoice("Center of the packing", "center"),
+                    MenuChoice("Lower-left corner of the packing", "minimum_corner"),
+                ),
+                default="minimum_corner",
             ),
         ]
-        questions.extend(
-            _component_questions(
-                "box.origin",
-                "Box origin",
-                "Coordinate of the minimum box corner",
-                "units.length",
-                LENGTH_FACTORS,
-                default_si=0,
-                visible=lambda a: a.get("box.origin.mode") == "components",
-            )
-        )
         questions.extend(
             [
                 _select(
@@ -551,7 +533,7 @@ class PackingStageWizard:
             "sizing_method": answers["sizing_method"],
             "seed": answers["seed"],
             "box": {
-                "origin": _vector_from_answers(answers, "box.origin"),
+                "origin_mode": answers["box.origin_mode"],
                 "lengths": _vector_from_answers(answers, "box.lengths"),
                 "periodic": answers["box.periodic"],
             },

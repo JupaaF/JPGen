@@ -93,7 +93,9 @@ class VariableBoxFractionSizing(PackingSizingStrategy):
         box = config["box"]
         radii = config["radii"].sample(config["count"], rng)
         scale = (solid_volume(radii) / config["target_solid_fraction"] / box.volume) ** (1.0 / 3.0)
-        return Box(box.origin, box.lengths * scale, box.periodic), radii
+        lengths = box.lengths * scale
+        origin = -lengths / 2 if config.get("origin_mode") == "center" else box.origin
+        return Box(origin, lengths, box.periodic), radii
 
 
 PACKING_SIZING_STRATEGIES = {

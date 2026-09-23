@@ -56,6 +56,7 @@ def write_case(case, directory):
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
         "NeighbourSearchFrequency": 5,
+        "DeltaOption": "Relative", "SearchToleranceMultiplier": 0.01,
         "ContactMeshOption": needs_contacts, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
         "BoundingBoxMoveOptionDetail": [1, 1, 1, 1, 1, 1],

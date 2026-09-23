@@ -116,7 +116,7 @@ packing:
   seed: 20260916
   exports: [vtk]
   box:
-    origin: [0.0, 0.0, 0.0]
+    origin_mode: minimum_corner
     lengths: [0.1, 0.1, 0.1]
     periodic: false
   radii:
@@ -130,6 +130,12 @@ packing:
     max_overlap: 0.0
     position_attempts: 1000
 ```
+
+The wizard offers `box.origin_mode: center` to place the center of the final box at
+`(0, 0, 0)`, or `minimum_corner` to place its minimum X, Y and Z corner there.
+For `variable_box_fraction`, centering uses the final scaled lengths. Existing
+YAML files can still specify explicit `box.origin` coordinates instead of
+`box.origin_mode`; the two fields cannot be combined.
 
 `exports` is a list containing `vtk`, `kratos`, both, or neither. Names are
 case-insensitive, duplicate values are removed while preserving their first
@@ -145,7 +151,7 @@ list of available formats. Unknown options inside `packing` or
 
 - `fixed_count`: requires `count` and fixed `box.lengths`; no target fraction.
 - `fixed_box_fraction`: requires `target_solid_fraction` and fixed `box.lengths`; determines the particle count. Omit `count`.
-- `variable_box_fraction`: requires `count`, `target_solid_fraction` and reference `box.lengths`; scales all lengths equally while preserving their ratios and origin.
+- `variable_box_fraction`: requires `count`, `target_solid_fraction` and reference `box.lengths`; scales all lengths equally while preserving their ratios. An explicit origin or the minimum corner stays fixed; center mode centers the final scaled box.
 
 The selected sizing and placement implementations are retained in `PackingPlan` and reused by `PackingGenerator`; execution does not consult either registry again. Add sizing methods through `PACKING_SIZING_STRATEGIES` and placement methods through `PLACEMENT_STRATEGIES`.
 
