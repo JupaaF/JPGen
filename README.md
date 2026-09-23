@@ -463,6 +463,16 @@ until: {observable: solid_fraction, op: above, value: 0.64}
 
 ### Results and extension points
 
+For DEM protocols, Kratos also exports particle snapshots at the start and end
+of every leaf stage and every repetition of a sequence block, including nested
+blocks. `dem/native_results/snapshots.jsonl` lists each boundary with its `kind`
+(`stage` or `block`), `phase` (`start` or `end`), path, step, time and `state`
+path. Each distinct boundary step has one `snapshots/step_<step>.npz` array
+archive and matching `.json` metadata file; simultaneous boundaries refer to
+the same state. These files contain IDs, positions, radii, linear and angular
+velocities, and the current box. They are analysis snapshots, not solver restart
+checkpoints. Backends must declare particle snapshot support to run a protocol.
+
 `dem/native_results/observables.jsonl` records sampled observables and current
 cell geometry, including every stage exit. `protocol_history.jsonl` appends each
 completed or timed-out stage, its repeat path, times, step indices and exit

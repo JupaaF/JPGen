@@ -55,6 +55,7 @@ def main():
                     (output / "observables.jsonl").write_text("", encoding="utf-8")
                     (output / "protocol_history.jsonl").write_text("", encoding="utf-8")
                     (output / "protocol_history.json").write_text("[]", encoding="utf-8")
+                    (output / "snapshots.jsonl").write_text("", encoding="utf-8")
                     specification = execution['protocol']
                     self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy'}
@@ -69,6 +70,7 @@ def main():
                         self.output_observables.add('unbalanced_force')
                     self.adapter = KratosProtocolAdapter(self, execution)
                     self.observables = self.adapter.observe(self.protocol.observables)
+                    self._save_boundaries(output)
             finally:
                 (output / "resolved_parameters.json").write_text(
                     self.DEM_parameters.PrettyPrintJsonString(), encoding="utf-8")
@@ -90,6 +92,7 @@ def main():
                 previous = len(self.protocol.history)
                 stage_path = self.protocol.path
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
+                self._save_boundaries(output)
                 stage_exited = len(self.protocol.history) != previous
                 sampled = self.completed_steps % execution['protocol']['sample_every'] == 0
                 if sampled or stage_exited:
@@ -112,8 +115,36 @@ def main():
                     missing = self.protocol.observables - self.observables.keys()
                     self.observables.update(self.adapter.observe(missing))
 
-        def Finalize(self):
+        def _particle_arrays(self):
             nodes = sorted(self.spheres_model_part.Nodes, key=lambda node: node.Id)
+            count = len(nodes)
+            yield "ids", np.fromiter((node.Id for node in nodes), dtype=np.int64, count=count)
+            yield "positions", np.fromiter(
+                (value for node in nodes for value in (node.X, node.Y, node.Z)),
+                dtype=np.float64, count=3 * count).reshape(count, 3)
+            yield "radii", np.fromiter((node.GetSolutionStepValue(KM.RADIUS) for node in nodes),
+                                       dtype=np.float64, count=count)
+            for name, variable in (("velocities", KM.VELOCITY),
+                                   ("angular_velocities", KM.ANGULAR_VELOCITY)):
+                yield name, np.fromiter(
+                    (value for node in nodes for value in node.GetSolutionStepValue(variable)),
+                    dtype=np.float64, count=3 * count).reshape(count, 3)
+
+        def _save_boundaries(self, output):
+            boundaries = self.protocol.take_boundaries()
+            if not boundaries:
+                return
+            snapshots = output / "snapshots"
+            snapshots.mkdir(exist_ok=True)
+            stem = f"step_{self.completed_steps:012d}"
+            write_state(snapshots, self._particle_arrays(), time=self.protocol.time,
+                        box=self.adapter.box(), stem=stem)
+            with (output / "snapshots.jsonl").open("a", encoding="utf-8") as stream:
+                for boundary in boundaries:
+                    stream.write(json.dumps({**boundary, "state": f"snapshots/{stem}"},
+                                            allow_nan=False) + "\n")
+
+        def Finalize(self):
             self.final_state = {
                 "time": self.time,
                 "box": self.adapter.box() if self.adapter else {
@@ -121,22 +152,8 @@ def main():
                     "lengths": [getattr(self, f"BoundingBoxMax{axis}_update") - getattr(self, f"BoundingBoxMin{axis}_update") for axis in "XYZ"],
                     "periodic": execution["boundary"] == "periodic"},
             }
-            def arrays():
-                count = len(nodes)
-                yield "ids", np.fromiter((node.Id for node in nodes), dtype=np.int64, count=count)
-                yield "positions", np.fromiter(
-                    (value for node in nodes for value in (node.X, node.Y, node.Z)),
-                    dtype=np.float64, count=3 * count).reshape(count, 3)
-                yield "radii", np.fromiter((node.GetSolutionStepValue(KM.RADIUS) for node in nodes),
-                                           dtype=np.float64, count=count)
-                for name, variable in (("velocities", KM.VELOCITY),
-                                       ("angular_velocities", KM.ANGULAR_VELOCITY)):
-                    yield name, np.fromiter(
-                        (value for node in nodes for value in node.GetSolutionStepValue(variable)),
-                        dtype=np.float64, count=3 * count).reshape(count, 3)
-
             # Stream numeric arrays before Kratos deletes its model parts.
-            write_state(output, arrays(), **self.final_state)
+            write_state(output, self._particle_arrays(), **self.final_state)
             super().Finalize()
 
     parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))

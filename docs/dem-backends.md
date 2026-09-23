@@ -29,6 +29,15 @@ DEFINITION = BackendDefinition(
 )
 ```
 
+Set `particle_snapshots=True` only when the backend exports the particle state
+at every protocol boundary: entry and exit of each leaf stage and each repetition
+of a sequence block. A backend without this capability is rejected for protocols
+before execution. The snapshots are analysis outputs; this flag does not promise
+solver restart or rollback. Kratos writes one `JPGen.dem.state` archive per unique
+boundary step under `dem/native_results/snapshots/` and records all boundary
+events in `snapshots.jsonl`. Other engines may use their own storage format but
+must provide equivalent particle and box data and identify the associated events.
+
 These capabilities are illustrative: advertise them only if the engine actually
 implements the requested physics. Register the definition in `DEM_BACKENDS`.
 The description and package `__init__.py` must not import the engine runtime,

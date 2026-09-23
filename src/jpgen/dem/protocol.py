@@ -183,6 +183,20 @@ def iter_stages(stages, prefix=''):
             yield path, stage
 
 
+def iter_stage_boundaries(stages, prefix=''):
+    """Yield block boundaries and leaf stages in execution order."""
+    for index, stage in enumerate(stages):
+        path = f'{prefix}{index + 1}:{stage.get("name", "stage")}'
+        if 'stages' in stage:
+            for cycle in range(stage.get('repeat', 1)):
+                cycle_path = f'{path}[{cycle + 1}]'
+                yield 'block_start', cycle_path, None
+                yield from iter_stage_boundaries(stage['stages'], cycle_path + '/')
+                yield 'block_end', cycle_path, None
+        else:
+            yield 'stage', path, stage
+
+
 def required_observables(stages):
     result = set()
     for stage in stages:
@@ -296,7 +310,8 @@ class ProtocolRunner:
     def __init__(self, protocol, dt):
         self.dt = dt
         self.time = 0.0
-        self.iterator = iter_stages(protocol['stages'])
+        self.iterator = iter_stage_boundaries(protocol['stages'])
+        self.pending_boundaries = []
         self.history = []
         self.steps = 0
         self.done = False
@@ -304,16 +319,33 @@ class ProtocolRunner:
         self._enter()
 
     def _enter(self):
-        item = next(self.iterator, None)
-        if item is None:
-            self.done = True
-            return
-        self.path, self.stage = item
+        while True:
+            item = next(self.iterator, None)
+            if item is None:
+                self.done = True
+                return
+            kind, path, stage = item
+            if kind == 'stage':
+                self.path, self.stage = path, stage
+                self._record_boundary('stage', 'start', path)
+                break
+            self._record_boundary('block', 'start' if kind == 'block_start' else 'end', path)
         self.start_step = self.steps
         self.start_time = self.time
         self.observables = required_observables([self.stage]) - {'time', 'stage_time'}
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
+
+    def _record_boundary(self, kind, phase, path):
+        self.pending_boundaries.append({
+            'kind': kind, 'phase': phase, 'path': path,
+            'step': self.steps, 'time': self.time,
+        })
+
+    def take_boundaries(self):
+        boundaries = self.pending_boundaries
+        self.pending_boundaries = []
+        return boundaries
 
     def act(self, values, context=None) -> ActuatorCommand:
         control = self.stage['control']
@@ -330,6 +362,7 @@ class ProtocolRunner:
             self.history.append({'path': self.path, 'start_step': self.start_step, 'end_step': self.steps,
                                  'start_time': self.start_time, 'end_time': self.time,
                                  'stop_reason': 'condition_met' if reached else 'max_duration', 'observables': values})
+            self._record_boundary('stage', 'end', self.path)
             if not reached:
                 self.failed = self.done = True
             else:

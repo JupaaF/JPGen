@@ -20,6 +20,7 @@ class DemCapabilities:
     integration_schemes: frozenset[tuple[str, str]] = frozenset()
     actuator_commands: frozenset[str] = frozenset()
     native_controls: frozenset[str] = frozenset()
+    particle_snapshots: bool = False
 
     def validate(self, plan) -> None:
         from ..protocol import control_types, required_actuator_commands, required_observables
@@ -33,6 +34,8 @@ class DemCapabilities:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support {plan.boundary} boundaries.")
         if not plan.protocol:
             return
+        if not self.particle_snapshots:
+            raise ConfigurationError(f"Backend {plan.backend.name} cannot export protocol boundary snapshots.")
         unsupported_controls = control_types(plan.protocol["stages"]) - self.controls
         if unsupported_controls:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support controls: "
@@ -55,6 +58,7 @@ class DemCapabilities:
             "observables": sorted(self.observables),
             "actuator_commands": sorted(self.actuator_commands),
             "native_controls": sorted(self.native_controls),
+            "particle_snapshots": self.particle_snapshots,
         }
 
 

@@ -11,16 +11,16 @@ VERSION = "1.0"
 ARRAYS = ("ids", "positions", "radii", "velocities", "angular_velocities")
 
 
-def write_state(directory, arrays, *, time, box):
+def write_state(directory, arrays, *, time, box, stem="final_state"):
     """Write one array at a time, publishing metadata after the binary archive.
 
     ``arrays`` yields (name, array) pairs in ARRAYS order. Uncompressed NPY
     members avoid compression work and Python lists of particle values.
     """
-    metadata_path = directory / "final_state.json"
+    metadata_path = directory / f"{stem}.json"
     # A manually rerun case must not retain a previous completion marker.
     metadata_path.unlink(missing_ok=True)
-    temporary = directory / "final_state.npz.tmp"
+    temporary = directory / f"{stem}.npz.tmp"
     names = []
     with ZipFile(temporary, "w", compression=ZIP_STORED, allowZip64=True) as archive:
         for name, array in arrays:
@@ -29,9 +29,9 @@ def write_state(directory, arrays, *, time, box):
                 np.lib.format.write_array(stream, array, allow_pickle=False)
             del array
     if tuple(names) != ARRAYS:
-        raise ValueError("Invalid final-state array names or order.")
-    temporary.replace(directory / "final_state.npz")
-    temporary = directory / "final_state.json.tmp"
+        raise ValueError("Invalid DEM state array names or order.")
+    temporary.replace(directory / f"{stem}.npz")
+    temporary = directory / f"{stem}.json.tmp"
     temporary.write_text(json.dumps({
         "schema": SCHEMA, "schema_version": VERSION, "units": "SI",
         "time": time, "box": box,
@@ -39,9 +39,9 @@ def write_state(directory, arrays, *, time, box):
     temporary.replace(metadata_path)
 
 
-def read_state(directory):
+def read_state(directory, stem="final_state"):
     """Read numeric arrays without pickle; domain validation belongs to the caller."""
-    metadata = json.loads((directory / "final_state.json").read_text(encoding="utf-8"))
+    metadata = json.loads((directory / f"{stem}.json").read_text(encoding="utf-8"))
     if (not isinstance(metadata, dict)
             or metadata.get("schema") != SCHEMA or metadata.get("schema_version") != VERSION
             or metadata.get("units") != "SI"):
