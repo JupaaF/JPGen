@@ -63,13 +63,27 @@ def path_targets(specification):
 
 def pressure_path_stage(path, target, index):
     """Build one ordinary leaf stage; future path drivers can reuse the schedule."""
-    control = dict(path['control'], mode='isotropic', target_pressure=target)
+    control = dict(path['control'])
+    ratios = control.pop('stress_ratios', None)
+    if control.get('mode', 'isotropic') == 'anisotropic':
+        control['target_stress'] = [target * ratio for ratio in ratios]
+        stress_targets = [('stress_' + axis, value)
+                          for axis, value in zip(('xx', 'yy', 'zz'), control['target_stress'])]
+    else:
+        control['mode'] = 'isotropic'
+        control['target_pressure'] = target
+        stress_targets = []
     acceptance = path['acceptance']
+    def near(observable, value):
+        return {
+            'observable': observable, 'op': 'near', 'value': value,
+            **({'atol': acceptance['target_atol']} if 'target_atol' in acceptance else {}),
+            **({'rtol': acceptance['target_rtol']} if 'target_rtol' in acceptance else {}),
+        }
     condition = {
         'all': [
-            {'observable': 'pressure', 'op': 'near', 'value': target,
-             **({'atol': acceptance['target_atol']} if 'target_atol' in acceptance else {}),
-             **({'rtol': acceptance['target_rtol']} if 'target_rtol' in acceptance else {})},
+            near('pressure', target),
+            *(near(observable, value) for observable, value in stress_targets),
             {'observable': 'kinetic_energy', 'op': 'below', 'value': acceptance['kinetic_energy_below']},
             {'observable': 'unbalanced_force', 'op': 'below', 'value': acceptance['unbalanced_force_below']},
         ],
@@ -104,10 +118,26 @@ def validate_path(path, dt, boundary):
     if targets['intermediate_states'] > 100000:
         raise ValueError('Path contains too many intermediate states.')
     control = path['control']
-    _mapping(control, {'type', 'max_velocity', 'loading_factor', 'update_every_steps'}, {'type'})
+    _mapping(control, {'type', 'mode', 'stress_ratios', 'max_velocity', 'loading_factor', 'update_every_steps'}, {'type'})
     if control['type'] != 'stress_servo':
         raise ValueError('Pressure paths require stress_servo control.')
-    validate_control(control | {'mode': 'isotropic', 'target_pressure': targets['end']})
+    mode = control.setdefault('mode', 'isotropic')
+    if mode == 'isotropic':
+        if 'stress_ratios' in control:
+            raise ValueError('stress_ratios requires anisotropic pressure path control.')
+        validate_control(control | {'target_pressure': targets['end']})
+    elif mode == 'anisotropic':
+        ratios = control.get('stress_ratios')
+        if not isinstance(ratios, list) or len(ratios) != 3:
+            raise ValueError('Anisotropic pressure paths require three stress_ratios.')
+        for ratio in ratios:
+            _number(ratio, 0, True)
+        if not math.isclose(sum(ratios), 3.0, rel_tol=1e-9, abs_tol=1e-9):
+            raise ValueError('Pressure path stress_ratios must sum to 3 (mean 1).')
+        validate_control({key: value for key, value in control.items() if key != 'stress_ratios'}
+                         | {'target_stress': [targets['end'] * ratio for ratio in ratios]})
+    else:
+        raise ValueError('Pressure path mode must be isotropic or anisotropic.')
     for field, default in (('max_velocity', DEFAULT_SERVO_MAX_VELOCITY),
                            ('loading_factor', DEFAULT_SERVO_LOADING_FACTOR),
                            ('update_every_steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS)):
@@ -325,6 +355,8 @@ def required_observables(stages):
             result |= required_observables(stage['stages'])
         elif 'path' in stage:
             result |= {'pressure', 'kinetic_energy', 'unbalanced_force'}
+            if stage['path']['control'].get('mode') == 'anisotropic':
+                result |= {'stress_xx', 'stress_yy', 'stress_zz'}
         else:
             result |= condition_observables(stage['until'])
             if stage['control']['type'] == 'stress_servo':

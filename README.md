@@ -470,8 +470,11 @@ until: {observable: solid_fraction, op: above, value: 0.64}
 ### Equilibrated pressure paths
 
 A protocol piece may be a pressure path. It creates a sequence of constant
-isotropic servo targets and advances only after pressure, kinetic energy and
+stress servo targets and advances only after pressure, kinetic energy and
 force imbalance satisfy the acceptance condition continuously for `hold_for`.
+Isotropic control adjusts all axes together to track mean pressure. Anisotropic
+control tracks each normal stress independently and also requires all three
+normal stresses to satisfy the target tolerance.
 The final target is saved; `intermediate_states` counts only targets strictly
 between `start` and `end`. `start` is the spacing reference and should be an
 already prepared pressure state; the path does not verify or save that initial
@@ -494,6 +497,7 @@ dem:
             spacing: log
           control:
             type: stress_servo
+            mode: isotropic
             max_velocity: 0.01
             loading_factor: 0.8
             update_every_steps: 50
@@ -504,6 +508,12 @@ dem:
             hold_for: 0.005
           max_duration_per_target: 0.5
 ```
+
+For an anisotropic path, set `control.mode: anisotropic` and
+`control.stress_ratios: [0.5, 1.0, 1.5]`, for example. The three positive
+ratios must sum to 3. Each target pressure is multiplied by these ratios to
+produce the X, Y and Z stress targets while preserving their mean. Omitting
+`mode` keeps existing paths isotropic.
 
 `spacing` may be `log` or `linear`. For 20 intermediate states the path
 attempts 21 targets, excluding the initial reference pressure and including

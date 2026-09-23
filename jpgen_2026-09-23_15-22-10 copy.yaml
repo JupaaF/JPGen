@@ -1,0 +1,100 @@
+packing:
+  sizing_method: variable_box_fraction
+  seed: 226348716759132191509040987327891250623
+  box:
+    origin_mode: center
+    lengths:
+    - 0.1
+    - 0.1
+    - 0.1
+    periodic: true
+  radii:
+    type: uniform
+    min: 0.003
+    max: 0.007
+  restarts: 10
+  max_particles: 1000000
+  solid_fraction_tolerance: 0.001
+  velocity:
+    type: constant
+    value: 0.0
+  angular_velocity:
+    type: constant
+    value: 0.0
+  count: 10000
+  target_solid_fraction: 0.57
+  placement:
+    method: progressive_growth
+    max_overlap: 0.02
+    relax_all_overlaps: true
+    max_iterations: 10000
+    overlap_tolerance: 1.0e-05
+    initial_scale: 0.25
+    initial_increment: 0.05
+    min_increment: 0.0001
+    max_increment: 0.1
+    max_stages: 200
+  exports:
+  - vtk
+dem:
+  engine: kratos
+  backend_options:
+    python: /home/jpfernandez/Documentos/JPGen/.venv/bin/python
+    installation:
+    threads: 1
+    timeout_seconds:
+  material:
+    density: 2650.0
+    young_modulus: 600000000.0
+    poisson_ratio: 0.3
+  contact:
+    static_friction: 0.4
+    dynamic_friction: 0.4
+    friction_decay: 500.0
+    restitution: 0.5
+    model: hertz_viscous_coulomb
+  integration:
+    translation: symplectic_euler
+    rotation: direct
+  boundary: periodic
+  gravity:
+  - 0.0
+  - 0.0
+  - 0.0
+  time_step: 1.0e-05
+  protocol:
+    stages:
+    - name: relaxation
+      control:
+        type: stress_servo
+        mode: isotropic
+        target_pressure: 5000.0
+        max_velocity: 0.01
+        loading_factor: 0.8
+        update_every_steps: 50
+      until:
+        observable: pressure
+        op: below
+        value: 5000.0
+        hold_for: 0
+      max_duration: 2.0
+    - name: 5to200
+      path:
+        observable: pressure
+        targets:
+          start: 5000.0
+          end: 200000.0
+          intermediate_states: 20
+          spacing: log
+        control:
+          type: stress_servo
+          max_velocity: 0.1
+          loading_factor: 0.8
+          update_every_steps: 5
+        acceptance:
+          target_rtol: 0.01
+          kinetic_energy_below: 0.001
+          unbalanced_force_below: 0.005
+          hold_for: 0.005
+        max_duration_per_target: 1.0
+    sample_every: 100

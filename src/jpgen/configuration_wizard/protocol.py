@@ -1,4 +1,5 @@
 """Dynamic, navigable Lego-style DEM protocol editor."""
+import math
 from pathlib import Path
 
 import yaml
@@ -142,7 +143,8 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
             questions.extend(_stage_questions(answers, key + '.children', periodic, depth + 1, capabilities))
             continue
         if answers.get(key + '.kind') == 'path':
-            questions.extend(_pressure_path_questions(key))
+            questions.extend(_pressure_path_questions(
+                key, answers, {'stress_xx', 'stress_yy', 'stress_zz'} <= capabilities.observables))
             continue
         controllers = [('Free evolution (fixed current cell)', 'free_evolution')]
         if periodic:
@@ -210,8 +212,15 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
     return questions
 
 
-def _pressure_path_questions(key):
-    return [
+def _stress_ratios(value, answers):
+    ratios = _vector(value, answers)
+    if any(ratio <= 0 for ratio in ratios) or not math.isclose(sum(ratios), 3.0, rel_tol=1e-9, abs_tol=1e-9):
+        raise ValueError('Enter three positive ratios whose sum is 3 (mean 1).')
+    return ratios
+
+
+def _pressure_path_questions(key, answers, anisotropic_available):
+    questions = [
         _question(key + '.path.start', 'Start pressure reference (Pa)', 5000.0, _positive_float,
                   explanation='Positive spacing reference. Prepare and equilibrate this initial state separately; the path does not verify or save it.'),
         _question(key + '.path.end', 'Final pressure (Pa)', 200000.0, _positive_float,
@@ -221,8 +230,17 @@ def _pressure_path_questions(key):
         _question(key + '.path.spacing', 'Target spacing', 'log',
                   choices=[('Logarithmic', 'log'), ('Linear', 'linear')],
                   explanation='Logarithmic spacing gives equal pressure ratios; linear spacing gives equal pressure differences.'),
+        _question(key + '.path.mode', 'Stress control mode', 'isotropic',
+                  choices=[('Isotropic pressure', 'isotropic')] +
+                          ([('Normal stresses X Y Z', 'anisotropic')] if anisotropic_available else []),
+                  explanation='Isotropic control adjusts all cell dimensions together to track mean pressure. Anisotropic control tracks a separate normal stress on each axis.'),
+    ]
+    if answers.get(key + '.path.mode', 'isotropic') == 'anisotropic':
+        questions.append(_question(key + '.path.stress_ratios', 'Normal stress ratios X Y Z (mean 1)', '1 1 1', _stress_ratios,
+                                   explanation='Multiply each path pressure by these positive ratios to obtain the X, Y and Z targets. Their sum must be 3, so the target mean pressure stays on the requested path.'))
+    questions.extend([
         _question(key + '.path.max_velocity', 'Maximum wall velocity (m/s)', DEFAULT_SERVO_MAX_VELOCITY, _positive_float,
-                  explanation='Positive velocity limit for the isotropic pressure servo.'),
+                  explanation='Positive velocity limit for the stress servo on each cell face.'),
         _question(key + '.path.loading_factor', 'Servo loading factor', DEFAULT_SERVO_LOADING_FACTOR, _positive_float,
                   explanation='Positive multiplier on the pressure-error response.'),
         _question(key + '.path.update_every_steps', 'Move cell every N steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS, _positive_integer,
@@ -237,7 +255,8 @@ def _pressure_path_questions(key):
                   explanation='The pressure, energy and force conditions must remain true together for this simulated duration.'),
         _question(key + '.path.max_duration_per_target', 'Maximum duration per target (s)', 1.0, _positive_float,
                   explanation='Stop the sequence with diagnostics if one target does not equilibrate in this time.'),
-    ]
+    ])
+    return questions
 
 
 def build_protocol(answers, prefix='dem.protocol'):
@@ -253,7 +272,8 @@ def build_protocol(answers, prefix='dem.protocol'):
                 'observable': 'pressure',
                 'targets': {'start': value('start'), 'end': value('end'),
                             'intermediate_states': value('intermediate_states'), 'spacing': value('spacing')},
-                'control': {'type': 'stress_servo',
+                'control': {'type': 'stress_servo', 'mode': value('mode'),
+                            **({'stress_ratios': value('stress_ratios')} if value('mode') == 'anisotropic' else {}),
                             **{field: value(field) for field in ('max_velocity', 'loading_factor', 'update_every_steps')}},
                 'acceptance': {'target_rtol': value('target_rtol'),
                                'kinetic_energy_below': value('kinetic_energy_below'),
