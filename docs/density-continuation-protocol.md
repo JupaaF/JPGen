@@ -1,10 +1,13 @@
-# Propuesta de protocolo DEM: `density_continuation`
+# Protocolo DEM: `density_continuation`
 
-Estado: esquema y máquina de estados portable implementados. La ejecución en Kratos
-permanece deshabilitada: falta implementar y verificar la carga de los `.rest`
-exportados en los límites del protocolo, junto con la restauración del integrador,
-la historia de contactos y el estado del protocolo. El YAML
-se valida, pero Kratos lo rechaza antes de crear un run.
+Estado: implementado en JPGen y en el Kratos local con
+[el parche DEM de reinicio](../patches/kratos-dem-density-restart.patch). La
+prevalidación exige el marcador de compatibilidad del binario antes de iniciar
+una ejecución. El rollback restaura un checkpoint completo en un nuevo análisis
+del mismo proceso y conserva los contadores de trabajo. Los checkpoints guardan
+el estado portable del protocolo para inspección; todavía no existe un comando
+CLI para reanudar una ejecución tras salir del proceso. Un caso pequeño
+reproducible se encuentra en [el ejemplo](../examples/dem_density_continuation.yaml).
 
 ## Objetivo
 
@@ -40,7 +43,7 @@ alcanzar con la trayectoria y el presupuesto elegidos.
 - La primera versión guarda muestras a la fricción alcanzada. Recuperar la
   fricción original no forma parte de su aceptación ni ocurre implícitamente.
 
-## Configuración propuesta
+## Configuración
 
 Fragmento dentro de `dem.protocol.stages`; los valores son ilustrativos y deben
 ajustarse a las unidades, tamaño y dinámica de la muestra:
@@ -137,9 +140,10 @@ Es el estado desde el que se restaurará si el intento no es aceptable.
 ### 3. Reducir fricción
 
 Aplicar `f_new = max(min_factor, f - decrement)`. Actualizar los parámetros de
-los contactos existentes y de los futuros. La ley de contacto debe imponer el
-nuevo límite de Coulomb y corregir coherentemente su memoria tangencial.
-No borrar globalmente el historial de contactos.
+los contactos existentes y de los futuros. La ley `DEM_D_Hertz_viscous_Coulomb`
+lee los coeficientes activos al calcular fuerzas y limita la respuesta tangencial
+con esos valores. El historial de contactos permanece en las partículas y no se
+borra globalmente.
 
 ### 4. Relajar a fricción constante
 
@@ -189,9 +193,9 @@ mantener el último decremento exitoso en los siguientes. Una respuesta plana
 no justifica un salto inmediato a fricción cero. Una pendiente negativa se
 registra como respuesta no monótona y no se usa en la fórmula predictiva.
 
-En rollback, reducir el decremento del intento fallido. Si ya no puede reducirse
-por encima del mínimo configurado, terminar con `resolution_limit` y guardar
-el intervalo observado de densidades equilibradas. Eso no demuestra que el
+En rollback, reducir el decremento del intento fallido. Si el siguiente
+reintento exigiría un decremento inferior al mínimo configurado, terminar con
+`resolution_limit` y guardar el intervalo observado de densidades equilibradas. Eso no demuestra que el
 objetivo sea físicamente imposible con otra trayectoria.
 
 Si `f` alcanza `min_factor`, completar la relajación y evaluar antes de declarar
@@ -210,8 +214,10 @@ Un checkpoint reiniciable debe preservar, como mínimo:
 - Estado de continuación, objetivo activo e historiales de condiciones.
 
 Los HDF5 de geometría o resultados actuales no bastan para este contrato. El
-backend debe demostrar restauración equivalente, o rechazar el protocolo antes
-de iniciar la simulación. No sustituir silenciosamente un checkpoint por una
+backend Kratos exige el marcador `JPGEN_DENSITY_RESTART_VERSION = 1` en el
+binario y rechaza la etapa antes de iniciar la simulación si falta. La carga
+usa los model parts serializados; reconstruye la malla de medición de contactos
+y busca vecinos en cada paso. No sustituye el checkpoint por una
 reinicialización desde posiciones.
 
 Rollback restaura el tiempo físico y los historiales al checkpoint. Los
@@ -223,8 +229,9 @@ el significado de tiempo físico de la rama activa. También se registra
 `attempted_duration` para contabilizar trabajo y evitar reintentos ilimitados.
 
 Los registros de intentos son append-only y llevan identificador de intento y
-estado `accepted` o `discarded`; tiempos repetidos tras rollback no se mezclan
-como si pertenecieran a una única trayectoria física.
+eventos `start`, `accepted`, `accepted_target` o `discarded`. El campo de paso
+de `observables.jsonl` cuenta trabajo integrado, mientras que el tiempo refleja
+la rama física activa; tras rollback pueden aparecer tiempos repetidos.
 
 ## Resultados
 
@@ -243,31 +250,28 @@ etiquetar la captura previa como muestra equilibrada a la fricción recuperada.
 Una futura variante podría aceptar solo después de esa recuperación y utilizar
 ramas separadas de continuación y evaluación.
 
-Los fallos conservan los objetivos ya publicados, el último checkpoint aceptado
+Los fallos conservan los objetivos ya publicados, el último checkpoint equilibrado
 y los diagnósticos del intento fallido. No continuar silenciosamente con el
 siguiente objetivo. Los metadatos distinguen una serie incompleta de una ejecución
 que ha cumplido todos los objetivos.
 
 ## Integración en JPGen
 
-El controlador necesita estado persistente y operaciones transaccionales; no
-basta con añadir una función algebraica al diccionario `CONTROLLERS`.
+`dem/protocol.py` valida y recorre etapas y bloques repetidos. Cada entrada en
+una etapa de densidad crea una instancia independiente de
+`dem/density_continuation.py` y toma como referencia la fricción activa de ese
+momento. El control cambia los parámetros de contacto entre pasos completos;
+al comienzo del siguiente paso el servo calcula y aplica la velocidad de las
+caras, y Kratos integra las fuerzas con la nueva fricción. Así se conserva la
+historia tangencial de los contactos existentes.
 
-1. Ampliar validación y representación de etapas en `dem/protocol.py`, manteniendo
-   la propiedad del algoritmo en JPGen y la compatibilidad con bloques repetidos.
-2. Incorporar una máquina de estados por instancia de etapa; reiniciarla en cada
-   repetición y tomar como referencias las fricciones activas de esa entrada.
-3. Extender el contrato de comandos para combinar confinamiento y cambios de
-   parámetros de contacto en un mismo paso, con orden de aplicación definido:
-   actualizar fricción, calcular/aplicar actuación de celda e integrar contactos.
-4. Añadir operaciones explícitas de checkpoint/restore al contrato del backend,
-   ejecutadas entre pasos completos y coordinadas con `ProtocolRunner`.
-5. Declarar capacidades de fricción dinámica, checkpoint con historia de
-   contactos, rollback y publicación de muestras; rechazar backends incompletos.
-6. Añadir observables y contadores de etapa y adaptar persistencia e historial
-   para distinguir la trayectoria aceptada de los intentos descartados.
-7. Actualizar el asistente de configuración y la copia de módulos del caso
-   standalone cuando el protocolo esté implementado.
+`DemContinuationPort` ofrece lectura y actualización de fricción, checkpoint,
+restauración, publicación y registro de intentos. Kratos serializa los model
+parts y una instantánea del estado portable; una restauración crea un análisis
+nuevo dentro del mismo worker y vuelve a enlazar el `ProtocolRunner` activo.
+Las capacidades del backend y la prevalidación del binario impiden ejecutar la
+etapa con una implementación incompleta. El asistente puede construir la etapa
+y el caso standalone copia la máquina de estados portable.
 
 ## Validaciones y límites
 
@@ -298,6 +302,6 @@ backend disponga de la medida.
   Coulomb: https://docs.lammps.org/stable/pair_granular.html
 
 Estas referencias respaldan la dependencia con la fricción, la preparación y
-la memoria de contacto. La continuación adaptativa con objetivos, rollback y
-publicación de muestras descrita aquí es una propuesta de diseño para JPGen;
-no se presenta como un algoritmo validado por esos trabajos.
+la memoria de contacto. La continuación adaptativa con objetivos, rollback y publicación de muestras
+es una implementación de JPGen; no se presenta como un algoritmo validado por
+esos trabajos.

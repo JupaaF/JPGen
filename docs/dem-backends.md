@@ -44,13 +44,17 @@ observables and particle snapshots can run the path; successful target exits
 must be distinguishable from failed diagnostic boundaries. Kratos publishes
 accepted exits through `accepted_states.jsonl`.
 
-The optional `state_restore` and `contact_parameter_updates` capabilities
-are reserved for future stateful paths such as friction-driven density
-continuation. `DemContinuationPort` names the required checkpoint, restore
-and live-friction operations. A checkpoint must preserve solver and protocol
-state, including cell geometry and contact history. Exporting a restart file
-does not by itself imply these capabilities; Kratos currently advertises
-neither.
+Density continuation additionally requires `state_restore`,
+`contact_parameter_updates`, `contact_history_checkpoint`, `rollback`,
+`target_publication` and `native_restart_export`. `DemContinuationPort` provides
+checkpoint, restore, live-friction and publication operations. Kratos advertises
+these only with the JPGen DEM restart patch: runtime preflight checks its
+version marker. Its density checkpoint stores all DEM model parts, cell geometry,
+active friction and portable controller state. A failed increment reloads a fresh
+analysis from that checkpoint while keeping attempt counters in the worker.
+Neighbour search runs every density step, and the derived contact measurement
+mesh is rebuilt after reload. A checkpoint is also published for each accepted
+target. Restarting the CLI from an earlier run is not implemented.
 
 `native_restart_export` is a separate optional capability. Kratos advertises it
 and writes the native `SpheresPart.rest` for every unique protocol boundary step,
@@ -58,7 +62,7 @@ using the same `FileSerializer` and pointer serialization flag as its restart
 utility. `restart.json` stores the step, time, box and Kratos version. The
 `snapshots.jsonl` event records the corresponding `.rest` path. This capability
 only promises export of native solver files; it does not advertise a JPGen resume
-or rollback operation. A future backend may produce a different native format,
+or rollback operation on its own. A future backend may produce a different native format,
 and a backend without this capability can still export particle snapshots.
 
 These capabilities are illustrative: advertise them only if the engine actually

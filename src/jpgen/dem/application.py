@@ -28,7 +28,11 @@ class DemApplication:
         case = plan.create_case(packing)
         prepared = plan.backend.prepare(case, workspace.directory / "dem")
         report = plan.backend.run(prepared, observer)
-        validate_execution_report(case, report)
+        try:
+            validate_execution_report(case, report)
+        except DemExecutionError as error:
+            error.execution_report = report
+            raise
         state = plan.backend.collect(prepared, report)
         validate_final_state(case, report, state)
         with np.errstate(over="ignore", invalid="ignore"):
@@ -49,6 +53,8 @@ class DemApplication:
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
             "stop_reason": report.stop_reason, "return_code": report.return_code,
             "completed_stages": report.completed_stages, "accepted_targets": report.accepted_targets,
+            "attempted_duration": report.attempted_duration,
+            "diagnostics": report.diagnostics,
             **({"accepted_states_index": "dem/native_results/accepted_states.jsonl"}
                if report.accepted_targets else {}),
             "observables": report.observables,

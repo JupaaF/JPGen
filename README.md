@@ -378,6 +378,7 @@ experiment. Every stage runs on the same live solver, preserving contact history
 | `stress_servo` | `mode: isotropic`, `target_pressure`, `max_velocity`, `loading_factor`, `update_every_steps` | Control mean normal contact stress |
 | `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]`, `max_velocity`, `loading_factor`, `update_every_steps` | Independently control three normal stresses |
 | `strain_rate` | `rate: [x, y, z]` | Prescribe logarithmic cell strain rates in 1/s; expansion positive |
+| `density_continuation` | `targets`, confinement, friction, relaxation and limits | Reduce contact friction adaptively under pressure control; publish equilibrated density targets |
 
 The portable JPGen servo uses Kratos' wall-velocity formula. For each controlled
 axis it commands `(target - measured) * loading_factor * D50 /
@@ -533,11 +534,37 @@ their associated Kratos restart files are not yet usable for JPGen resume.
 The wizard offers this path as a protocol piece when the selected backend
 supports pressure control and the required observables.
 
-The path structure separates target spacing from target control. A future
-`solid_fraction` path can use linear targets and the same accepted-state
-index, but friction adaptation requires equivalent solver-state restoration
-and live contact-parameter updates. Those capabilities are declared separately
-and are currently unavailable.
+### Density continuation
+
+Use `control.type: density_continuation` in a periodic leaf stage to reduce the
+active static and dynamic friction by a common factor while an isotropic servo
+maintains the configured pressure. Targets must be strictly increasing, with
+a separation greater than twice `density_atol`. Acceptance requires the target
+density, pressure tolerance, kinetic energy, force imbalance and density
+stability to hold together. A transient crossing never publishes a target.
+See the [complete protocol](docs/density-continuation-protocol.md) and the
+[small runnable example](examples/dem_density_continuation.yaml).
+
+A failed increment restores the preceding solver checkpoint and retries with a
+smaller friction decrement. `max_duration` counts all integrated attempts,
+including discarded branches. The physical time in the final state follows
+only the accepted branch; `attempted_duration` reports total integrated work.
+Each accepted target is published under `dem/density_targets/target_0001/`,
+with particle arrays, native Kratos model parts, `checkpoint.json` and
+`target.json`. `dem/native_results/density_attempts.jsonl` records attempts,
+transient crossings, discards and acceptances. Earlier accepted targets remain
+available if a later target fails. Kratos uses neighbour search on every step
+for this controller so restored contact forces reproduce the uninterrupted
+trajectory.
+
+Density rollback requires the JPGen Kratos DEM patch in
+[patches/kratos-dem-density-restart.patch](patches/kratos-dem-density-restart.patch).
+The runtime checks for its version marker before creating a run. Apply the
+patch to the matching Kratos source and rebuild `KratosDEMCore` and
+`KratosDEMApplication`, or use the already patched local `Kratos/` build.
+The serialized checkpoint includes the portable controller state for audit;
+CLI resume after a process exit is not implemented. Rollback is performed
+inside the active worker run.
 
 ### Results and extension points
 
@@ -552,9 +579,9 @@ velocities, and the current box. Backends must declare particle snapshot support
 to run a protocol. Kratos additionally writes `dem/native_results/restarts/step_<step>/SpheresPart.rest`
 at each distinct boundary step, with a `restart.json` recording the step, time,
 box and Kratos version. The index links each boundary to both files. The `.rest`
-uses Kratos' native `FileSerializer` and contains the sphere `ModelPart`; JPGen
-does not yet load these files or restore its protocol state, so automatic resume
-and rollback are not available.
+uses Kratos' native `FileSerializer` and contains the sphere `ModelPart`.
+These ordinary stage-boundary exports remain analysis artifacts; density
+continuation uses its separate complete checkpoints for rollback.
 
 `dem/native_results/observables.jsonl` records sampled observables and current
 cell geometry, including every stage exit. Execution reports include the real

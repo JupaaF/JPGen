@@ -1,5 +1,8 @@
 """Kratos cell actuation and observations for the standalone protocol worker."""
+import json
 import math
+import shutil
+from pathlib import Path
 
 import numpy as np
 import KratosMultiphysics as KM
@@ -8,6 +11,7 @@ import KratosMultiphysics.DEMApplication as DEM
 from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 from protocol import STRESS_OBSERVABLES
+from state_exchange import write_state
 
 
 class KratosProtocolAdapter:
@@ -22,6 +26,7 @@ class KratosProtocolAdapter:
         self.max_radius = execution['max_radius']
         self.variables = KM.VariableUtils()
         self.periodic = execution['boundary'] == 'periodic'
+        self.output = Path.cwd()
 
     def box(self):
         origin = [getattr(self.analysis, f'BoundingBoxMin{axis}_update') for axis in 'XYZ']
@@ -107,3 +112,92 @@ class KratosProtocolAdapter:
         # Keep components obtained by the same reduction to avoid repeating it
         # when a sample or stage exit requests the rest of the stress tensor.
         return result
+
+    def _contact_properties(self):
+        properties = [sub for parent in self.analysis.spheres_model_part.Properties
+                      for sub in parent.GetSubProperties()]
+        if not properties:
+            raise ValueError('Kratos has no contact subproperties for density continuation.')
+        return properties
+
+    def friction(self):
+        pairs = {(float(prop[DEM.STATIC_FRICTION]), float(prop[DEM.DYNAMIC_FRICTION]))
+                 for prop in self._contact_properties()}
+        if len(pairs) != 1:
+            raise ValueError('Density continuation requires one active friction pair.')
+        return pairs.pop()
+
+    def set_friction(self, static, dynamic):
+        if not all(math.isfinite(value) and value >= 0 for value in (static, dynamic)):
+            raise ValueError('Invalid friction update.')
+        for prop in self._contact_properties():
+            prop[DEM.STATIC_FRICTION] = static
+            prop[DEM.DYNAMIC_FRICTION] = dynamic
+
+    def checkpoint(self, stage, physical_step, time, observables):
+        """Save every DEM model part at a completed step for a fresh solver load."""
+        runner = self.analysis.protocol
+        runner.checkpoint_serial += 1
+        stem = f'checkpoint_{runner.checkpoint_serial:08d}'
+        directory = self.output / 'checkpoints' / stem
+        temporary = directory.with_name(directory.name + '.tmp')
+        temporary.mkdir(parents=True, exist_ok=False)
+        try:
+            parts = (self.analysis.spheres_model_part, self.analysis.contact_model_part,
+                     self.analysis.cluster_model_part, self.analysis.dem_inlet_model_part,
+                     self.analysis.rigid_face_model_part, self.analysis.mapping_model_part)
+            for part in parts:
+                serializer = KM.FileSerializer(str(temporary / part.Name),
+                                               KM.SerializerTraceType.SERIALIZER_NO_TRACE)
+                serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
+                serializer.Save(part.Name, part)
+                del serializer
+            box = self.box()
+            write_state(temporary, self.analysis._particle_arrays(), time=time, box=box, stem='state')
+            metadata = {'schema': 'JPGen.dem.kratos_checkpoint', 'schema_version': '1.0',
+                        'kratos_version': KM.Kernel.Version(), 'stage': stage,
+                        'step': physical_step, 'time': time, 'box': box,
+                        'friction': self.friction(), 'observables': dict(observables),
+                        'protocol_state': runner.state(),
+                        'model_parts': [part.Name for part in parts]}
+            (temporary / 'checkpoint.json').write_text(json.dumps(metadata, allow_nan=False) + '\n', encoding='utf-8')
+            temporary.replace(directory)
+        except BaseException:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
+        return {'directory': str(directory), 'metadata': metadata}
+
+    def restore(self, checkpoint):
+        # The current Kratos strategy owns pointers into its model parts. A new
+        # analysis loads the checkpoint after this completed step; in-place load
+        # would invalidate those pointers and erase contact history.
+        self.analysis.rollback_checkpoint = checkpoint
+
+    def log_attempt(self, record):
+        with (self.output / 'density_attempts.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, allow_nan=False) + '\n')
+
+    def publish_target(self, checkpoint, metadata):
+        number = self.analysis.protocol.density_published_targets + 1
+        relative = f'density_targets/target_{number:04d}'
+        destination = self.output.parent / relative
+        temporary = destination.with_name(destination.name + '.tmp')
+        destination.parent.mkdir(exist_ok=True)
+        if destination.exists() or temporary.exists():
+            raise ValueError('Density target publication path already exists.')
+        shutil.copytree(checkpoint['directory'], temporary)
+        metadata = dict(metadata, checkpoint=checkpoint['metadata'],
+                        kratos_version=KM.Kernel.Version(),
+                        provenance={'backend': 'kratos', 'seed': self.execution.get('seed'),
+                                    'contact_model': self.execution.get('contact_model')})
+        (temporary / 'target.json').write_text(json.dumps(metadata, allow_nan=False) + '\n', encoding='utf-8')
+        temporary.replace(destination)
+        record = {'kind': 'density_target', 'phase': 'end', 'accepted': True,
+                  'path': metadata['stage'], 'target': {'observable': 'solid_fraction',
+                  'index': metadata['index'], 'value': metadata['target']},
+                  'step': metadata['step'], 'time': metadata['time'],
+                  'attempted_duration': metadata['attempted_duration'],
+                  'state': relative + '/state', 'restart': relative + '/SpheresPart.rest',
+                  'metadata': relative + '/target.json'}
+        with (self.output / 'accepted_states.jsonl').open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(record, allow_nan=False) + '\n')

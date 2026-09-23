@@ -71,6 +71,9 @@ class KratosBackend:
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
         probe_code = "import KratosMultiphysics\nfrom KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
+        if plan.protocol and 'density_continuation' in control_types(plan.protocol['stages']):
+            probe_code += "\nimport KratosMultiphysics.DEMApplication as DEM"
+            probe_code += "\nassert getattr(DEM, 'JPGEN_DENSITY_RESTART_VERSION', None) == 1, 'Kratos lacks JPGen contact-history restart support'"
         if plan.protocol and self.capabilities.native_restart_export:
             probe_code += "\nassert hasattr(KratosMultiphysics, 'FileSerializer'), 'Kratos lacks native restart serialization'"
             probe_code += "\nassert hasattr(KratosMultiphysics.Serializer, 'SHALLOW_GLOBAL_POINTERS_SERIALIZATION'), 'Kratos lacks restart pointer serialization'"
@@ -141,6 +144,8 @@ class KratosBackend:
                 steps=result["steps"], stop_reason=result["stop_reason"],
                 completed_stages=result["completed_stages"],
                 accepted_targets=result.get("accepted_targets", 0),
+                attempted_duration=result.get("attempted_duration", 0.0),
+                diagnostics=result.get("diagnostics", {}),
                 failed_stage=result.get("failed_stage"), observables=result["observables"],
                 time=result.get("time"), time_step=result.get("time_step", {}),
                 control=result.get("control", {}),
@@ -164,29 +169,41 @@ class KratosBackend:
 
 
 def _validate_accepted_states(directory, expected_count, stages):
-    """Check the published index and references before accepting a solver report."""
+    """Check accepted pressure and density targets and their published files."""
     if type(expected_count) is not int or expected_count < 0:
         raise ValueError("Invalid accepted target count.")
     records = (directory / "accepted_states.jsonl").read_text(encoding="utf-8").splitlines()
     if len(records) != expected_count:
         raise ValueError("Accepted state index does not match the execution report.")
-    expected = [(path, stage['_path_target']) for path, stage in iter_stages(stages)
-                if '_path_target' in stage]
+    expected = []
+    for path, stage in iter_stages(stages):
+        if '_path_target' in stage:
+            expected.append((path, stage['_path_target'], 'stage'))
+        elif stage['control']['type'] == 'density_continuation':
+            for index, target in enumerate(stage['control']['targets'], 1):
+                expected.append((path, {'observable': 'solid_fraction', 'index': index,
+                                        'value': target}, 'density_target'))
     if expected_count > len(expected):
         raise ValueError("Accepted target count exceeds configured path targets.")
     previous_step = -1
-    for line, (path, target_spec) in zip(records, expected):
+    for line, (path, target_spec, kind) in zip(records, expected):
         item = json.loads(line)
-        target = item["target"]
         step = item["step"]
         if (item.get("accepted") is not True or item.get("phase") != "end"
-                or item.get("kind") != "stage" or type(step) is not int
+                or item.get("kind") != kind or type(step) is not int
                 or step <= previous_step or item.get("path") != path
-                or target != target_spec):
+                or item.get("target") != target_spec):
             raise ValueError("Invalid accepted state index entry.")
         previous_step = step
+        root = directory.parent if kind == 'density_target' else directory
         for suffix in (".json", ".npz"):
-            if not (directory / (item["state"] + suffix)).is_file():
+            if not (root / (item["state"] + suffix)).is_file():
                 raise ValueError("Accepted particle state is missing.")
-        if not (directory / item["restart"]).is_file():
+        if not (root / item["restart"]).is_file():
             raise ValueError("Accepted native restart is missing.")
+        if kind == 'density_target':
+            metadata = json.loads((root / item['metadata']).read_text(encoding='utf-8'))
+            if (metadata['target'] != target_spec['value'] or
+                    abs(metadata['observables']['solid_fraction'] - metadata['target']) >
+                    metadata['density_atol']):
+                raise ValueError('Invalid accepted density target metadata.')

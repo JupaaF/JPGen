@@ -61,7 +61,7 @@ class ConfigurationWizard:
                 if protocol:
                     preview = pressure_path_previews(protocol["stages"])
                     if preview:
-                        self.terminal.print("\nResolved pressure targets", style="bold")
+                        self.terminal.print("\nResolved protocol targets", style="bold")
                         self.terminal.print(preview)
                 action = self.terminal.choose(
                     "Save this configuration and start JPGen?",

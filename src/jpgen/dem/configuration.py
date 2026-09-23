@@ -7,7 +7,7 @@ from ..configuration_values import mapping, number, vector
 from ..errors import ConfigurationError
 from .contacts import build_contact
 from .domain import Contact, DemCase, Material, Integration
-from .protocol import validate_protocol, maximum_servo_velocity
+from .protocol import validate_protocol, maximum_servo_velocity, control_types
 from .timestep import validate_time_step
 from .backends.base import DemBackend
 
@@ -100,6 +100,9 @@ def build_dem_plan(raw, backends=None):
         steps = round(ratio)
         if not math.isclose(ratio, steps, rel_tol=0, abs_tol=1e-8):
             raise ConfigurationError("dem.end_time must be an integer multiple of dem.time_step.")
+    if (protocol is not None and 'density_continuation' in control_types(protocol['stages'])
+            and contact.static_friction == 0 and contact.dynamic_friction == 0):
+        raise ConfigurationError('density_continuation requires nonzero entry friction.')
     plan = DemPlan(backends[engine](raw.get("backend_options", {})), material, contact,
                    boundary, tuple(vector(raw.get("gravity", [0, 0, 0]), "dem.gravity")), dt, steps, protocol, integration)
     plan.backend.capabilities.validate(plan)

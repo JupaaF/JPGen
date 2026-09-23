@@ -70,6 +70,13 @@ def _positive_float(value, answers):
     return result
 
 
+def _density_targets(value, answers):
+    values = [_positive_float(part, answers) for part in value.replace(',', ' ').split()]
+    if not values:
+        raise ValueError('Enter at least one density target.')
+    return values
+
+
 def _vector(value, answers):
     result = [_float(v, answers) for v in value.replace(',', ' ').split()]
     if len(result) != 3:
@@ -133,6 +140,13 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
         kinds = [('Simulation stage', 'stage'), ('Repeat a sequence', 'repeat')]
         if path_available:
             kinds.append(('Equilibrated pressure path', 'path'))
+        density_available = (path_available and 'density_continuation' in capabilities.controls
+                             and all(getattr(capabilities, flag) for flag in
+                                     ('state_restore', 'contact_parameter_updates',
+                                      'contact_history_checkpoint', 'rollback',
+                                      'target_publication', 'native_restart_export')))
+        if density_available:
+            kinds.append(('Friction driven density continuation', 'density'))
         questions.append(_question(key + '.kind', f'Piece {index + 1}', 'stage', choices=kinds,
                                    explanation='Choose one stage, a repeated sequence, or a pressure path that saves each equilibrated target before moving to the next.'))
         questions.append(_question(key + '.name', 'Piece name', f'stage_{index + 1}', parser=lambda v, _: v.strip(),
@@ -145,6 +159,9 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
         if answers.get(key + '.kind') == 'path':
             questions.extend(_pressure_path_questions(
                 key, answers, {'stress_xx', 'stress_yy', 'stress_zz'} <= capabilities.observables))
+            continue
+        if answers.get(key + '.kind') == 'density':
+            questions.extend(_density_questions(key))
             continue
         controllers = [('Free evolution (fixed current cell)', 'free_evolution')]
         if periodic:
@@ -259,6 +276,55 @@ def _pressure_path_questions(key, answers, anisotropic_available):
     return questions
 
 
+def _density_questions(key):
+    defaults = [
+        ('targets', 'Increasing solid fraction targets', '0.620 0.625 0.630', _density_targets,
+         'Space separated nominal solid fractions. Each is saved only after pressure, force, energy and density stability have held.'),
+        ('density_atol', 'Absolute density tolerance', 0.0002, _positive_float,
+         'Absolute tolerance around each requested solid fraction.'),
+        ('target_pressure', 'Confining mean pressure (Pa)', 5000.0, _positive_float,
+         'Positive mean pressure maintained during the whole continuation.'),
+        ('pressure_rtol', 'Relative pressure tolerance', 0.01, _positive_float,
+         'Acceptance requires measured pressure inside this relative tolerance.'),
+        ('max_velocity', 'Maximum wall velocity (m/s)', 0.01, _positive_float,
+         'Limit for the pressure servo on each face.'),
+        ('min_factor', 'Minimum friction factor', 0.0, _float,
+         'Both entry friction coefficients are multiplied by this factor at the limit.'),
+        ('initial_decrement', 'Initial friction factor decrement', 0.05, _positive_float,
+         'First reduction of the shared friction factor.'),
+        ('min_decrement', 'Minimum decrement', 0.0001, _positive_float,
+         'Smallest retry resolution before declaring a resolution limit.'),
+        ('max_decrement', 'Maximum decrement', 0.10, _positive_float,
+         'Largest allowed reduction in one accepted step.'),
+        ('safety_factor', 'Prediction safety factor', 0.5, _positive_float,
+         'Fraction of the predicted decrement when an accepted slope is available.'),
+        ('growth_factor', 'Maximum decrement growth factor', 1.5, _positive_float,
+         'Upper bound on growth relative to the last successful decrement.'),
+        ('retry_factor', 'Retry reduction factor', 0.5, _positive_float,
+         'Multiplier applied to a discarded decrement.'),
+        ('kinetic_energy_below', 'Kinetic energy threshold (J)', 1e-8, _positive_float,
+         'Translation plus rotation energy required for relaxation.'),
+        ('unbalanced_force_below', 'Unbalanced force threshold', 1e-3, _positive_float,
+         'Dimensionless force imbalance required for relaxation.'),
+        ('hold_for', 'Hold all conditions for (s)', 0.005, _positive_float,
+         'Consecutive time for the joint acceptance condition.'),
+        ('stability_window', 'Density stability window (s)', 0.005, _positive_float,
+         'Observation interval whose density range must stay small.'),
+        ('stability_max_range', 'Maximum density range', 0.00005, _positive_float,
+         'Largest nominal solid fraction range in the stability window.'),
+        ('relaxation_max_duration', 'Maximum duration per attempt (s)', 0.1, _positive_float,
+         'Failed attempts are rolled back after this simulated duration.'),
+        ('max_attempts', 'Maximum friction reduction attempts', 200, _positive_integer,
+         'Total attempts across all density targets.'),
+        ('max_retries_per_increment', 'Maximum retries per decrement', 12, _positive_integer,
+         'Maximum discarded attempts before a diagnosed failure.'),
+        ('max_duration', 'Total attempted duration (s)', 10.0, _positive_float,
+         'Integrated work budget including rolled back attempts.'),
+    ]
+    return [_question(key + '.density.' + field, label, default, parser, explanation=help_text)
+            for field, label, default, parser, help_text in defaults]
+
+
 def build_protocol(answers, prefix='dem.protocol'):
     stages = []
     for index in range(answers[prefix + '.count']):
@@ -266,6 +332,33 @@ def build_protocol(answers, prefix='dem.protocol'):
         stage = {'name': answers[key + '.name']}
         if answers[key + '.kind'] == 'repeat':
             stage.update(repeat=answers[key + '.repeat'], stages=build_protocol(answers, key + '.children')['stages'])
+        elif answers[key + '.kind'] == 'density':
+            value = lambda field: answers[key + '.density.' + field]
+            targets = value('targets')
+            stage.update(
+                control={
+                    'type': 'density_continuation', 'targets': targets,
+                    'density_atol': value('density_atol'),
+                    'confinement': {field: value(field) for field in
+                                    ('target_pressure', 'pressure_rtol', 'max_velocity')},
+                    'friction': {field: value(field) for field in
+                                 ('min_factor', 'initial_decrement', 'min_decrement',
+                                  'max_decrement', 'safety_factor', 'growth_factor', 'retry_factor')},
+                    'relaxation': {
+                        'max_duration': value('relaxation_max_duration'),
+                        'condition': {'all': [
+                            {'observable': 'kinetic_energy', 'op': 'below',
+                             'value': value('kinetic_energy_below')},
+                            {'observable': 'unbalanced_force', 'op': 'below',
+                             'value': value('unbalanced_force_below')}],
+                            'hold_for': value('hold_for')},
+                        'density_stability': {'window': value('stability_window'),
+                                              'max_range': value('stability_max_range')}},
+                    'limits': {field: value(field) for field in
+                               ('max_attempts', 'max_retries_per_increment')},
+                    'snapshots': {'mode': 'equilibrated', 'include_restart': True}},
+                until={'observable': 'density_targets_completed', 'op': 'above',
+                       'value': len(targets)}, max_duration=value('max_duration'))
         elif answers[key + '.kind'] == 'path':
             value = lambda field: answers[key + '.path.' + field]
             stage['path'] = {
@@ -321,6 +414,11 @@ def pressure_path_previews(stages):
             label = prefix + piece.get('name', 'path')
             if 'stages' in piece:
                 visit(piece['stages'], label + '/')
+            elif piece.get('control', {}).get('type') == 'density_continuation':
+                values = piece['control']['targets']
+                lines.append(f"{label}: {len(values)} density targets (solid fraction)")
+                for index, value in enumerate(values, 1):
+                    lines.append(f"  {index}: {value:.9g}")
             elif 'path' in piece and piece['path']['observable'] == 'pressure':
                 targets = piece['path']['targets']
                 values = list(path_targets(targets))

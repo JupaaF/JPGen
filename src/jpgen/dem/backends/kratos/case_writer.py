@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from ....packing.exporters.kratos import KratosExporter
-from ...protocol import CONTACT_OBSERVABLES, STRESS_OBSERVABLES, required_observables
+from ...protocol import CONTACT_OBSERVABLES, STRESS_OBSERVABLES, required_observables, control_types
 
 TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
 ROTATION_SCHEMES = {"direct": "Direct_Integration"}
@@ -55,7 +55,8 @@ def write_case(case, directory):
         "BoundingBoxOption": case.boundary == "periodic", "AutomaticBoundingBoxOption": False,
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
-        "NeighbourSearchFrequency": 5,
+        "NeighbourSearchFrequency": (1 if case.protocol and
+                                     'density_continuation' in control_types(case.protocol['stages']) else 5),
         "DeltaOption": "Relative", "SearchToleranceMultiplier": 0.01,
         "ContactMeshOption": needs_contacts, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
@@ -76,11 +77,14 @@ def write_case(case, directory):
                                              "particle_diameter_d50": particle_diameter_d50,
                                              "young_modulus": material.young_modulus, "poisson_ratio": material.poisson_ratio,
                                              "max_radius": float(np.max(case.packing.radii)),
-                                             "end_time": case.end_time})):
+                                             "end_time": case.end_time,
+                                             "seed": case.packing.metadata.seed,
+                                             "contact_model": contact.model})):
         (inputs / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     shutil.copyfile(Path(__file__).with_name("runner.py"), inputs / "run.py")
 
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
+    shutil.copyfile(Path(__file__).parents[2] / "density_continuation.py", inputs / "density_continuation.py")
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
     shutil.copyfile(Path(__file__).parents[2] / "commands.py", inputs / "commands.py")
     shutil.copyfile(Path(__file__).parents[2] / "state_exchange.py", inputs / "state_exchange.py")

@@ -117,6 +117,17 @@ class JPGenApplication:
             status.update(status="failed", error=message)
             if active_stage is not None:
                 status[active_stage].update(status="failed", error=message)
+            if active_stage == "dem" and hasattr(error, "execution_report"):
+                report = error.execution_report
+                status["dem"].update(
+                    accepted_targets=report.accepted_targets,
+                    attempted_duration=report.attempted_duration,
+                    diagnostics=report.diagnostics,
+                    failed_stage=report.failed_stage,
+                    stop_reason=report.stop_reason,
+                )
+                if report.accepted_targets:
+                    status["dem"]["accepted_states_index"] = "dem/native_results/accepted_states.jsonl"
             if active_stage == "packing" and dem_plan is not None:
                 status["dem"]["status"] = "skipped"
             workspace.save_summary(status)

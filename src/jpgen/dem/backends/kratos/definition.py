@@ -5,7 +5,7 @@ from ...protocol import OBSERVABLES
 
 CAPABILITIES = DemCapabilities(
     boundaries=frozenset({"open", "periodic"}),
-    controls=frozenset({"free_evolution", "strain_rate", "stress_servo"}),
+    controls=frozenset({"free_evolution", "strain_rate", "stress_servo", "density_continuation"}),
     observables=frozenset(OBSERVABLES),
     contact_models=frozenset({"hertz_viscous_coulomb"}),
     integration_schemes=frozenset({("symplectic_euler", "direct")}),
@@ -13,6 +13,11 @@ CAPABILITIES = DemCapabilities(
     native_controls=frozenset({"stress_servo"}),
     particle_snapshots=True,
     native_restart_export=True,
+    state_restore=True,
+    contact_parameter_updates=True,
+    contact_history_checkpoint=True,
+    rollback=True,
+    target_publication=True,
 )
 
 DEFINITION = BackendDefinition(

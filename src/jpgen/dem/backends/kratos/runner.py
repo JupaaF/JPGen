@@ -25,10 +25,12 @@ def main():
     from state_exchange import write_state
 
     class JPGenAnalysis(DEMAnalysisStage):
-        def __init__(self, model, parameters):
-            self.completed_steps = 0
+        def __init__(self, model, parameters, resume_runner=None, restart_checkpoint=None):
+            self.completed_steps = resume_runner.attempted_steps if resume_runner else 0
             self.final_state = None
-            self.protocol = None
+            self.protocol = resume_runner
+            self.restart_checkpoint = restart_checkpoint
+            self.rollback_checkpoint = None
             self.adapter = None
             self.observables = {}
             super().__init__(model, parameters)
@@ -40,23 +42,49 @@ def main():
 
         def KeepAdvancingSolutionLoop(self):
             if self.protocol is not None:
-                return not self.protocol.done
+                return not self.protocol.done and self.rollback_checkpoint is None
             return self.completed_steps < execution["steps"]
 
         def _AdvanceTime(self):
             # Avoid cumulative rounding causing a spurious extra/missing step.
-            previous_time = self.completed_steps * self.DEM_parameters["MaxTimeStep"].GetDouble()
+            previous_time = (self.protocol.time if self.protocol is not None else
+                             self.completed_steps * self.DEM_parameters["MaxTimeStep"].GetDouble())
             return self._GetSolver().AdvanceInTime(previous_time)
+
+        def ReadModelPartsFromRestartFile(self, settings):
+            if self.restart_checkpoint is None:
+                return super().ReadModelPartsFromRestartFile(settings)
+            metadata = self.restart_checkpoint['metadata']
+            if (metadata['schema'] != 'JPGen.dem.kratos_checkpoint' or
+                    metadata['schema_version'] != '1.0' or
+                    metadata['kratos_version'] != KM.Kernel.Version()):
+                raise ValueError('Incompatible Kratos density checkpoint.')
+            directory = Path(self.restart_checkpoint['directory'])
+            for name in metadata['model_parts']:
+                # ContactPart is a derived measurement mesh. Kratos rebuilds it
+                # on the first completed step; loading it here duplicates one
+                # generation of contact elements in the first stress sample.
+                if name == 'ContactPart':
+                    continue
+                part = self.model.GetModelPart(name)
+                serializer = KM.FileSerializer(str(directory / name),
+                                               KM.SerializerTraceType.SERIALIZER_NO_TRACE)
+                serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
+                serializer.Load(name, part)
+                del serializer
+                part.ProcessInfo[KM.IS_RESTARTED] = True
 
         def Initialize(self):
             try:
                 super().Initialize()
                 if execution.get("protocol"):
-                    (output / "observables.jsonl").write_text("", encoding="utf-8")
-                    (output / "snapshots.jsonl").write_text("", encoding="utf-8")
-                    (output / "accepted_states.jsonl").write_text("", encoding="utf-8")
                     specification = execution['protocol']
-                    self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
+                    if self.protocol is None:
+                        (output / "observables.jsonl").write_text("", encoding="utf-8")
+                        (output / "snapshots.jsonl").write_text("", encoding="utf-8")
+                        (output / "accepted_states.jsonl").write_text("", encoding="utf-8")
+                        (output / "density_attempts.jsonl").write_text("", encoding="utf-8")
+                        self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy'}
                     if execution['boundary'] == 'periodic':
                         self.output_observables |= {'solid_fraction', 'bulk_density'}
@@ -68,8 +96,19 @@ def main():
                     if 'unbalanced_force' in requested:
                         self.output_observables.add('unbalanced_force')
                     self.adapter = KratosProtocolAdapter(self, execution)
-                    self.observables = self.adapter.observe(self.protocol.observables)
-                    self._save_boundaries(output)
+                    if self.restart_checkpoint is None:
+                        self.protocol.attach(self.adapter)
+                    else:
+                        self.protocol.rebind(self.adapter)
+                    if self.restart_checkpoint is None:
+                        self.observables = self.adapter.observe(self.protocol.observables)
+                        self._save_boundaries(output)
+                    else:
+                        # Contact stress is refreshed by the next solver step.
+                        # Use the exact checkpoint measurement for the first actuation.
+                        self.observables = dict(self.restart_checkpoint['metadata']['observables'])
+                        if self.protocol.done:
+                            self._save_boundaries(output)
             finally:
                 (output / "resolved_parameters.json").write_text(
                     self.DEM_parameters.PrettyPrintJsonString(), encoding="utf-8")
@@ -90,6 +129,8 @@ def main():
             if self.protocol is not None:
                 stage_path = self.protocol.path
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
+                if self.protocol.restored:
+                    return
                 stage_exited = self.protocol.stage_exited
                 sampled = self.completed_steps % execution['protocol']['sample_every'] == 0
                 if sampled or stage_exited:
@@ -165,6 +206,9 @@ def main():
                         accepted_stream.write(json.dumps(record, allow_nan=False) + "\n")
 
         def Finalize(self):
+            if self.rollback_checkpoint is not None:
+                super().Finalize()
+                return
             self.final_state = {
                 "time": self.time,
                 "box": self.adapter.box() if self.adapter else {
@@ -176,20 +220,36 @@ def main():
             write_state(output, self._particle_arrays(), **self.final_state)
             super().Finalize()
 
-    parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
-    analysis = JPGenAnalysis(KM.Model(), parameters)
-    analysis.Run()
+    runner = None
+    checkpoint = None
+    while True:
+        parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
+        if checkpoint is not None:
+            parameters["solver_settings"]["model_import_settings"]["input_type"].SetString("rest")
+            box = checkpoint['metadata']['box']
+            for axis, letter in enumerate('XYZ'):
+                parameters[f'BoundingBoxMin{letter}'].SetDouble(box['origin'][axis])
+                parameters[f'BoundingBoxMax{letter}'].SetDouble(box['origin'][axis] + box['lengths'][axis])
+        analysis = JPGenAnalysis(KM.Model(), parameters, runner, checkpoint)
+        analysis.Run()
+        if analysis.rollback_checkpoint is None:
+            break
+        runner = analysis.protocol
+        checkpoint = analysis.rollback_checkpoint
     (output / "execution_report.json").write_text(json.dumps({
         "steps": analysis.completed_steps,
-        "stop_reason": ("max_duration" if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",
+        "stop_reason": (analysis.protocol.stop_reason if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",
         "time": analysis.final_state["time"],
         "time_step": {"mode": "fixed", "value": execution["end_time"] / execution["steps"]},
         "completed_stages": analysis.protocol.completed_stages if analysis.protocol else 0,
         "accepted_targets": analysis.protocol.accepted_targets if analysis.protocol else 0,
+        "attempted_duration": analysis.protocol.attempted_steps * analysis.protocol.dt if analysis.protocol else 0.0,
+        "diagnostics": analysis.protocol.diagnostics if analysis.protocol else {},
         "failed_stage": analysis.protocol.failed_stage if analysis.protocol else None,
         "observables": analysis.observables,
         "control": {"implementation": "jpgen_portable",
-                    "actuators": ["cell_strain_rate", "symmetric_wall_velocity"]},
+                    "actuators": ["cell_strain_rate", "symmetric_wall_velocity"],
+                    "unbalanced_force_definition": "RMS particle force imbalance / RMS contact force; excludes moments; zero without contacts"},
         "versions": {"kratos": KM.Kernel.Version(), "python": platform.python_version()},
     }, indent=2), encoding="utf-8")
 

@@ -31,6 +31,10 @@ def validate_execution_report(case: DemCase, report: ExecutionReport) -> None:
         else:
             if type(report.completed_stages) is not int or report.completed_stages < 1:
                 raise ValueError("Invalid completed protocol stage count.")
+            density_failures = {'relaxation_failed', 'resolution_limit', 'friction_limit',
+                                'target_below_initial_density', 'attempt_limit'}
+            if report.stop_reason in density_failures:
+                raise DemExecutionError(f"Density stage {report.failed_stage} failed: {report.stop_reason}.")
             if report.stop_reason == "max_duration":
                 if not isinstance(report.failed_stage, str) or not report.failed_stage:
                     raise ValueError("Missing failed protocol stage.")

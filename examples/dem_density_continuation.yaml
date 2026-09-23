@@ -1,0 +1,94 @@
+# Small deterministic execution example; thresholds are illustrative, not a calibrated material.
+packing:
+  sizing_method: fixed_count
+  count: 64
+  seed: 20260917
+  exports: []
+  box:
+    origin:
+    - 0.0
+    - 0.0
+    - 0.0
+    lengths:
+    - 0.02
+    - 0.02
+    - 0.02
+    periodic: true
+  radii:
+    type: constant
+    value: 0.0024
+  velocity:
+    type: constant
+    value: 0.0
+  placement:
+    method: random_sequential
+    max_overlap: 0.3
+    position_attempts: 10000
+dem:
+  engine: kratos
+  material:
+    density: 2500.0
+    young_modulus: 10000000.0
+    poisson_ratio: 0.25
+  contact:
+    model: hertz_viscous_coulomb
+    static_friction: 0.5
+    dynamic_friction: 0.4
+    friction_decay: 500.0
+    restitution: 0.2
+  boundary: periodic
+  gravity:
+  - 0.0
+  - 0.0
+  - 0.0
+  time_step: 1.0e-05
+  backend_options:
+    threads: 1
+    timeout_seconds: 120.0
+  protocol:
+    sample_every: 1
+    stages:
+    - name: density_continuation_demo
+      control:
+        type: density_continuation
+        targets:
+        - 0.4640815319774829
+        - 0.4647787697395637
+        density_atol: 0.00015
+        confinement:
+          target_pressure: 100000000.0
+          pressure_rtol: 1.0
+          max_velocity: 0.1
+        friction:
+          min_factor: 0.0
+          initial_decrement: 0.05
+          min_decrement: 0.0001
+          max_decrement: 0.1
+          safety_factor: 0.5
+          growth_factor: 1.5
+          retry_factor: 0.5
+        relaxation:
+          max_duration: 0.001
+          condition:
+            all:
+            - observable: kinetic_energy
+              op: below
+              value: 100000.0
+            - observable: unbalanced_force
+              op: below
+              value: 100000.0
+            hold_for: 2.0e-05
+          density_stability:
+            window: 2.0e-05
+            max_range: 0.1
+        limits:
+          max_attempts: 10
+          max_retries_per_increment: 3
+        snapshots:
+          mode: equilibrated
+          include_restart: true
+      until:
+        observable: density_targets_completed
+        op: above
+        value: 2
+      max_duration: 0.01

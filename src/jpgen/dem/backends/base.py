@@ -24,6 +24,9 @@ class DemCapabilities:
     native_restart_export: bool = False
     state_restore: bool = False
     contact_parameter_updates: bool = False
+    contact_history_checkpoint: bool = False
+    rollback: bool = False
+    target_publication: bool = False
 
     def validate(self, plan) -> None:
         from ..protocol import control_types, required_actuator_commands, required_observables
@@ -39,7 +42,16 @@ class DemCapabilities:
             return
         if not self.particle_snapshots:
             raise ConfigurationError(f"Backend {plan.backend.name} cannot export protocol boundary snapshots.")
-        unsupported_controls = control_types(plan.protocol["stages"]) - self.controls
+        controls = control_types(plan.protocol["stages"])
+        if 'density_continuation' in controls:
+            required = ('state_restore', 'contact_parameter_updates',
+                        'contact_history_checkpoint', 'rollback',
+                        'target_publication', 'native_restart_export')
+            missing = [name for name in required if not getattr(self, name)]
+            if missing:
+                raise ConfigurationError(f"Backend {plan.backend.name} cannot run density_continuation: "
+                                         f"missing {', '.join(missing)}.")
+        unsupported_controls = controls - self.controls
         if unsupported_controls:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support controls: "
                                      f"{', '.join(sorted(unsupported_controls))}.")
@@ -65,6 +77,9 @@ class DemCapabilities:
             "native_restart_export": self.native_restart_export,
             "state_restore": self.state_restore,
             "contact_parameter_updates": self.contact_parameter_updates,
+            "contact_history_checkpoint": self.contact_history_checkpoint,
+            "rollback": self.rollback,
+            "target_publication": self.target_publication,
         }
 
 
@@ -81,18 +96,24 @@ class DemControlPort(Protocol):
 
 
 class DemContinuationPort(Protocol):
-    """Future stateful paths require complete, equivalent solver restoration.
+    """Stateful paths require complete, equivalent solver restoration.
 
     A checkpoint includes integrator, contact history, cell, active material
     parameters and protocol-local state. Exporting a native restart alone does
     not satisfy this contract.
     """
 
-    def checkpoint(self) -> object: ...
+    def checkpoint(self, stage: str, physical_step: int, time: float, observables: dict) -> object: ...
 
     def restore(self, checkpoint: object) -> None: ...
 
+    def friction(self) -> tuple[float, float]: ...
+
     def set_friction(self, static: float, dynamic: float) -> None: ...
+
+    def publish_target(self, checkpoint: object, metadata: dict) -> None: ...
+
+    def log_attempt(self, record: dict) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -110,6 +131,8 @@ class ExecutionReport:
     stop_reason: str = "end_time"
     completed_stages: int = 0
     accepted_targets: int = 0
+    attempted_duration: float = 0.0
+    diagnostics: dict = field(default_factory=dict)
     failed_stage: str | None = None
     observables: dict = field(default_factory=dict)
     time: float | None = None

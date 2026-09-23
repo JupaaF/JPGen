@@ -1,0 +1,136 @@
+diff --git a/applications/DEMApplication/custom_elements/spheric_particle.cpp b/applications/DEMApplication/custom_elements/spheric_particle.cpp
+index 5ec59c9507..928f35417e 100644
+--- a/applications/DEMApplication/custom_elements/spheric_particle.cpp
++++ b/applications/DEMApplication/custom_elements/spheric_particle.cpp
+@@ -190,6 +190,20 @@ void SphericParticle::Initialize(const ProcessInfo& r_process_info)
+ {
+     KRATOS_TRY
+ 
++    // A DEM restart already contains nodal rotation, contact-force history and
++    // neighbour bookkeeping. Rebuild only the runtime integration objects;
++    // the ordinary initialization below would erase the restored state.
++    if (r_process_info[IS_RESTARTED]) {
++        DEMIntegrationScheme::Pointer& translational_scheme = GetProperties()[DEM_TRANSLATIONAL_INTEGRATION_SCHEME_POINTER];
++        DEMIntegrationScheme::Pointer& rotational_scheme = GetProperties()[DEM_ROTATIONAL_INTEGRATION_SCHEME_POINTER];
++        SetIntegrationScheme(translational_scheme, rotational_scheme);
++        if (this->Is(DEMFlags::HAS_GLOBAL_DAMPING)) {
++            mGlobalDampingModel = pCloneGlobalDampingModel(this);
++            mGlobalDampingModel->mGlobalDamping = r_process_info[GLOBAL_DAMPING];
++        }
++        return;
++    }
++
+     this->mInitializationTime = r_process_info[TIME];
+     this->mIndentationInitialOption = r_process_info[CLEAN_INDENT_V2_OPTION];
+ 
+diff --git a/applications/DEMApplication/custom_python/DEM_python_application.cpp b/applications/DEMApplication/custom_python/DEM_python_application.cpp
+index cc343b9845..32c4a34438 100644
+--- a/applications/DEMApplication/custom_python/DEM_python_application.cpp
++++ b/applications/DEMApplication/custom_python/DEM_python_application.cpp
+@@ -27,6 +27,7 @@ using namespace pybind11;
+ 
+ PYBIND11_MODULE(KratosDEMApplication,m)
+ {
++    m.attr("JPGEN_DENSITY_RESTART_VERSION") = 1;
+     class_<KratosDEMApplication, KratosDEMApplication::Pointer, KratosApplication>(m, "KratosDEMApplication")
+         .def(init<>());
+         ;
+diff --git a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
+index 347016704c..62bbaa82d5 100644
+--- a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
++++ b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
+@@ -165,23 +165,9 @@ namespace Kratos {
+         RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().LocalMesh().Elements(), mListOfSphericParticles);
+         RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().GhostMesh().Elements(), mListOfGhostSphericParticles);
+ 
+-        InitializeSolutionStep();
+-        ApplyInitialConditions();
+-
+-        // Search Neighbours and related operations
+-        SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT], 1.0);
+-        SearchNeighbours();
+-        ComputeNewNeighboursHistoricalData();
+-
+-        SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT_FOR_WALLS], 1.0);
+-        SearchRigidFaceNeighbours(); //initial search is performed with hierarchical method in any case MSI
+-        ComputeNewRigidFaceNeighboursHistoricalData();
+-
+-        if (mRemoveBallsInitiallyTouchingWallsOption) {
+-            MarkToDeleteAllSpheresInitiallyIndentedWithFEM(*mpDem_model_part);
+-            mpParticleCreatorDestructor->DestroyParticles<SphericParticle>(r_model_part);
+-            RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().LocalMesh().Elements(), mListOfSphericParticles);
+-            RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().GhostMesh().Elements(), mListOfGhostSphericParticles);
++        if (!r_process_info[IS_RESTARTED]) {
++            InitializeSolutionStep();
++            ApplyInitialConditions();
+ 
+             // Search Neighbours and related operations
+             SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT], 1.0);
+@@ -191,24 +177,41 @@ namespace Kratos {
+             SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT_FOR_WALLS], 1.0);
+             SearchRigidFaceNeighbours(); //initial search is performed with hierarchical method in any case MSI
+             ComputeNewRigidFaceNeighboursHistoricalData();
+-        }
+ 
+-        AttachSpheresToStickyWalls();
++            if (mRemoveBallsInitiallyTouchingWallsOption) {
++                MarkToDeleteAllSpheresInitiallyIndentedWithFEM(*mpDem_model_part);
++                mpParticleCreatorDestructor->DestroyParticles<SphericParticle>(r_model_part);
++                RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().LocalMesh().Elements(), mListOfSphericParticles);
++                RebuildListOfSphericParticles<SphericParticle>(r_model_part.GetCommunicator().GhostMesh().Elements(), mListOfGhostSphericParticles);
+ 
+-        if (r_process_info[CONTACT_MESH_OPTION] == 1) {
+-            CreateContactElements();
+-            InitializeContactElements();
+-        }
++                // Search Neighbours and related operations
++                SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT], 1.0);
++                SearchNeighbours();
++                ComputeNewNeighboursHistoricalData();
+ 
+-        //set flag to 2 (search performed this timestep)
+-        mSearchControl = 2;
++                SetSearchRadiiOnAllParticles(*mpDem_model_part, mpDem_model_part->GetProcessInfo()[SEARCH_RADIUS_INCREMENT_FOR_WALLS], 1.0);
++                SearchRigidFaceNeighbours(); //initial search is performed with hierarchical method in any case MSI
++                ComputeNewRigidFaceNeighboursHistoricalData();
++            }
+ 
+-        // Finding overlapping of initial configurations
+-        if (r_process_info[CLEAN_INDENT_OPTION]) {
+-            for (int i = 0; i < 10; i++) CalculateInitialMaxIndentations(r_process_info);
+-        }
++            AttachSpheresToStickyWalls();
++
++            if (r_process_info[CONTACT_MESH_OPTION] == 1) {
++                CreateContactElements();
++                InitializeContactElements();
++            }
+ 
+-        //FinalizeSolutionStep();
++            //set flag to 2 (search performed this timestep)
++            mSearchControl = 2;
++
++            // Finding overlapping of initial configurations
++            if (r_process_info[CLEAN_INDENT_OPTION]) {
++                for (int i = 0; i < 10; i++) CalculateInitialMaxIndentations(r_process_info);
++            }
++
++            //FinalizeSolutionStep();
++
++        }
+ 
+         ComputeNodalArea();
+ 
+@@ -1486,6 +1489,12 @@ namespace Kratos {
+                     current_neighbours.push_back(neighbours_to_add[l]);
+                 }
+             }
++            // A restored ModelPart can have a different container traversal order.
++            // Keep contact-force accumulation reproducible across restarts.
++            std::sort(current_neighbours.begin(), current_neighbours.end(),
++                      [](const SphericParticle* a, const SphericParticle* b) {
++                          return a->Id() < b->Id();
++                      });
+         }
+         KRATOS_CATCH("")
+     }

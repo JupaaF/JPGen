@@ -14,7 +14,8 @@ else:
     from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'unbalanced_force', 'solid_fraction', 'bulk_density',
-               'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz'}
+               'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz',
+               'density_targets_completed'}
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
 CONTACT_OBSERVABLES = STRESS_OBSERVABLES | {'unbalanced_force'}
 
@@ -41,6 +42,79 @@ def _count(value):
         raise ValueError('Repeat must be a positive integer.')
     return value
 
+
+
+def _density_control(control, dt):
+    _mapping(control, {'type', 'targets', 'density_atol', 'confinement', 'friction',
+                       'relaxation', 'limits', 'snapshots'},
+             {'type', 'targets', 'density_atol', 'confinement', 'friction',
+              'relaxation', 'limits', 'snapshots'})
+    targets = control['targets']
+    if not isinstance(targets, list) or not targets or len(targets) > 100000:
+        raise ValueError('density_continuation needs 1 to 100000 targets.')
+    atol = _number(control['density_atol'], 0, True)
+    previous = None
+    for target in targets:
+        _number(target, 0, True)
+        if previous is not None and target - previous <= 2 * atol:
+            raise ValueError('Density targets must increase by more than twice density_atol.')
+        previous = target
+    confinement = control['confinement']
+    _mapping(confinement, {'target_pressure', 'pressure_rtol', 'max_velocity',
+                           'loading_factor', 'update_every_steps'},
+             {'target_pressure', 'pressure_rtol', 'max_velocity'})
+    _number(confinement['target_pressure'], 0, True)
+    _number(confinement['pressure_rtol'], 0, True)
+    servo = {'type': 'stress_servo', 'mode': 'isotropic',
+             'target_pressure': confinement['target_pressure'],
+             'max_velocity': confinement['max_velocity'],
+             'loading_factor': confinement.get('loading_factor', DEFAULT_SERVO_LOADING_FACTOR),
+             'update_every_steps': confinement.get('update_every_steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS)}
+    validate_control(servo)
+    confinement['loading_factor'] = servo['loading_factor']
+    confinement['update_every_steps'] = servo['update_every_steps']
+    friction = control['friction']
+    _mapping(friction, {'min_factor', 'initial_decrement', 'min_decrement',
+                        'max_decrement', 'safety_factor', 'growth_factor', 'retry_factor'},
+             {'min_factor', 'initial_decrement', 'min_decrement', 'max_decrement',
+              'safety_factor', 'growth_factor', 'retry_factor'})
+    minimum = _number(friction['min_factor'], 0)
+    if minimum >= 1:
+        raise ValueError('min_factor must be below 1.')
+    for key in ('initial_decrement', 'min_decrement', 'max_decrement'):
+        _number(friction[key], 0, True)
+    if not friction['min_decrement'] <= friction['initial_decrement'] <= friction['max_decrement'] <= 1:
+        raise ValueError('Require min_decrement <= initial_decrement <= max_decrement <= 1.')
+    for key in ('safety_factor', 'retry_factor'):
+        value = _number(friction[key], 0, True)
+        if value >= 1:
+            raise ValueError(f'{key} must be below 1.')
+    _number(friction['growth_factor'], 1)
+    relaxation = control['relaxation']
+    _mapping(relaxation, {'max_duration', 'condition', 'density_stability'},
+             {'max_duration', 'condition', 'density_stability'})
+    attempt_duration = _number(relaxation['max_duration'], dt)
+    validate_condition(relaxation['condition'])
+    leaves = relaxation['condition'].get('all')
+    if (not isinstance(leaves, list) or
+            not {'kinetic_energy', 'unbalanced_force'} <=
+            {leaf.get('observable') for leaf in leaves if isinstance(leaf, dict) and leaf.get('op') == 'below'}):
+        raise ValueError('Density relaxation must combine kinetic_energy and unbalanced_force with all.')
+    stability = relaxation['density_stability']
+    _mapping(stability, {'window', 'max_range'}, {'window', 'max_range'})
+    if _number(stability['window'], dt) > attempt_duration:
+        raise ValueError('Density stability window exceeds relaxation duration.')
+    _number(stability['max_range'], 0, True)
+    if relaxation['condition'].get('hold_for', 0) > attempt_duration:
+        raise ValueError('Relaxation hold_for exceeds max_duration.')
+    limits = control['limits']
+    _mapping(limits, {'max_attempts', 'max_retries_per_increment'},
+             {'max_attempts', 'max_retries_per_increment'})
+    _count(limits['max_attempts'])
+    _count(limits['max_retries_per_increment'])
+    _mapping(control['snapshots'], {'mode', 'include_restart'}, {'mode', 'include_restart'})
+    if control['snapshots'] != {'mode': 'equilibrated', 'include_restart': True}:
+        raise ValueError('Density continuation requires equilibrated snapshots with restart.')
 
 def _nonnegative_count(value):
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -229,6 +303,9 @@ def validate_control(control):
             raise ValueError('rate requires three strain rates in 1/s.')
         for value in control['rate']:
             _number(value)
+    elif kind == 'density_continuation':
+        # The time-step-dependent checks are performed by validate_protocol.
+        _density_control(control, 0.0)
     elif kind == 'stress_servo':
         legacy = set(control) & {'gain', 'max_strain_rate'}
         if legacy:
@@ -275,8 +352,11 @@ def validate_protocol(raw, dt, boundary):
                 budget += validate_path(stage['path'], dt, boundary)
                 continue
             _mapping(stage, {'name', 'control', 'until', 'max_duration'}, {'control', 'until', 'max_duration'})
-            validate_control(stage['control'])
             control = stage['control']
+            if isinstance(control, dict) and control.get('type') == 'density_continuation':
+                _density_control(control, dt)
+            else:
+                validate_control(control)
             rates = control.get('rate', [])
             if any(abs(rate * dt) > 0.01 for rate in rates):
                 raise ValueError('Controller permits more than 1% cell strain per step; reduce time_step or rate.')
@@ -285,6 +365,16 @@ def validate_protocol(raw, dt, boundary):
             if stage['until'].get('min_duration', 0) > duration or stage['until'].get('hold_for', 0) > duration:
                 raise ValueError('Condition duration exceeds stage max_duration.')
             required = condition_observables(stage['until'])
+            if control['type'] == 'density_continuation':
+                if (stage['until'] != {'observable': 'density_targets_completed',
+                                       'op': 'above', 'value': len(control['targets'])}):
+                    raise ValueError('density_continuation until must require all density targets.')
+                if boundary != 'periodic':
+                    raise ValueError('density_continuation requires periodic boundaries.')
+                if control['relaxation']['max_duration'] > duration:
+                    raise ValueError('Relaxation max_duration exceeds stage max_duration.')
+            elif 'density_targets_completed' in required:
+                raise ValueError('density_targets_completed is local to density_continuation.')
             if boundary != 'periodic' and (stage['control']['type'] != 'free_evolution' or required & (STRESS_OBSERVABLES | {'solid_fraction', 'bulk_density'})):
                 raise ValueError('Cell control, stress and density conditions require periodic boundaries.')
             budget += duration_steps(duration, dt)
@@ -315,7 +405,8 @@ def path_target_count(stages):
     """Count accepted targets expected from all paths in a successful protocol."""
     return sum((stage.get('repeat', 1) * path_target_count(stage['stages'])
                 if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 1
-                if 'path' in stage else 0) for stage in stages)
+                if 'path' in stage else len(stage['control']['targets'])
+                if stage['control']['type'] == 'density_continuation' else 0) for stage in stages)
 
 
 def iter_stages(stages, prefix=''):
@@ -358,7 +449,10 @@ def required_observables(stages):
             if stage['path']['control'].get('mode') == 'anisotropic':
                 result |= {'stress_xx', 'stress_yy', 'stress_zz'}
         else:
-            result |= condition_observables(stage['until'])
+            result |= condition_observables(stage['until']) - {'density_targets_completed'}
+            if stage['control']['type'] == 'density_continuation':
+                result |= {'solid_fraction', 'pressure', 'kinetic_energy', 'unbalanced_force'} | STRESS_OBSERVABLES
+                result |= condition_observables(stage['control']['relaxation']['condition'])
             if stage['control']['type'] == 'stress_servo':
                 result |= ({'pressure'} if stage['control']['mode'] == 'isotropic'
                            else {'stress_xx', 'stress_yy', 'stress_zz'})
@@ -379,6 +473,7 @@ def control_types(stages):
 
 def required_actuator_commands(stages):
     commands = {'stress_servo': 'symmetric_wall_velocity',
+                'density_continuation': 'symmetric_wall_velocity',
                 'strain_rate': 'cell_strain_rate'}
     return {commands[kind] for kind in control_types(stages) if kind != 'free_evolution'}
 
@@ -393,6 +488,8 @@ def maximum_servo_velocity(stages):
             result = max(result, stage['path']['control']['max_velocity'])
         elif stage['control']['type'] == 'stress_servo':
             result = max(result, stage['control']['max_velocity'])
+        elif stage['control']['type'] == 'density_continuation':
+            result = max(result, stage['control']['confinement']['max_velocity'])
     return result
 
 
@@ -470,19 +567,74 @@ class ProtocolRunner:
         self.dt = dt
         self.time = 0.0
         self.iterator = iter_stage_boundaries(protocol['stages'])
+        self.iterator_position = 0
         self.pending_boundaries = []
         self.completed_stages = 0
         self.accepted_targets = 0
+        self.density_published_targets = 0
         self.failed_stage = None
         self.stage_exited = False
-        self.steps = 0
+        self.steps = 0  # Physical steps on the accepted branch.
+        self.attempted_steps = 0  # Every integrated step, including discarded work.
         self.done = False
         self.failed = False
+        self.stop_reason = None
+        self.diagnostics = {}
+        self.restored = False
+        self.checkpoint_serial = 0
+        self.port = None
+        self.density = None
         self._enter()
+
+    def state(self):
+        """Save the stage cursor and condition history with the solver checkpoint."""
+        def condition_state(condition):
+            return {'since': condition.since,
+                    'children': [condition_state(child) for child in condition.children]}
+
+        accepted = (self.density.start_accepted_targets + self.density.target_index
+                    if self.density is not None else self.accepted_targets)
+        published = (self.density.start_published_targets + self.density.target_index
+                     if self.density is not None else self.density_published_targets)
+        return {'iterator_position': self.iterator_position, 'path': self.path,
+                'stage': self.stage, 'steps': self.steps, 'time': self.time,
+                'attempted_steps': self.attempted_steps,
+                'completed_stages': self.completed_stages,
+                'accepted_targets': accepted,
+                'density_published_targets': published,
+                'start_step': self.start_step, 'start_time': self.start_time,
+                'condition': condition_state(self.condition),
+                'density': self.density.state() if self.density is not None else None}
+
+    def attach(self, port):
+        """Attach a live solver after its own initialization has completed."""
+        self.port = port
+        self._start_density()
+
+    def rebind(self, port):
+        """Continue an accepted protocol branch with a freshly loaded solver."""
+        self.port = port
+        if self.density is not None:
+            self.density.port = port
+            port.set_friction(self.density.static_entry * self.density.factor,
+                              self.density.dynamic_entry * self.density.factor)
+
+    def _start_density(self):
+        if self.port is None or self.stage['control']['type'] != 'density_continuation':
+            return
+        if __package__:
+            from .density_continuation import DensityContinuation
+        else:
+            from density_continuation import DensityContinuation
+        self.density = DensityContinuation(self.stage['control'], self.dt, self.port,
+                                           self.path, self.start_step, self.start_time, self.limit,
+                                           self.accepted_targets, self.density_published_targets)
 
     def _enter(self):
         while True:
             item = next(self.iterator, None)
+            if item is not None:
+                self.iterator_position += 1
             if item is None:
                 self.done = True
                 return
@@ -494,18 +646,25 @@ class ProtocolRunner:
             self._record_boundary('block', 'start' if kind == 'block_start' else 'end', path)
         self.start_step = self.steps
         self.start_time = self.time
-        self.observables = required_observables([self.stage]) - {'time', 'stage_time'}
+        self.observables = required_observables([self.stage]) - {'time', 'stage_time', 'density_targets_completed'}
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
+        self.density = None
+        self._start_density()
 
     def _record_boundary(self, kind, phase, path, *, accepted=None, values=None):
         event = {'kind': kind, 'phase': phase, 'path': path,
                  'step': self.steps, 'time': self.time}
-        if kind == 'stage' and '_path_target' in self.stage:
-            event['target'] = self.stage['_path_target']
+        if kind == 'stage' and ('_path_target' in self.stage or
+                                self.stage['control']['type'] == 'density_continuation'):
+            if '_path_target' in self.stage:
+                event['target'] = self.stage['_path_target']
             if phase == 'end':
                 event['accepted'] = accepted
                 event['observables'] = values
+                if self.density is not None:
+                    event['attempted_duration'] = self.density.attempted_duration
+                    event['failure'] = self.density.failure
         self.pending_boundaries.append(event)
 
     def take_boundaries(self):
@@ -515,6 +674,8 @@ class ProtocolRunner:
 
     def act(self, values, context=None) -> ActuatorCommand:
         control = self.stage['control']
+        if self.density is not None:
+            return self.density.act(values, context, self.steps)
         if (control['type'] == 'stress_servo' and
                 (self.steps - self.start_step + 1) % control['update_every_steps'] != 0):
             return NoActuation()
@@ -522,10 +683,42 @@ class ProtocolRunner:
 
     def advance(self, values):
         self.stage_exited = False
+        self.restored = False
         self.steps += 1
+        self.attempted_steps += 1
         self.time = self.steps * self.dt
         elapsed = self.time - self.start_time
         values = dict(values, time=self.time, stage_time=elapsed)
+        if self.density is not None:
+            outcome = self.density.advance(values, self.steps, self.time)
+            if 'accepted_target' in outcome:
+                self.accepted_targets += 1
+                self.density_published_targets += 1
+            values['density_targets_completed'] = self.density.target_index
+            if 'restore' in outcome:
+                self.steps, self.time = outcome['restore']
+                self.restored = True
+            if self.density.done:
+                self.stage_exited = True
+                self.completed_stages += 1
+                self._record_boundary('stage', 'end', self.path,
+                                      accepted=self.density.failure is None, values=values)
+                if self.density.failure is not None:
+                    self.failed = self.done = True
+                    self.failed_stage = self.path
+                    self.stop_reason = self.density.failure
+                    self.diagnostics = {
+                        'target_index': self.density.target_index + 1,
+                        'target': self.density.control['targets'][self.density.target_index],
+                        'attempts': self.density.attempts,
+                        'retries': self.density.retries,
+                        'factor': self.density.factor,
+                        'last_equilibrated_interval': self.density.last_interval,
+                        'attempted_duration': self.density.attempted_duration,
+                    }
+                else:
+                    self._enter()
+            return values
         reached = self.condition.evaluate(values, elapsed, self.dt)
         expired = self.steps - self.start_step >= self.limit
         if reached or expired:
@@ -535,6 +728,7 @@ class ProtocolRunner:
             if not reached:
                 self.failed = self.done = True
                 self.failed_stage = self.path
+                self.stop_reason = 'max_duration'
             else:
                 if '_path_target' in self.stage:
                     self.accepted_targets += 1
