@@ -6,7 +6,7 @@ import yaml
 from ..dem.protocol import (
     OBSERVABLES, STRESS_OBSERVABLES, validate_protocol,
     DEFAULT_SERVO_MAX_VELOCITY, DEFAULT_SERVO_LOADING_FACTOR,
-    DEFAULT_SERVO_UPDATE_EVERY_STEPS,
+    DEFAULT_SERVO_UPDATE_EVERY_STEPS, path_targets,
 )
 from .questions import MenuChoice, Question
 from .timestep import build_time_step
@@ -44,6 +44,13 @@ def _positive_integer(value, _answers):
     result = int(value)
     if result < 1:
         raise ValueError('Enter a positive integer.')
+    return result
+
+
+def _nonnegative_integer(value, _answers):
+    result = int(value)
+    if result < 0 or str(result) != str(value).strip():
+        raise ValueError('Enter a nonnegative integer.')
     return result
 
 
@@ -117,14 +124,25 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
                                    explanation='Number of stages or repeat blocks to execute in order within this sequence. Enter an integer from 1 to 100; a repeat block counts as one piece here.')]
     for index in range(answers.get(prefix + '.count', 1)):
         key = f'{prefix}.{index}'
-        questions.append(_question(key + '.kind', f'Piece {index + 1}', 'stage', choices=[('Simulation stage', 'stage'), ('Repeat a sequence', 'repeat')],
-                                   explanation='A simulation stage combines a controller with a stopping condition. A repeat block runs a nested sequence several times, for example alternating loading and unloading stages.'))
+        path_available = (periodic and capabilities is not None
+                          and 'stress_servo' in capabilities.controls
+                          and {'pressure', 'kinetic_energy', 'unbalanced_force'} <= capabilities.observables
+                          and 'symmetric_wall_velocity' in capabilities.actuator_commands
+                          and capabilities.particle_snapshots)
+        kinds = [('Simulation stage', 'stage'), ('Repeat a sequence', 'repeat')]
+        if path_available:
+            kinds.append(('Equilibrated pressure path', 'path'))
+        questions.append(_question(key + '.kind', f'Piece {index + 1}', 'stage', choices=kinds,
+                                   explanation='Choose one stage, a repeated sequence, or a pressure path that saves each equilibrated target before moving to the next.'))
         questions.append(_question(key + '.name', 'Piece name', f'stage_{index + 1}', parser=lambda v, _: v.strip(),
                                    explanation='Give this stage or repeat block a nonempty descriptive name. The name appears in the saved configuration and in the failed-stage diagnostic when applicable.'))
         if answers.get(key + '.kind') == 'repeat':
             questions.append(_question(key + '.repeat', 'Number of repetitions', 10, _positive_integer,
                                    explanation='Number of times to execute the entire nested sequence, including the first pass. Each pass keeps the physical state from the previous one, while stage time and condition timers restart.'))
             questions.extend(_stage_questions(answers, key + '.children', periodic, depth + 1, capabilities))
+            continue
+        if answers.get(key + '.kind') == 'path':
+            questions.extend(_pressure_path_questions(key))
             continue
         controllers = [('Free evolution (fixed current cell)', 'free_evolution')]
         if periodic:
@@ -192,6 +210,36 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
     return questions
 
 
+def _pressure_path_questions(key):
+    return [
+        _question(key + '.path.start', 'Start pressure reference (Pa)', 5000.0, _positive_float,
+                  explanation='Positive spacing reference. Prepare and equilibrate this initial state separately; the path does not verify or save it.'),
+        _question(key + '.path.end', 'Final pressure (Pa)', 200000.0, _positive_float,
+                  explanation='Positive final servo target, included among the saved states.'),
+        _question(key + '.path.intermediate_states', 'Intermediate equilibrated states', 20, _nonnegative_integer,
+                  explanation='Number of saved targets strictly between start and end. The final target adds one more state.'),
+        _question(key + '.path.spacing', 'Target spacing', 'log',
+                  choices=[('Logarithmic', 'log'), ('Linear', 'linear')],
+                  explanation='Logarithmic spacing gives equal pressure ratios; linear spacing gives equal pressure differences.'),
+        _question(key + '.path.max_velocity', 'Maximum wall velocity (m/s)', DEFAULT_SERVO_MAX_VELOCITY, _positive_float,
+                  explanation='Positive velocity limit for the isotropic pressure servo.'),
+        _question(key + '.path.loading_factor', 'Servo loading factor', DEFAULT_SERVO_LOADING_FACTOR, _positive_float,
+                  explanation='Positive multiplier on the pressure-error response.'),
+        _question(key + '.path.update_every_steps', 'Move cell every N steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS, _positive_integer,
+                  explanation='Each target starts its own update counter; the cell moves on step N.'),
+        _question(key + '.path.target_rtol', 'Pressure relative tolerance', 0.01, _positive_float,
+                  explanation='The measured pressure must remain within this fraction of the current target.'),
+        _question(key + '.path.kinetic_energy_below', 'Kinetic energy threshold (J)', 1e-8, _positive_float,
+                  explanation='Require total translational and rotational kinetic energy below this threshold.'),
+        _question(key + '.path.unbalanced_force_below', 'Unbalanced force threshold', 1e-3, _positive_float,
+                  explanation='Require dimensionless force imbalance below this threshold.'),
+        _question(key + '.path.hold_for', 'Hold all conditions for (s)', 0.005, _positive_float,
+                  explanation='The pressure, energy and force conditions must remain true together for this simulated duration.'),
+        _question(key + '.path.max_duration_per_target', 'Maximum duration per target (s)', 1.0, _positive_float,
+                  explanation='Stop the sequence with diagnostics if one target does not equilibrate in this time.'),
+    ]
+
+
 def build_protocol(answers, prefix='dem.protocol'):
     stages = []
     for index in range(answers[prefix + '.count']):
@@ -199,6 +247,20 @@ def build_protocol(answers, prefix='dem.protocol'):
         stage = {'name': answers[key + '.name']}
         if answers[key + '.kind'] == 'repeat':
             stage.update(repeat=answers[key + '.repeat'], stages=build_protocol(answers, key + '.children')['stages'])
+        elif answers[key + '.kind'] == 'path':
+            value = lambda field: answers[key + '.path.' + field]
+            stage['path'] = {
+                'observable': 'pressure',
+                'targets': {'start': value('start'), 'end': value('end'),
+                            'intermediate_states': value('intermediate_states'), 'spacing': value('spacing')},
+                'control': {'type': 'stress_servo',
+                            **{field: value(field) for field in ('max_velocity', 'loading_factor', 'update_every_steps')}},
+                'acceptance': {'target_rtol': value('target_rtol'),
+                               'kinetic_energy_below': value('kinetic_energy_below'),
+                               'unbalanced_force_below': value('unbalanced_force_below'),
+                               'hold_for': value('hold_for')},
+                'max_duration_per_target': value('max_duration_per_target'),
+            }
         else:
             control = {'type': answers[key + '.control']}
             if control['type'] == 'strain_rate':
@@ -228,3 +290,28 @@ def build_protocol(answers, prefix='dem.protocol'):
             stage.update(control=control, until=until, max_duration=answers[key + '.max_duration'])
         stages.append(stage)
     return {'stages': stages, 'sample_every': answers.get(prefix + '.sample_every', 100)}
+
+
+def pressure_path_previews(stages):
+    """Render resolved targets for interactive review without expanding YAML."""
+    lines = []
+
+    def visit(pieces, prefix=''):
+        for piece in pieces:
+            label = prefix + piece.get('name', 'path')
+            if 'stages' in piece:
+                visit(piece['stages'], label + '/')
+            elif 'path' in piece and piece['path']['observable'] == 'pressure':
+                targets = piece['path']['targets']
+                values = list(path_targets(targets))
+                lines.append(f"{label}: {len(values)} pressure targets (Pa)")
+                if len(values) <= 30:
+                    shown = enumerate(values, 1)
+                else:
+                    shown = list(enumerate(values[:10], 1)) + [(len(values), values[-1])]
+                for index, value in shown:
+                    if len(values) > 30 and index == len(values):
+                        lines.append('  ...')
+                    lines.append(f"  {index}: {value:.9g}")
+    visit(stages)
+    return '\n'.join(lines)

@@ -42,6 +42,97 @@ def _count(value):
     return value
 
 
+def _nonnegative_count(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError('intermediate_states must be a nonnegative integer.')
+    return value
+
+
+def path_targets(specification):
+    """Yield targets after the starting state, including the exact final target."""
+    start, end = specification['start'], specification['end']
+    intervals = specification['intermediate_states'] + 1
+    for index in range(1, intervals + 1):
+        if index == intervals:
+            yield end
+        elif specification['spacing'] == 'log':
+            yield math.exp(math.log(start) + (math.log(end) - math.log(start)) * index / intervals)
+        else:
+            yield start + (end - start) * index / intervals
+
+
+def pressure_path_stage(path, target, index):
+    """Build one ordinary leaf stage; future path drivers can reuse the schedule."""
+    control = dict(path['control'], mode='isotropic', target_pressure=target)
+    acceptance = path['acceptance']
+    condition = {
+        'all': [
+            {'observable': 'pressure', 'op': 'near', 'value': target,
+             **({'atol': acceptance['target_atol']} if 'target_atol' in acceptance else {}),
+             **({'rtol': acceptance['target_rtol']} if 'target_rtol' in acceptance else {})},
+            {'observable': 'kinetic_energy', 'op': 'below', 'value': acceptance['kinetic_energy_below']},
+            {'observable': 'unbalanced_force', 'op': 'below', 'value': acceptance['unbalanced_force_below']},
+        ],
+        'hold_for': acceptance['hold_for'],
+    }
+    return {
+        'control': control, 'until': condition,
+        'max_duration': path['max_duration_per_target'],
+        '_path_target': {'observable': 'pressure', 'index': index,
+                         'total': path['targets']['intermediate_states'] + 1,
+                         'value': target},
+    }
+
+
+def validate_path(path, dt, boundary):
+    _mapping(path, {'observable', 'targets', 'control', 'acceptance', 'max_duration_per_target'},
+             {'observable', 'targets', 'control', 'acceptance', 'max_duration_per_target'})
+    if path['observable'] != 'pressure':
+        raise ValueError('Only pressure paths are supported until a stateful density controller and restore are available.')
+    if boundary != 'periodic':
+        raise ValueError('Pressure paths require periodic boundaries.')
+    targets = path['targets']
+    _mapping(targets, {'start', 'end', 'intermediate_states', 'spacing'},
+             {'start', 'end', 'intermediate_states', 'spacing'})
+    _number(targets['start'], 0, True)
+    _number(targets['end'], 0, True)
+    if targets['start'] == targets['end']:
+        raise ValueError('Path start and end must differ.')
+    _nonnegative_count(targets['intermediate_states'])
+    if targets['spacing'] not in ('linear', 'log'):
+        raise ValueError('Path spacing must be linear or log.')
+    if targets['intermediate_states'] > 100000:
+        raise ValueError('Path contains too many intermediate states.')
+    control = path['control']
+    _mapping(control, {'type', 'max_velocity', 'loading_factor', 'update_every_steps'}, {'type'})
+    if control['type'] != 'stress_servo':
+        raise ValueError('Pressure paths require stress_servo control.')
+    validate_control(control | {'mode': 'isotropic', 'target_pressure': targets['end']})
+    for field, default in (('max_velocity', DEFAULT_SERVO_MAX_VELOCITY),
+                           ('loading_factor', DEFAULT_SERVO_LOADING_FACTOR),
+                           ('update_every_steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS)):
+        control.setdefault(field, default)
+    acceptance = path['acceptance']
+    _mapping(acceptance, {'target_atol', 'target_rtol', 'kinetic_energy_below',
+                          'unbalanced_force_below', 'hold_for'},
+             {'kinetic_energy_below', 'unbalanced_force_below', 'hold_for'})
+    if not ({'target_atol', 'target_rtol'} & set(acceptance)):
+        raise ValueError('Path acceptance requires target_atol and/or target_rtol.')
+    for field in ('target_atol', 'target_rtol', 'kinetic_energy_below',
+                  'unbalanced_force_below', 'hold_for'):
+        if field in acceptance:
+            _number(acceptance[field], 0)
+    if acceptance.get('target_atol', 0) == acceptance.get('target_rtol', 0) == 0:
+        raise ValueError('Path target tolerance must be positive.')
+    duration = _number(path['max_duration_per_target'], dt)
+    if acceptance['hold_for'] > duration:
+        raise ValueError('Path hold_for exceeds max_duration_per_target.')
+    for target in path_targets(targets):
+        if not math.isfinite(target) or target <= 0:
+            raise ValueError('Path contains an unrepresentable pressure target.')
+    return (targets['intermediate_states'] + 1) * duration_steps(duration, dt)
+
+
 def validate_condition(condition, depth=0):
     if depth > 20:
         raise ValueError('Conditions may nest at most 20 levels.')
@@ -149,6 +240,10 @@ def validate_protocol(raw, dt, boundary):
                 _mapping(stage, {'name', 'repeat', 'stages'}, {'stages'})
                 budget += _count(stage.get('repeat', 1)) * visit(stage['stages'], depth + 1)
                 continue
+            if 'path' in stage:
+                _mapping(stage, {'name', 'path'}, {'path'})
+                budget += validate_path(stage['path'], dt, boundary)
+                continue
             _mapping(stage, {'name', 'control', 'until', 'max_duration'}, {'control', 'until', 'max_duration'})
             validate_control(stage['control'])
             control = stage['control']
@@ -182,7 +277,15 @@ def duration_steps(duration, dt):
 def stage_count(stages):
     """Count leaf executions without expanding repeated blocks."""
     return sum((stage.get('repeat', 1) * stage_count(stage['stages'])
-                if 'stages' in stage else 1) for stage in stages)
+                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 1
+                if 'path' in stage else 1) for stage in stages)
+
+
+def path_target_count(stages):
+    """Count accepted targets expected from all paths in a successful protocol."""
+    return sum((stage.get('repeat', 1) * path_target_count(stage['stages'])
+                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 1
+                if 'path' in stage else 0) for stage in stages)
 
 
 def iter_stages(stages, prefix=''):
@@ -191,6 +294,9 @@ def iter_stages(stages, prefix=''):
         if 'stages' in stage:
             for cycle in range(stage.get('repeat', 1)):
                 yield from iter_stages(stage['stages'], f'{path}[{cycle + 1}]/')
+        elif 'path' in stage:
+            for index, target in enumerate(path_targets(stage['path']['targets']), 1):
+                yield f'{path}/target_{index:04d}', pressure_path_stage(stage['path'], target, index)
         else:
             yield path, stage
 
@@ -205,6 +311,9 @@ def iter_stage_boundaries(stages, prefix=''):
                 yield 'block_start', cycle_path, None
                 yield from iter_stage_boundaries(stage['stages'], cycle_path + '/')
                 yield 'block_end', cycle_path, None
+        elif 'path' in stage:
+            for index, target in enumerate(path_targets(stage['path']['targets']), 1):
+                yield 'stage', f'{path}/target_{index:04d}', pressure_path_stage(stage['path'], target, index)
         else:
             yield 'stage', path, stage
 
@@ -214,6 +323,8 @@ def required_observables(stages):
     for stage in stages:
         if 'stages' in stage:
             result |= required_observables(stage['stages'])
+        elif 'path' in stage:
+            result |= {'pressure', 'kinetic_energy', 'unbalanced_force'}
         else:
             result |= condition_observables(stage['until'])
             if stage['control']['type'] == 'stress_servo':
@@ -227,6 +338,8 @@ def control_types(stages):
     for stage in stages:
         if 'stages' in stage:
             result |= control_types(stage['stages'])
+        elif 'path' in stage:
+            result.add(stage['path']['control']['type'])
         else:
             result.add(stage['control']['type'])
     return result
@@ -244,6 +357,8 @@ def maximum_servo_velocity(stages):
     for stage in stages:
         if 'stages' in stage:
             result = max(result, maximum_servo_velocity(stage['stages']))
+        elif 'path' in stage:
+            result = max(result, stage['path']['control']['max_velocity'])
         elif stage['control']['type'] == 'stress_servo':
             result = max(result, stage['control']['max_velocity'])
     return result
@@ -325,6 +440,7 @@ class ProtocolRunner:
         self.iterator = iter_stage_boundaries(protocol['stages'])
         self.pending_boundaries = []
         self.completed_stages = 0
+        self.accepted_targets = 0
         self.failed_stage = None
         self.stage_exited = False
         self.steps = 0
@@ -350,11 +466,15 @@ class ProtocolRunner:
         self.condition = Condition(self.stage['until'])
         self.limit = duration_steps(self.stage['max_duration'], self.dt)
 
-    def _record_boundary(self, kind, phase, path):
-        self.pending_boundaries.append({
-            'kind': kind, 'phase': phase, 'path': path,
-            'step': self.steps, 'time': self.time,
-        })
+    def _record_boundary(self, kind, phase, path, *, accepted=None, values=None):
+        event = {'kind': kind, 'phase': phase, 'path': path,
+                 'step': self.steps, 'time': self.time}
+        if kind == 'stage' and '_path_target' in self.stage:
+            event['target'] = self.stage['_path_target']
+            if phase == 'end':
+                event['accepted'] = accepted
+                event['observables'] = values
+        self.pending_boundaries.append(event)
 
     def take_boundaries(self):
         boundaries = self.pending_boundaries
@@ -379,10 +499,12 @@ class ProtocolRunner:
         if reached or expired:
             self.stage_exited = True
             self.completed_stages += 1
-            self._record_boundary('stage', 'end', self.path)
+            self._record_boundary('stage', 'end', self.path, accepted=reached, values=values)
             if not reached:
                 self.failed = self.done = True
                 self.failed_stage = self.path
             else:
+                if '_path_target' in self.stage:
+                    self.accepted_targets += 1
                 self._enter()
         return values

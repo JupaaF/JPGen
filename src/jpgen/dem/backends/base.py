@@ -22,6 +22,8 @@ class DemCapabilities:
     native_controls: frozenset[str] = frozenset()
     particle_snapshots: bool = False
     native_restart_export: bool = False
+    state_restore: bool = False
+    contact_parameter_updates: bool = False
 
     def validate(self, plan) -> None:
         from ..protocol import control_types, required_actuator_commands, required_observables
@@ -61,6 +63,8 @@ class DemCapabilities:
             "native_controls": sorted(self.native_controls),
             "particle_snapshots": self.particle_snapshots,
             "native_restart_export": self.native_restart_export,
+            "state_restore": self.state_restore,
+            "contact_parameter_updates": self.contact_parameter_updates,
         }
 
 
@@ -74,6 +78,21 @@ class DemControlPort(Protocol):
     def observe(self, observables: set[str]) -> dict: ...
 
     def box(self) -> dict: ...
+
+
+class DemContinuationPort(Protocol):
+    """Future stateful paths require complete, equivalent solver restoration.
+
+    A checkpoint includes integrator, contact history, cell, active material
+    parameters and protocol-local state. Exporting a native restart alone does
+    not satisfy this contract.
+    """
+
+    def checkpoint(self) -> object: ...
+
+    def restore(self, checkpoint: object) -> None: ...
+
+    def set_friction(self, static: float, dynamic: float) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -90,6 +109,7 @@ class ExecutionReport:
     steps: int = 0
     stop_reason: str = "end_time"
     completed_stages: int = 0
+    accepted_targets: int = 0
     failed_stage: str | None = None
     observables: dict = field(default_factory=dict)
     time: float | None = None

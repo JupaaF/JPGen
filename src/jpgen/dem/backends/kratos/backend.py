@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
-from ...protocol import STRESS_OBSERVABLES, required_observables, control_types
+from ...protocol import STRESS_OBSERVABLES, required_observables, control_types, iter_stages
 from ...domain import DemState
 from ...state_exchange import read_state
 from ....packing.domain.box import Box
@@ -133,10 +133,14 @@ class KratosBackend:
             raise DemExecutionError(f"Kratos exited with code {return_code}; see {directory / 'logs'}.")
         try:
             result = json.loads((directory / "native_results" / "execution_report.json").read_text())
+            if prepared.case.protocol:
+                _validate_accepted_states(directory / "native_results", result.get("accepted_targets", 0),
+                                          prepared.case.protocol["stages"])
             return ExecutionReport(
                 return_code=return_code, elapsed_seconds=elapsed, versions=result["versions"],
                 steps=result["steps"], stop_reason=result["stop_reason"],
                 completed_stages=result["completed_stages"],
+                accepted_targets=result.get("accepted_targets", 0),
                 failed_stage=result.get("failed_stage"), observables=result["observables"],
                 time=result.get("time"), time_step=result.get("time_step", {}),
                 control=result.get("control", {}),
@@ -157,3 +161,32 @@ class KratosBackend:
             return state
         except (OSError, ValueError, TypeError, KeyError, EOFError, BadZipFile) as error:
             raise DemExecutionError(f"Invalid Kratos final state: {error}") from error
+
+
+def _validate_accepted_states(directory, expected_count, stages):
+    """Check the published index and references before accepting a solver report."""
+    if type(expected_count) is not int or expected_count < 0:
+        raise ValueError("Invalid accepted target count.")
+    records = (directory / "accepted_states.jsonl").read_text(encoding="utf-8").splitlines()
+    if len(records) != expected_count:
+        raise ValueError("Accepted state index does not match the execution report.")
+    expected = [(path, stage['_path_target']) for path, stage in iter_stages(stages)
+                if '_path_target' in stage]
+    if expected_count > len(expected):
+        raise ValueError("Accepted target count exceeds configured path targets.")
+    previous_step = -1
+    for line, (path, target_spec) in zip(records, expected):
+        item = json.loads(line)
+        target = item["target"]
+        step = item["step"]
+        if (item.get("accepted") is not True or item.get("phase") != "end"
+                or item.get("kind") != "stage" or type(step) is not int
+                or step <= previous_step or item.get("path") != path
+                or target != target_spec):
+            raise ValueError("Invalid accepted state index entry.")
+        previous_step = step
+        for suffix in (".json", ".npz"):
+            if not (directory / (item["state"] + suffix)).is_file():
+                raise ValueError("Accepted particle state is missing.")
+        if not (directory / item["restart"]).is_file():
+            raise ValueError("Accepted native restart is missing.")

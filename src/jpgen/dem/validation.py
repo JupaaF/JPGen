@@ -7,7 +7,7 @@ import numpy as np
 from ..errors import DemExecutionError
 from .backends.base import ExecutionReport
 from .domain import DemCase, DemState
-from .protocol import stage_count
+from .protocol import stage_count, path_target_count
 
 
 def validate_execution_report(case: DemCase, report: ExecutionReport) -> None:
@@ -40,6 +40,8 @@ def validate_execution_report(case: DemCase, report: ExecutionReport) -> None:
             if (report.stop_reason != "protocol_complete"
                     or report.failed_stage is not None
                     or report.completed_stages != stage_count(case.protocol["stages"])
+                    or type(report.accepted_targets) is not int
+                    or report.accepted_targets != path_target_count(case.protocol["stages"])
                     or report.steps > case.steps
                     or final_time > case.end_time + case.time_step * 1e-7):
                 raise ValueError("DEM did not complete the requested protocol.")

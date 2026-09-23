@@ -38,6 +38,20 @@ boundary step under `dem/native_results/snapshots/` and records all boundary
 events in `snapshots.jsonl`. Other engines may use their own storage format but
 must provide equivalent particle and box data and identify the associated events.
 
+Pressure paths use the ordinary portable `stress_servo` command for each
+resolved target. A backend advertising pressure control, pressure/energy/force
+observables and particle snapshots can run the path; successful target exits
+must be distinguishable from failed diagnostic boundaries. Kratos publishes
+accepted exits through `accepted_states.jsonl`.
+
+The optional `state_restore` and `contact_parameter_updates` capabilities
+are reserved for future stateful paths such as friction-driven density
+continuation. `DemContinuationPort` names the required checkpoint, restore
+and live-friction operations. A checkpoint must preserve solver and protocol
+state, including cell geometry and contact history. Exporting a restart file
+does not by itself imply these capabilities; Kratos currently advertises
+neither.
+
 `native_restart_export` is a separate optional capability. Kratos advertises it
 and writes the native `SpheresPart.rest` for every unique protocol boundary step,
 using the same `FileSerializer` and pointer serialization flag as its restart

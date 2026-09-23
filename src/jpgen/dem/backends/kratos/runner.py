@@ -54,6 +54,7 @@ def main():
                 if execution.get("protocol"):
                     (output / "observables.jsonl").write_text("", encoding="utf-8")
                     (output / "snapshots.jsonl").write_text("", encoding="utf-8")
+                    (output / "accepted_states.jsonl").write_text("", encoding="utf-8")
                     specification = execution['protocol']
                     self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy'}
@@ -89,12 +90,14 @@ def main():
             if self.protocol is not None:
                 stage_path = self.protocol.path
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
-                self._save_boundaries(output)
                 stage_exited = self.protocol.stage_exited
                 sampled = self.completed_steps % execution['protocol']['sample_every'] == 0
                 if sampled or stage_exited:
                     missing = self.output_observables - self.observables.keys()
                     self.observables.update(self.adapter.observe(missing))
+                # Boundary metadata sees the same completed-step measurements as
+                # the observables log, including density and the stress tensor.
+                self._save_boundaries(output)
                 if sampled or stage_exited:
                     with (output / "observables.jsonl").open("a", encoding="utf-8") as stream:
                         stream.write(json.dumps({"step": self.completed_steps, "stage": stage_path, "observables": self.observables,
@@ -153,10 +156,13 @@ def main():
             write_state(snapshots, self._particle_arrays(), time=self.protocol.time,
                         box=box, stem=stem)
             restart = self._save_native_restart(output, stem, box)
-            with (output / "snapshots.jsonl").open("a", encoding="utf-8") as stream:
+            with (output / "snapshots.jsonl").open("a", encoding="utf-8") as stream, \
+                    (output / "accepted_states.jsonl").open("a", encoding="utf-8") as accepted_stream:
                 for boundary in boundaries:
-                    stream.write(json.dumps({**boundary, "state": f"snapshots/{stem}",
-                                             "restart": restart}, allow_nan=False) + "\n")
+                    record = {**boundary, "state": f"snapshots/{stem}", "restart": restart}
+                    stream.write(json.dumps(record, allow_nan=False) + "\n")
+                    if boundary.get("accepted") is True and "target" in boundary:
+                        accepted_stream.write(json.dumps(record, allow_nan=False) + "\n")
 
         def Finalize(self):
             self.final_state = {
@@ -179,6 +185,7 @@ def main():
         "time": analysis.final_state["time"],
         "time_step": {"mode": "fixed", "value": execution["end_time"] / execution["steps"]},
         "completed_stages": analysis.protocol.completed_stages if analysis.protocol else 0,
+        "accepted_targets": analysis.protocol.accepted_targets if analysis.protocol else 0,
         "failed_stage": analysis.protocol.failed_stage if analysis.protocol else None,
         "observables": analysis.observables,
         "control": {"implementation": "jpgen_portable",

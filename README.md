@@ -467,6 +467,68 @@ until: {observable: solid_fraction, op: above, value: 0.64}
 # Or: {observable: bulk_density, op: above, value: 1600.0}
 ```
 
+### Equilibrated pressure paths
+
+A protocol piece may be a pressure path. It creates a sequence of constant
+isotropic servo targets and advances only after pressure, kinetic energy and
+force imbalance satisfy the acceptance condition continuously for `hold_for`.
+The final target is saved; `intermediate_states` counts only targets strictly
+between `start` and `end`. `start` is the spacing reference and should be an
+already prepared pressure state; the path does not verify or save that initial
+state. Both pressures must be positive, and either increasing or decreasing
+paths are allowed.
+
+```yaml
+dem:
+  # engine, material, contact, boundary: periodic, time_step, ...
+  protocol:
+    sample_every: 100
+    stages:
+      - name: compression
+        path:
+          observable: pressure
+          targets:
+            start: 5000.0
+            end: 200000.0
+            intermediate_states: 20
+            spacing: log
+          control:
+            type: stress_servo
+            max_velocity: 0.01
+            loading_factor: 0.8
+            update_every_steps: 50
+          acceptance:
+            target_rtol: 0.01
+            kinetic_energy_below: 1.0e-8
+            unbalanced_force_below: 1.0e-3
+            hold_for: 0.005
+          max_duration_per_target: 0.5
+```
+
+`spacing` may be `log` or `linear`. For 20 intermediate states the path
+attempts 21 targets, excluding the initial reference pressure and including
+the final pressure. The targets are calculated once from the effective
+configuration; successful targets continue in the same solver with contact
+history intact. Each target has its own duration limit and hold timer. If any
+target fails, later targets are not attempted.
+
+Every target boundary is recorded in `snapshots.jsonl`. Successful target exits
+also appear in `dem/native_results/accepted_states.jsonl`, with the requested
+pressure, measured observables, time, particle-state path and native restart
+path. This append-only index remains available for earlier accepted targets
+if a later target fails. A failed target has a diagnostic boundary snapshot
+but is never listed as accepted. The run summary reports `accepted_targets`
+and the index path on success. The state archives are analysis snapshots;
+their associated Kratos restart files are not yet usable for JPGen resume.
+The wizard offers this path as a protocol piece when the selected backend
+supports pressure control and the required observables.
+
+The path structure separates target spacing from target control. A future
+`solid_fraction` path can use linear targets and the same accepted-state
+index, but friction adaptation requires equivalent solver-state restoration
+and live contact-parameter updates. Those capabilities are declared separately
+and are currently unavailable.
+
 ### Results and extension points
 
 For DEM protocols, Kratos also exports particle snapshots at the start and end

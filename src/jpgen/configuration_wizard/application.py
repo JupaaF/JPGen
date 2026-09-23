@@ -7,6 +7,7 @@ from pathlib import Path
 from .dem import DemStageWizard
 from .output import GeneratedConfiguration, render_yaml
 from .packing import PackingStageWizard
+from .protocol import pressure_path_previews
 from .questions import (
     InteractiveTerminal,
     MenuChoice,
@@ -56,6 +57,12 @@ class ConfigurationWizard:
                 rendered = render_yaml(configuration)
                 self.terminal.print("\nConfiguration preview", style="bold")
                 self.terminal.print(rendered)
+                protocol = configuration.get("dem", {}).get("protocol")
+                if protocol:
+                    preview = pressure_path_previews(protocol["stages"])
+                    if preview:
+                        self.terminal.print("\nResolved pressure targets", style="bold")
+                        self.terminal.print(preview)
                 action = self.terminal.choose(
                     "Save this configuration and start JPGen?",
                     (MenuChoice("Save and run", "save"),),
