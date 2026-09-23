@@ -53,8 +53,6 @@ def main():
                 super().Initialize()
                 if execution.get("protocol"):
                     (output / "observables.jsonl").write_text("", encoding="utf-8")
-                    (output / "protocol_history.jsonl").write_text("", encoding="utf-8")
-                    (output / "protocol_history.json").write_text("[]", encoding="utf-8")
                     (output / "snapshots.jsonl").write_text("", encoding="utf-8")
                     specification = execution['protocol']
                     self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
@@ -89,21 +87,14 @@ def main():
             super().FinalizeSolutionStep()
             self.completed_steps += 1
             if self.protocol is not None:
-                previous = len(self.protocol.history)
                 stage_path = self.protocol.path
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
                 self._save_boundaries(output)
-                stage_exited = len(self.protocol.history) != previous
+                stage_exited = self.protocol.stage_exited
                 sampled = self.completed_steps % execution['protocol']['sample_every'] == 0
                 if sampled or stage_exited:
                     missing = self.output_observables - self.observables.keys()
                     self.observables.update(self.adapter.observe(missing))
-                if len(self.protocol.history) != previous:
-                    # Persist only new stage exits; closing flushes each append
-                    # so completed stages remain available after interruption.
-                    with (output / "protocol_history.jsonl").open("a", encoding="utf-8") as stream:
-                        for entry in self.protocol.history[previous:]:
-                            stream.write(json.dumps(entry, allow_nan=False) + "\n")
                 if sampled or stage_exited:
                     with (output / "observables.jsonl").open("a", encoding="utf-8") as stream:
                         stream.write(json.dumps({"step": self.completed_steps, "stage": stage_path, "observables": self.observables,
@@ -181,23 +172,14 @@ def main():
 
     parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
     analysis = JPGenAnalysis(KM.Model(), parameters)
-    try:
-        analysis.Run()
-    finally:
-        if analysis.protocol is not None:
-            # Keep the existing JSON summary, including on Python exceptions.
-            # Forced termination may skip this; the JSONL journal is incremental.
-            temporary = output / "protocol_history.json.tmp"
-            with temporary.open("w", encoding="utf-8") as stream:
-                json.dump(analysis.protocol.history, stream, indent=2, allow_nan=False)
-                stream.write("\n")
-            temporary.replace(output / "protocol_history.json")
+    analysis.Run()
     (output / "execution_report.json").write_text(json.dumps({
         "steps": analysis.completed_steps,
         "stop_reason": ("max_duration" if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",
         "time": analysis.final_state["time"],
         "time_step": {"mode": "fixed", "value": execution["end_time"] / execution["steps"]},
-        "history": analysis.protocol.history if analysis.protocol else [],
+        "completed_stages": analysis.protocol.completed_stages if analysis.protocol else 0,
+        "failed_stage": analysis.protocol.failed_stage if analysis.protocol else None,
         "observables": analysis.observables,
         "control": {"implementation": "jpgen_portable",
                     "actuators": ["cell_strain_rate", "symmetric_wall_velocity"]},

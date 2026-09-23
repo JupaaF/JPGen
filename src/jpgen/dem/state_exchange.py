@@ -46,12 +46,12 @@ def read_state(directory, stem="final_state"):
             or metadata.get("schema") != SCHEMA or metadata.get("schema_version") != VERSION
             or metadata.get("units") != "SI"):
         raise ValueError("Unsupported DEM state exchange schema or units.")
-    with np.load(directory / "final_state.npz", allow_pickle=False) as archive:
+    with np.load(directory / f"{stem}.npz", allow_pickle=False) as archive:
         if len(archive.files) != len(ARRAYS) or set(archive.files) != set(ARRAYS):
-            raise ValueError("Invalid final-state archive members.")
+            raise ValueError("Invalid state archive members.")
         arrays = {name: archive[name] for name in ARRAYS}
     for name, array in arrays.items():
         expected = np.dtype("int64" if name == "ids" else "float64")
         if array.dtype.kind != expected.kind or array.dtype.itemsize != expected.itemsize:
-            raise ValueError(f"Invalid final-state dtype: {name}.")
+            raise ValueError(f"Invalid state dtype: {name}.")
     return dict(arrays, time=metadata["time"], box=metadata["box"])

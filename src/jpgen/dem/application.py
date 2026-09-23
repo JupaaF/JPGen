@@ -48,7 +48,7 @@ class DemApplication:
             "kinetic_energy": kinetic_energy, "kinetic_energy_units": "J",
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
             "stop_reason": report.stop_reason, "return_code": report.return_code,
-            "protocol_history": report.history, "observables": report.observables,
+            "completed_stages": report.completed_stages, "observables": report.observables,
             "time_step": report.time_step, "control": report.control,
             "backend_capabilities": plan.backend.capabilities.to_config(),
         }, ("dem/" + self.store.filename,))

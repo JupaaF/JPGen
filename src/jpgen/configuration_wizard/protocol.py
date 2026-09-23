@@ -109,7 +109,7 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
         questions.append(_question(key + '.kind', f'Piece {index + 1}', 'stage', choices=[('Simulation stage', 'stage'), ('Repeat a sequence', 'repeat')],
                                    explanation='A simulation stage combines a controller with a stopping condition. A repeat block runs a nested sequence several times, for example alternating loading and unloading stages.'))
         questions.append(_question(key + '.name', 'Piece name', f'stage_{index + 1}', parser=lambda v, _: v.strip(),
-                                   explanation='Give this stage or repeat block a nonempty descriptive name. The name appears in the saved configuration and execution history so you can identify which part of the experiment ran.'))
+                                   explanation='Give this stage or repeat block a nonempty descriptive name. The name appears in the saved configuration and in the failed-stage diagnostic when applicable.'))
         if answers.get(key + '.kind') == 'repeat':
             questions.append(_question(key + '.repeat', 'Number of repetitions', 10, _positive_integer,
                                    explanation='Number of times to execute the entire nested sequence, including the first pass. Each pass keeps the physical state from the previous one, while stage time and condition timers restart.'))

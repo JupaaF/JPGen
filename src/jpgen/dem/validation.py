@@ -7,7 +7,7 @@ import numpy as np
 from ..errors import DemExecutionError
 from .backends.base import ExecutionReport
 from .domain import DemCase, DemState
-from .protocol import iter_stages
+from .protocol import stage_count
 
 
 def validate_execution_report(case: DemCase, report: ExecutionReport) -> None:
@@ -29,29 +29,20 @@ def validate_execution_report(case: DemCase, report: ExecutionReport) -> None:
                     or not time_matches or report.stop_reason != "end_time"):
                 raise ValueError("DEM did not complete the requested steps.")
         else:
+            if type(report.completed_stages) is not int or report.completed_stages < 1:
+                raise ValueError("Invalid completed protocol stage count.")
             if report.stop_reason == "max_duration":
-                stage = report.history[-1]["path"]
-                raise DemExecutionError(f"Stage {stage} exhausted max_duration before its condition was met.")
+                if not isinstance(report.failed_stage, str) or not report.failed_stage:
+                    raise ValueError("Missing failed protocol stage.")
+                raise DemExecutionError(
+                    f"Stage {report.failed_stage} exhausted max_duration before its condition was met."
+                )
             if (report.stop_reason != "protocol_complete"
-                    or (report.steps > case.steps)
+                    or report.failed_stage is not None
+                    or report.completed_stages != stage_count(case.protocol["stages"])
+                    or report.steps > case.steps
                     or final_time > case.end_time + case.time_step * 1e-7):
                 raise ValueError("DEM did not complete the requested protocol.")
-            expected = iter_stages(case.protocol["stages"])
-            end_step = 0
-            end_time = 0.0
-            for entry in report.history:
-                item = next(expected, None)
-                if (item is None or entry["path"] != item[0] or entry["stop_reason"] != "condition_met"
-                        or entry["start_step"] != end_step or entry["end_step"] <= end_step):
-                    raise ValueError("Invalid protocol stage history.")
-                if (not math.isclose(entry['start_time'], end_time, rel_tol=1e-12, abs_tol=1e-15)
-                        or not math.isfinite(entry['end_time']) or entry['end_time'] <= end_time):
-                    raise ValueError("Invalid physical times in protocol history.")
-                end_step = entry["end_step"]
-                end_time = entry['end_time']
-            if (next(expected, None) is not None or end_step != report.steps
-                    or not math.isclose(end_time, final_time, rel_tol=1e-12, abs_tol=1e-15)):
-                raise ValueError("Incomplete protocol history.")
     except (ValueError, TypeError, KeyError, IndexError, OverflowError) as error:
         if isinstance(error, DemExecutionError):
             raise

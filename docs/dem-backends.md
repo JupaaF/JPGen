@@ -134,7 +134,7 @@ after the archive; `read_state` checks the schema, member names and dtypes.
 Adapters remain responsible for constructing `DemState` and normalizing native
 results. `DemApplication` validates every execution report and final state against
 the case through `dem/validation.py`, before publishing results. The shared checks
-cover successful completion, step counts, protocol history, final time, boundary
+cover successful completion, step and completed stage counts, final time, boundary
 type and preservation of particle IDs and radii. Particle ordering may differ
 between engines; radii are compared by ID. An omitted final box means the initial
 box; adapters that deform the domain must provide its final geometry. Other

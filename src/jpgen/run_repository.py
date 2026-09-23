@@ -31,8 +31,36 @@ class RunWorkspace:
             yield Path(staging)
 
     def publish(self, staging, filenames):
+        """Publish a prepared output set, with rollback and a completion marker.
+
+        Readers can treat packing_outputs.json as the commit marker. A process
+        failure before it appears leaves an incomplete set clearly identifiable.
+        """
+        filenames = tuple(filenames)
+        if len(set(filenames)) != len(filenames):
+            raise ValueError("Duplicate output filename.")
+        marker = self.directory / "packing_outputs.json"
+        if marker.exists():
+            raise FileExistsError(marker)
         for filename in filenames:
-            (staging / filename).replace(self.directory / filename)
+            source = staging / filename
+            destination = self.directory / filename
+            if not source.is_file():
+                raise FileNotFoundError(source)
+            if destination.exists():
+                raise FileExistsError(destination)
+        moved = []
+        try:
+            for filename in filenames:
+                (staging / filename).replace(self.directory / filename)
+                moved.append(filename)
+            temporary = staging / "packing_outputs.json"
+            temporary.write_text(json.dumps({"schema": "JPGen.packing_outputs", "schema_version": "1.0", "files": list(filenames)}, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(marker)
+        except BaseException:
+            for filename in reversed(moved):
+                (self.directory / filename).replace(staging / filename)
+            raise
 
 
 class RunRepository(Protocol):

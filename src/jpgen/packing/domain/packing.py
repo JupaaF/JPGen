@@ -10,11 +10,9 @@ import numpy as np
 from ._arrays import readonly_array
 from .box import Box
 from .placement import (
-    GrowthStatistics,
-    InsertionStatistics,
+    PLACEMENT_STATISTICS_TYPES,
     PlacementAudit,
     PlacementStatistics,
-    RelaxationStatistics,
     placement_statistics_from_dict,
 )
 
@@ -37,15 +35,7 @@ class PackingMetadata:
             raise ValueError("Metadata seed must be a nonnegative integer.")
         if isinstance(self.successful_restart, bool) or not isinstance(self.successful_restart, int) or self.successful_restart < 0:
             raise ValueError("Successful restart must be a nonnegative integer.")
-        expected_statistics = {
-            "random_sequential": InsertionStatistics,
-            "overlap_relaxation": RelaxationStatistics,
-            "progressive_growth": GrowthStatistics,
-        }
-        if (
-            self.placement_method not in expected_statistics
-            or type(self.placement) is not expected_statistics[self.placement_method]
-        ):
+        if type(self.placement) is not PLACEMENT_STATISTICS_TYPES.get(self.placement_method):
             raise ValueError("Placement method and statistics type are inconsistent.")
         if not isinstance(self.audit, PlacementAudit):
             raise ValueError("Metadata requires typed placement statistics and audit.")

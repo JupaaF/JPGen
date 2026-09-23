@@ -50,6 +50,7 @@ Each invocation creates a unique directory under `runs/`:
 - `configuration.yaml`: normalized pipeline configuration, defaults and actual seed; usable for replay.
 - `summary.json`: run status, dependency versions, final box and packing statistics.
 - `packing.h5`: versioned packing dataset with geometry, initial velocities, configuration and metadata.
+- `packing_outputs.json`: completion marker listing the published packing files.
 - `particlesDEM.mdpa`: optional Kratos packing export, produced by `exports: [kratos]`.
 - `particles.vtp`: optional VTK XML PolyData, produced by `exports: [vtk]`.
 
@@ -65,7 +66,7 @@ state, then publishes the metadata after the archive is complete. Reading
 disables pickle and validates the exchange version, array names and dtypes
 before the existing physical consistency checks. `results.h5` is unchanged.
 
-Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
+Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A publication error rolls back moved files; `packing_outputs.json` appears only after the full set has been moved, so an interrupted publication can be identified by its missing marker. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
 
 ## Pipeline boundaries
 
@@ -153,7 +154,7 @@ list of available formats. Unknown options inside `packing` or
 - `fixed_box_fraction`: requires `target_solid_fraction` and fixed `box.lengths`; determines the particle count. Omit `count`.
 - `variable_box_fraction`: requires `count`, `target_solid_fraction` and reference `box.lengths`; scales all lengths equally while preserving their ratios. An explicit origin or the minimum corner stays fixed; center mode centers the final scaled box.
 
-The selected sizing and placement implementations are retained in `PackingPlan` and reused by `PackingGenerator`; execution does not consult either registry again. Add sizing methods through `PACKING_SIZING_STRATEGIES` and placement methods through `PLACEMENT_STRATEGIES`.
+The selected sizing and placement implementations are retained in `PackingPlan` and reused by `PackingGenerator`; execution does not consult either registry again. Add sizing methods through `PACKING_SIZING_STRATEGIES` and placement methods through `PLACEMENT_STRATEGIES`. A new placement statistics class declares its `method` and provides `to_dict`/`from_dict`; the domain registers it automatically for HDF5 restoration.
 
 Solid fraction is `sum(4*pi*r**3/3) / box_volume`. Overlapping particle volumes are counted separately, so it is a nominal material fraction rather than a geometric union fraction. `solid_fraction_tolerance` defaults to `0.001` and is absolute. `restarts` defaults to 10 retries after the initial attempt, and `max_particles` defaults to 1,000,000.
 
@@ -318,7 +319,7 @@ effective DEM configuration and execution provenance. Use
 `Hdf5DemResultStore.load(path)` to read the common final state. These are results,
 not restart checkpoints. The run summary includes final kinetic energy (J),
 elapsed wall time, actual step count, stop reason (`end_time` or
-`protocol_complete`), stage history and final measured observables.
+`protocol_complete`), completed stage count and final measured observables.
 
 Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed from the system random source. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, placement=1, speed=2, linear direction=3, angular speed=4 and angular direction=5. Run names do not influence generation.
 
@@ -479,16 +480,12 @@ does not yet load these files or restore its protocol state, so automatic resume
 and rollback are not available.
 
 `dem/native_results/observables.jsonl` records sampled observables and current
-cell geometry, including every stage exit. `protocol_history.jsonl` appends each
-completed or timed-out stage, its repeat path, times, step indices and exit
-measurements, without rewriting previous stages. `protocol_history.json` is
-published atomically once execution exits, including on Python exceptions.
-If the worker is forcibly terminated, use the completed records in the JSONL
-journal; the JSON summary may not have been finalized. Execution reports include
-the real step count and stop reason.
-Successful HDF5 results retain that history, final observations and both domain
-geometries; final particle positions are wrapped using the final cell. Failed
-protocols retain native final state, report and history for diagnosis.
+cell geometry, including every stage exit. Execution reports include the real
+step count, completed stage count, failed stage when applicable, and stop reason.
+Successful HDF5 results retain these summary values, final observations and both
+domain geometries; final particle positions are wrapped using the final cell.
+Failed protocols retain native final state and the execution report for diagnosis.
+No `protocol_history` files are written.
 
 `jpgen/dem/protocol.py` contains solver-independent validation, conditions,
 signals, controller functions and the lazy `ProtocolRunner`. Controllers emit typed commands (`NoActuation`, `CellStrainRate` or

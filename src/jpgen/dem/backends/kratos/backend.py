@@ -133,9 +133,14 @@ class KratosBackend:
             raise DemExecutionError(f"Kratos exited with code {return_code}; see {directory / 'logs'}.")
         try:
             result = json.loads((directory / "native_results" / "execution_report.json").read_text())
-            return ExecutionReport(return_code, elapsed, result["versions"], result["steps"],
-                                   result["stop_reason"], result["history"], result["observables"],
-                                   result.get("time"), result.get("time_step", {}), result.get("control", {}))
+            return ExecutionReport(
+                return_code=return_code, elapsed_seconds=elapsed, versions=result["versions"],
+                steps=result["steps"], stop_reason=result["stop_reason"],
+                completed_stages=result["completed_stages"],
+                failed_stage=result.get("failed_stage"), observables=result["observables"],
+                time=result.get("time"), time_step=result.get("time_step", {}),
+                control=result.get("control", {}),
+            )
         except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
             raise DemExecutionError(f"Invalid Kratos execution report: {error}") from error
 

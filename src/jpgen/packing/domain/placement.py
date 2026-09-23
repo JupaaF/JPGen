@@ -1,6 +1,7 @@
 """Placement audits and algorithm-specific statistics."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 import numpy as np
 
@@ -24,8 +25,26 @@ class PlacementAudit:
         }
 
 
+PLACEMENT_STATISTICS_TYPES = {}
+
+
 @dataclass(frozen=True)
 class PlacementStatistics:
+    method: ClassVar[str | None] = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        method = cls.__dict__.get("method")
+        if method is None:
+            return
+        if not isinstance(method, str) or not method or method in PLACEMENT_STATISTICS_TYPES:
+            raise ValueError(f"Invalid or duplicate placement statistics method: {method!r}.")
+        PLACEMENT_STATISTICS_TYPES[method] = cls
+
+    @classmethod
+    def from_dict(cls, values):
+        return cls(**values)
+
     position_draws: int
     iterations: int
 
@@ -40,6 +59,8 @@ class PlacementStatistics:
 
 @dataclass(frozen=True)
 class InsertionStatistics(PlacementStatistics):
+    method: ClassVar[str] = "random_sequential"
+
     max_observed_overlap: float
 
     def __post_init__(self):
@@ -53,6 +74,8 @@ class InsertionStatistics(PlacementStatistics):
 
 @dataclass(frozen=True)
 class RelaxationStatistics(PlacementStatistics):
+    method: ClassVar[str] = "overlap_relaxation"
+
     perturbations: int
 
     def __post_init__(self):
@@ -92,6 +115,18 @@ class GrowthStage:
 
 @dataclass(frozen=True)
 class GrowthStatistics(RelaxationStatistics):
+    method: ClassVar[str] = "progressive_growth"
+
+    @classmethod
+    def from_dict(cls, values):
+        return cls(
+            position_draws=values["position_draws"],
+            iterations=values["iterations"],
+            perturbations=values["perturbations"],
+            final_scale=values["final_scale"],
+            stages=tuple(GrowthStage(**stage) for stage in values["stages"]),
+        )
+
     final_scale: float
     stages: tuple[GrowthStage, ...]
 
@@ -115,17 +150,7 @@ class GrowthStatistics(RelaxationStatistics):
 
 
 def placement_statistics_from_dict(method, values):
-    common = {"position_draws": values["position_draws"], "iterations": values["iterations"]}
-    if method == "random_sequential":
-        return InsertionStatistics(**common, max_observed_overlap=values["max_observed_overlap"])
-    if method == "overlap_relaxation":
-        return RelaxationStatistics(**common, perturbations=values["perturbations"])
-    if method == "progressive_growth":
-        stages = tuple(GrowthStage(**stage) for stage in values["stages"])
-        return GrowthStatistics(
-            **common,
-            perturbations=values["perturbations"],
-            final_scale=values["final_scale"],
-            stages=stages,
-        )
-    raise ValueError(f"Unsupported placement statistics method: {method!r}.")
+    statistics_type = PLACEMENT_STATISTICS_TYPES.get(method)
+    if statistics_type is None:
+        raise ValueError(f"Unsupported placement statistics method: {method!r}.")
+    return statistics_type.from_dict(values)

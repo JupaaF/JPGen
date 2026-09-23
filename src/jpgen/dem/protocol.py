@@ -173,6 +173,12 @@ def duration_steps(duration, dt):
     return max(1, nearest if math.isclose(ratio, nearest, rel_tol=0, abs_tol=1e-8) else math.ceil(ratio))
 
 
+def stage_count(stages):
+    """Count leaf executions without expanding repeated blocks."""
+    return sum((stage.get('repeat', 1) * stage_count(stage['stages'])
+                if 'stages' in stage else 1) for stage in stages)
+
+
 def iter_stages(stages, prefix=''):
     for index, stage in enumerate(stages):
         path = f'{prefix}{index + 1}:{stage.get("name", "stage")}'
@@ -312,7 +318,9 @@ class ProtocolRunner:
         self.time = 0.0
         self.iterator = iter_stage_boundaries(protocol['stages'])
         self.pending_boundaries = []
-        self.history = []
+        self.completed_stages = 0
+        self.failed_stage = None
+        self.stage_exited = False
         self.steps = 0
         self.done = False
         self.failed = False
@@ -352,6 +360,7 @@ class ProtocolRunner:
         return CONTROLLERS[control['type']](control, values, self.time - self.start_time, context)
 
     def advance(self, values):
+        self.stage_exited = False
         self.steps += 1
         self.time = self.steps * self.dt
         elapsed = self.time - self.start_time
@@ -359,12 +368,12 @@ class ProtocolRunner:
         reached = self.condition.evaluate(values, elapsed, self.dt)
         expired = self.steps - self.start_step >= self.limit
         if reached or expired:
-            self.history.append({'path': self.path, 'start_step': self.start_step, 'end_step': self.steps,
-                                 'start_time': self.start_time, 'end_time': self.time,
-                                 'stop_reason': 'condition_met' if reached else 'max_duration', 'observables': values})
+            self.stage_exited = True
+            self.completed_stages += 1
             self._record_boundary('stage', 'end', self.path)
             if not reached:
                 self.failed = self.done = True
+                self.failed_stage = self.path
             else:
                 self._enter()
         return values

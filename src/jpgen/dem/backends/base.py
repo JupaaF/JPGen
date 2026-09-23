@@ -89,7 +89,8 @@ class ExecutionReport:
     versions: dict
     steps: int = 0
     stop_reason: str = "end_time"
-    history: list = field(default_factory=list)
+    completed_stages: int = 0
+    failed_stage: str | None = None
     observables: dict = field(default_factory=dict)
     time: float | None = None
     time_step: dict = field(default_factory=dict)
