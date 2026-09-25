@@ -238,12 +238,12 @@ def _stress_ratios(value, answers):
 
 def _pressure_path_questions(key, answers, anisotropic_available):
     questions = [
-        _question(key + '.path.start', 'Start pressure reference (Pa)', 5000.0, _positive_float,
-                  explanation='Positive spacing reference. Prepare and equilibrate this initial state separately; the path does not verify or save it.'),
+        _question(key + '.path.start', 'Initial pressure target (Pa)', 5000.0, _positive_float,
+                  explanation='Positive first servo target. The path equilibrates and saves this state before moving to the intermediate targets.'),
         _question(key + '.path.end', 'Final pressure (Pa)', 200000.0, _positive_float,
                   explanation='Positive final servo target, included among the saved states.'),
         _question(key + '.path.intermediate_states', 'Intermediate equilibrated states', 20, _nonnegative_integer,
-                  explanation='Number of saved targets strictly between start and end. The final target adds one more state.'),
+                  explanation='Number of saved targets strictly between start and end. The start and final targets add two more states.'),
         _question(key + '.path.spacing', 'Target spacing', 'log',
                   choices=[('Logarithmic', 'log'), ('Linear', 'linear')],
                   explanation='Logarithmic spacing gives equal pressure ratios; linear spacing gives equal pressure differences.'),

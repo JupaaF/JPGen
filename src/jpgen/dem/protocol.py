@@ -123,9 +123,10 @@ def _nonnegative_count(value):
 
 
 def path_targets(specification):
-    """Yield targets after the starting state, including the exact final target."""
+    """Yield the starting target, intermediate targets, and the exact final target."""
     start, end = specification['start'], specification['end']
     intervals = specification['intermediate_states'] + 1
+    yield start
     for index in range(1, intervals + 1):
         if index == intervals:
             yield end
@@ -167,7 +168,7 @@ def pressure_path_stage(path, target, index):
         'control': control, 'until': condition,
         'max_duration': path['max_duration_per_target'],
         '_path_target': {'observable': 'pressure', 'index': index,
-                         'total': path['targets']['intermediate_states'] + 1,
+                         'total': path['targets']['intermediate_states'] + 2,
                          'value': target},
     }
 
@@ -234,7 +235,7 @@ def validate_path(path, dt, boundary):
     for target in path_targets(targets):
         if not math.isfinite(target) or target <= 0:
             raise ValueError('Path contains an unrepresentable pressure target.')
-    return (targets['intermediate_states'] + 1) * duration_steps(duration, dt)
+    return (targets['intermediate_states'] + 2) * duration_steps(duration, dt)
 
 
 def validate_condition(condition, depth=0):
@@ -397,14 +398,14 @@ def duration_steps(duration, dt):
 def stage_count(stages):
     """Count leaf executions without expanding repeated blocks."""
     return sum((stage.get('repeat', 1) * stage_count(stage['stages'])
-                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 1
+                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 2
                 if 'path' in stage else 1) for stage in stages)
 
 
 def path_target_count(stages):
     """Count accepted targets expected from all paths in a successful protocol."""
     return sum((stage.get('repeat', 1) * path_target_count(stage['stages'])
-                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 1
+                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 2
                 if 'path' in stage else len(stage['control']['targets'])
                 if stage['control']['type'] == 'density_continuation' else 0) for stage in stages)
 

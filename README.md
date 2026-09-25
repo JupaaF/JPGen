@@ -476,11 +476,11 @@ force imbalance satisfy the acceptance condition continuously for `hold_for`.
 Isotropic control adjusts all axes together to track mean pressure. Anisotropic
 control tracks each normal stress independently and also requires all three
 normal stresses to satisfy the target tolerance.
-The final target is saved; `intermediate_states` counts only targets strictly
-between `start` and `end`. `start` is the spacing reference and should be an
-already prepared pressure state; the path does not verify or save that initial
-state. Both pressures must be positive, and either increasing or decreasing
-paths are allowed.
+The starting and final targets are equilibrated and saved; `intermediate_states`
+counts only targets strictly between `start` and `end`. The path applies the
+same acceptance condition to the initial target before advancing. Both
+pressures must be positive, and either increasing or decreasing paths are
+allowed.
 
 ```yaml
 dem:
@@ -517,9 +517,8 @@ produce the X, Y and Z stress targets while preserving their mean. Omitting
 `mode` keeps existing paths isotropic.
 
 `spacing` may be `log` or `linear`. For 20 intermediate states the path
-attempts 21 targets, excluding the initial reference pressure and including
-the final pressure. The targets are calculated once from the effective
-configuration; successful targets continue in the same solver with contact
+attempts 22 targets, including the initial and final pressures. The targets
+are calculated once from the effective configuration; successful targets continue in the same solver with contact
 history intact. Each target has its own duration limit and hold timer. If any
 target fails, later targets are not attempted.
 
