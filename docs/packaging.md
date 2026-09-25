@@ -8,10 +8,10 @@ commit `66dbb226f80dc78d5ff3985351effb03798ad2b8`, plus
 revision or uncommitted Kratos source changes.
 
 Build a separate wheel on every supported operating system, architecture and
-CPython version. The current project metadata targets CPython 3.12. The
-locally built and exercised artifact is Linux x86_64, CPython 3.12. macOS (Intel and Apple Silicon) and
-Windows wheels must be built and checked on their own runners before release.
-A Linux wheel cannot serve either of those systems.
+CPython version. The initial release targets Linux x86_64 and Windows x86_64
+on CPython 3.12. The locally built and exercised artifact is Linux x86_64. The
+Windows wheel must be built and checked on its own runner before release. A
+Linux wheel cannot serve Windows.
 
 ## Source preparation
 
@@ -52,9 +52,9 @@ environment outside the source checkout. Confirm the native placement backend,
 the `KRATOS-REVISION` marker, and a short DEM run using the bundled runtime.
 Check binary library dependencies and platform compatibility tags. For broad
 Linux compatibility, build in a suitable manylinux environment and repair
-the wheel; for macOS and Windows, inspect and bundle the corresponding native
-library dependencies. Ensure each uploaded file fits PyPI's size limit.
+the wheel; for Windows, inspect and bundle the corresponding native library
+dependencies. Ensure each uploaded file fits PyPI's size limit.
 
-Publish only after Linux, macOS and Windows wheels for the advertised Python
-version have passed these checks. Keep the Kratos Core and DEM license files
+Publish only after Linux and Windows wheels for the advertised Python version
+have passed these checks. Keep the Kratos Core and DEM license files
 and `THIRD_PARTY_NOTICES.md` in every artifact.

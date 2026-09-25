@@ -20,12 +20,6 @@ jobs:
           - os: ubuntu-22.04
             artifact: linux-x86_64
             parallel: 4
-          - os: macos-15-intel
-            artifact: macos-x86_64
-            parallel: 4
-          - os: macos-15
-            artifact: macos-arm64
-            parallel: 2
           - os: windows-2022
             artifact: windows-x86_64
             parallel: 4
@@ -42,15 +36,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libboost-all-dev libeigen3-dev patchelf
 
-      - name: Install macOS build dependencies
-        if: runner.os == 'macOS'
-        run: brew install boost eigen
-
       - name: Install Windows build dependencies
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-headers:x64-windows eigen3:x64-windows
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-headers:x64-windows boost-any:x64-windows boost-atomic:x64-windows boost-iterator:x64-windows boost-property-tree:x64-windows boost-range:x64-windows boost-ublas:x64-windows eigen3:x64-windows
 
       - name: Install Python build dependencies
         run: python -m pip install "setuptools>=77" wheel "pybind11>=2.12,<4" numpy h5py scipy PyYAML questionary
@@ -58,8 +48,8 @@ jobs:
       - name: Prepare pinned Kratos source
         run: python tools/prepare_kratos_source.py Kratos
 
-      - name: Build Linux and macOS wheel
-        if: runner.os != 'Windows'
+      - name: Build Linux wheel
+        if: runner.os == 'Linux'
         run: python tools/build_release_wheel.py --parallel ${{ matrix.parallel }}
 
       - name: Build Windows wheel
@@ -75,12 +65,6 @@ jobs:
         run: |
           python -m pip install auditwheel
           python -m auditwheel repair dist/*.whl --wheel-dir wheelhouse
-
-      - name: Repair macOS wheel
-        if: runner.os == 'macOS'
-        run: |
-          python -m pip install delocate
-          delocate-wheel -w wheelhouse dist/*.whl
 
       - name: Repair Windows wheel
         if: runner.os == 'Windows'
