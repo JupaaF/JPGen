@@ -97,6 +97,7 @@ class BuildWithKratos(build_py):
         for name, path in (
             ("KRATOS-CORE-LICENSE.txt", source / "kratos/license.txt"),
             ("KRATOS-DEM-LICENSE.txt", source / "applications/DEMApplication/license.txt"),
+            ("KRATOS-ZLIB-NOTICE.txt", source / "external_libraries/zlib/README"),
         ):
             shutil.copy2(path, destination / name)
         (destination / "KRATOS-REVISION").write_text(revision + "\n", encoding="utf-8")

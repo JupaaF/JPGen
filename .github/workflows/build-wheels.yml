@@ -72,9 +72,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          python -m pip install delvewheel
+          python -m pip install "delvewheel==1.13.1"
           $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
-          python -m delvewheel repair $wheel --wheel-dir wheelhouse
+          $kratosLibs = (Resolve-Path Kratos\bin\Release\libs).Path
+          $vcpkgBin = Join-Path $env:VCPKG_INSTALLATION_ROOT "installed\x64-windows\bin"
+          $dllPaths = @($kratosLibs)
+          if (Test-Path $vcpkgBin) { $dllPaths += $vcpkgBin }
+          python -m delvewheel repair $wheel --wheel-dir wheelhouse --add-path ($dllPaths -join ";")
 
       - name: Check artifact size
         run: python -c "from pathlib import Path; wheels=list(Path('wheelhouse').glob('*.whl')); assert len(wheels)==1; assert wheels[0].stat().st_size < 100_000_000"

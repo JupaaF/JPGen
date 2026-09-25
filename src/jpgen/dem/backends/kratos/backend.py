@@ -70,9 +70,14 @@ class KratosBackend:
             library_key = "PATH" if os.name == "nt" else (
                 "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
             )
+            library_directories = [Path(installation) / "libs"]
+            if self.installation is None and os.name == "nt":
+                repaired_libraries = Path(installation).parent.parent / "jpgen.libs"
+                if repaired_libraries.is_dir():
+                    library_directories.insert(0, repaired_libraries)
             for key, path in (
                 ("PYTHONPATH", str(installation)),
-                (library_key, str(Path(installation) / "libs")),
+                (library_key, os.pathsep.join(map(str, library_directories))),
             ):
                 environment[key] = path + (
                     os.pathsep + environment[key] if environment.get(key) else ""

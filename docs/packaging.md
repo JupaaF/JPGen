@@ -54,8 +54,11 @@ Check binary library dependencies and platform compatibility tags. For broad
 Linux compatibility, build in a suitable manylinux environment and repair
 the wheel. On Ubuntu 22.04, install `patchelf` 0.19.1.0 from PyPI for
 `auditwheel` 6.8.2; the distribution package is too old. For Windows,
-inspect and bundle the corresponding native library
-dependencies. Ensure each uploaded file fits PyPI's size limit.
+inspect and bundle the corresponding native library dependencies.
+`delvewheel` must search `Kratos/bin/Release/libs` for Kratos Core/DEM DLLs.
+Its repaired DLLs live in `jpgen.libs`; the bundled Kratos worker adds that
+directory to its Windows DLL search path. Ensure each uploaded file fits PyPI's
+size limit.
 
 Publish only after Linux and Windows wheels for the advertised Python version
 have passed these checks. Keep the Kratos Core and DEM license files

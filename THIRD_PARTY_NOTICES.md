@@ -8,6 +8,9 @@ Their license texts are distributed in the same directory as
 This product includes Kratos Multi-Physics technology.
 
 Kratos Core and DEM have their own redistribution and attribution conditions.
+Kratos can also build its bundled zlib 1.2.8 on Windows. Its notice is
+shipped as `jpgen/_kratos_runtime/KRATOS-ZLIB-NOTICE.txt`.
+
 The JPGen 0BSD license applies only to original JPGen code.
 
 Linux wheels repaired for portability may also contain GCC's `libgomp`.
