@@ -423,6 +423,7 @@ Walls and shear deformation are not provided by these controllers.
 | `time` | Global simulation time, s |
 | `stage_time` | Time since entry into this leaf stage, s |
 | `kinetic_energy` | Total translational + rotational particle kinetic energy, J |
+| `normalized_kinetic_energy` | `kinetic_energy / (pressure × cell volume)`, dimensionless; periodic cells with positive pressure |
 | `unbalanced_force` | RMS total particle force / RMS contact force, dimensionless |
 | `solid_fraction` | Sum of sphere volumes / current cell volume, dimensionless |
 | `bulk_density` | Particle mass / current cell volume, kg/m³ |
@@ -430,8 +431,11 @@ Walls and shear deformation are not provided by these controllers.
 | `stress_xx`, `stress_yy`, `stress_zz`, `stress_xy`, `stress_xz`, `stress_yz` | Components of the contact stress tensor, Pa |
 
 Stress is the contact-force/branch-vector contribution measured by Kratos,
-without a kinetic stress contribution. Density and stress conditions require a
+without a kinetic stress contribution. Density, stress and normalized kinetic energy conditions require a
 periodic cell; an open placement box does not define a material sample volume.
+The normalized energy is unavailable while the measured pressure is zero or
+negative, so its condition cannot pass and the field is omitted from samples.
+It is recorded at samples in periodic protocols that measure pressure.
 Particle material density remains constant. Sphere volume sums do not subtract
 overlap volumes. `unbalanced_force` approaches zero as the force residual falls
 relative to the contact-force scale; Kratos defines it as zero when there are no
@@ -504,7 +508,7 @@ dem:
             update_every_steps: 50
           acceptance:
             target_rtol: 0.01
-            kinetic_energy_below: 1.0e-8
+            kinetic_energy_below: 1.0e-8  # or normalized_kinetic_energy_below: 1.0e-6
             unbalanced_force_below: 1.0e-3
             hold_for: 0.005
           max_duration_per_target: 0.5

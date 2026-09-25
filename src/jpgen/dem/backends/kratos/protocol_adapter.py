@@ -89,24 +89,27 @@ class KratosProtocolAdapter:
     def observe(self, observables):
         particles = self.analysis.spheres_model_part
         result = {}
-        if 'kinetic_energy' in observables:
+        if observables & {'kinetic_energy', 'normalized_kinetic_energy'}:
             result['kinetic_energy'] = (self.physics.CalculateTranslationalKinematicEnergy(particles)
                                        + self.physics.CalculateRotationalKinematicEnergy(particles))
         if self.periodic and observables & {'solid_fraction', 'bulk_density'}:
             fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
-        if 'unbalanced_force' in observables or observables & STRESS_OBSERVABLES:
+        if 'unbalanced_force' in observables or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
         if 'unbalanced_force' in observables:
             if self.contact_physics is None:
                 self.contact_physics = DEM.ContactElementGlobalPhysicsCalculator()
             result['unbalanced_force'] = self.contact_physics.CalculateUnbalancedForceWithinSphere(
                 particles, self.analysis.contact_model_part, 1e300, [0.0, 0.0, 0.0])
-        if observables & STRESS_OBSERVABLES:
+        if observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
             stress = self.analysis.MeasureSphereForGettingGlobalStressTensor()
             for i, j, suffix in ((0, 0, 'xx'), (1, 1, 'yy'), (2, 2, 'zz'), (0, 1, 'xy'), (0, 2, 'xz'), (1, 2, 'yz')):
                 result['stress_' + suffix] = float(stress[i][j])
             result['pressure'] = sum(result['stress_' + axis] for axis in ('xx', 'yy', 'zz')) / 3
+        if 'normalized_kinetic_energy' in observables and result['pressure'] > 0:
+            result['normalized_kinetic_energy'] = (result['kinetic_energy'] /
+                                                   (result['pressure'] * math.prod(self.box()['lengths'])))
         if not all(math.isfinite(value) for value in result.values()):
             raise ValueError('Nonfinite DEM observable.')
         # Keep components obtained by the same reduction to avoid repeating it

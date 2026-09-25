@@ -92,7 +92,7 @@ def main():
                     self.needs_stress = bool(requested & STRESS_OBSERVABLES)
                     self.needs_contacts = bool(requested & CONTACT_OBSERVABLES)
                     if self.needs_stress:
-                        self.output_observables |= STRESS_OBSERVABLES
+                        self.output_observables |= STRESS_OBSERVABLES | {'normalized_kinetic_energy'}
                     if 'unbalanced_force' in requested:
                         self.output_observables.add('unbalanced_force')
                     self.adapter = KratosProtocolAdapter(self, execution)

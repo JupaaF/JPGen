@@ -13,7 +13,8 @@ if __package__:
 else:
     from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
-OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'unbalanced_force', 'solid_fraction', 'bulk_density',
+OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'normalized_kinetic_energy',
+               'unbalanced_force', 'solid_fraction', 'bulk_density',
                'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz',
                'density_targets_completed'}
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
@@ -149,6 +150,8 @@ def pressure_path_stage(path, target, index):
         control['target_pressure'] = target
         stress_targets = []
     acceptance = path['acceptance']
+    energy_observable = ('normalized_kinetic_energy' if 'normalized_kinetic_energy_below' in acceptance
+                         else 'kinetic_energy')
     def near(observable, value):
         return {
             'observable': observable, 'op': 'near', 'value': value,
@@ -159,7 +162,8 @@ def pressure_path_stage(path, target, index):
         'all': [
             near('pressure', target),
             *(near(observable, value) for observable, value in stress_targets),
-            {'observable': 'kinetic_energy', 'op': 'below', 'value': acceptance['kinetic_energy_below']},
+            {'observable': energy_observable, 'op': 'below',
+             'value': acceptance[energy_observable + '_below']},
             {'observable': 'unbalanced_force', 'op': 'below', 'value': acceptance['unbalanced_force_below']},
         ],
         'hold_for': acceptance['hold_for'],
@@ -219,12 +223,14 @@ def validate_path(path, dt, boundary):
         control.setdefault(field, default)
     acceptance = path['acceptance']
     _mapping(acceptance, {'target_atol', 'target_rtol', 'kinetic_energy_below',
-                          'unbalanced_force_below', 'hold_for'},
-             {'kinetic_energy_below', 'unbalanced_force_below', 'hold_for'})
+                          'normalized_kinetic_energy_below', 'unbalanced_force_below', 'hold_for'},
+             {'unbalanced_force_below', 'hold_for'})
+    if ('kinetic_energy_below' in acceptance) == ('normalized_kinetic_energy_below' in acceptance):
+        raise ValueError('Path acceptance requires exactly one kinetic energy threshold.')
     if not ({'target_atol', 'target_rtol'} & set(acceptance)):
         raise ValueError('Path acceptance requires target_atol and/or target_rtol.')
     for field in ('target_atol', 'target_rtol', 'kinetic_energy_below',
-                  'unbalanced_force_below', 'hold_for'):
+                  'normalized_kinetic_energy_below', 'unbalanced_force_below', 'hold_for'):
         if field in acceptance:
             _number(acceptance[field], 0)
     if acceptance.get('target_atol', 0) == acceptance.get('target_rtol', 0) == 0:
@@ -376,7 +382,7 @@ def validate_protocol(raw, dt, boundary):
                     raise ValueError('Relaxation max_duration exceeds stage max_duration.')
             elif 'density_targets_completed' in required:
                 raise ValueError('density_targets_completed is local to density_continuation.')
-            if boundary != 'periodic' and (stage['control']['type'] != 'free_evolution' or required & (STRESS_OBSERVABLES | {'solid_fraction', 'bulk_density'})):
+            if boundary != 'periodic' and (stage['control']['type'] != 'free_evolution' or required & (STRESS_OBSERVABLES | {'solid_fraction', 'bulk_density', 'normalized_kinetic_energy'})):
                 raise ValueError('Cell control, stress and density conditions require periodic boundaries.')
             budget += duration_steps(duration, dt)
         return budget
@@ -446,7 +452,9 @@ def required_observables(stages):
         if 'stages' in stage:
             result |= required_observables(stage['stages'])
         elif 'path' in stage:
-            result |= {'pressure', 'kinetic_energy', 'unbalanced_force'}
+            result |= {'pressure', 'unbalanced_force'}
+            result.add('normalized_kinetic_energy' if 'normalized_kinetic_energy_below' in stage['path']['acceptance']
+                       else 'kinetic_energy')
             if stage['path']['control'].get('mode') == 'anisotropic':
                 result |= {'stress_xx', 'stress_yy', 'stress_zz'}
         else:
@@ -457,6 +465,8 @@ def required_observables(stages):
             if stage['control']['type'] == 'stress_servo':
                 result |= ({'pressure'} if stage['control']['mode'] == 'isotropic'
                            else {'stress_xx', 'stress_yy', 'stress_zz'})
+    if 'normalized_kinetic_energy' in result:
+        result |= {'kinetic_energy', 'pressure'}
     return result
 
 
@@ -507,6 +517,9 @@ class Condition:
             matches = [child.evaluate(values, elapsed, dt) for child in self.children]
             matched = all(matches) if 'all' in spec else any(matches)
         else:
+            if spec['observable'] == 'normalized_kinetic_energy' and spec['observable'] not in values:
+                self.since = None
+                return False
             value, target = values[spec['observable']], spec['value']
             if not math.isfinite(value):
                 raise ValueError(f'Nonfinite observable: {spec["observable"]}')

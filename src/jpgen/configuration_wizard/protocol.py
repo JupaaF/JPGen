@@ -28,6 +28,7 @@ OBSERVABLE_EXPLANATIONS = {
     'time': 'Global simulated time since the DEM run began, in seconds. It does not restart between stages or repetitions.',
     'stage_time': 'Simulated time since entry into this stage, in seconds. It restarts at zero on each repetition.',
     'kinetic_energy': 'Total translational and rotational particle kinetic energy, in joules. A low value indicates little particle motion but does not by itself prove mechanical equilibrium.',
+    'normalized_kinetic_energy': 'Total particle kinetic energy divided by measured positive contact pressure times periodic cell volume, E/(pV). Dimensionless and unavailable when pressure is zero or negative.',
     'unbalanced_force': 'Dimensionless RMS particle-force imbalance divided by RMS contact force. Values approaching zero indicate mechanical equilibrium; use below with a small threshold.',
     'solid_fraction': 'Sum of particle sphere volumes divided by the current periodic cell volume. This is dimensionless and does not subtract overlap volumes; for example, 0.64 means a nominal solid fraction of 64%.',
     'bulk_density': 'Total particle mass divided by the current periodic cell volume, in kg/m³. This changes as the cell deforms and is different from the fixed particle material density.',
@@ -204,7 +205,7 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
         if group != 'single':
             questions.append(_question(key + '.conditions', 'Number of conditions', 2, count,
                                    explanation='Number of stopping conditions to combine with the all/any choice above. Each condition has its own observable, comparison and threshold. Enter an integer from 1 to 100.'))
-        available = OBSERVABLES if periodic else OBSERVABLES - STRESS_OBSERVABLES - {'solid_fraction', 'bulk_density'}
+        available = OBSERVABLES if periodic else OBSERVABLES - STRESS_OBSERVABLES - {'solid_fraction', 'bulk_density', 'normalized_kinetic_energy'}
         if capabilities is not None:
             available = available & (capabilities.observables | {'time', 'stage_time'})
         for c in range(1 if group == 'single' else answers.get(key + '.conditions', 2)):
@@ -264,8 +265,20 @@ def _pressure_path_questions(key, answers, anisotropic_available):
                   explanation='Each target starts its own update counter; the cell moves on step N.'),
         _question(key + '.path.target_rtol', 'Pressure relative tolerance', 0.01, _positive_float,
                   explanation='The measured pressure must remain within this fraction of the current target.'),
-        _question(key + '.path.kinetic_energy_below', 'Kinetic energy threshold (J)', 1e-8, _positive_float,
-                  explanation='Require total translational and rotational kinetic energy below this threshold.'),
+        _question(key + '.path.kinetic_energy_mode', 'Kinetic energy threshold units', 'kinetic_energy',
+                  choices=[('Joules', 'kinetic_energy'), ('Normalized E/(pV)', 'normalized_kinetic_energy')],
+                  explanation='Choose absolute kinetic energy in joules or dimensionless energy normalized by positive contact pressure and cell volume.'),
+    ])
+    energy_mode = answers.get(key + '.path.kinetic_energy_mode', 'kinetic_energy')
+    if energy_mode == 'normalized_kinetic_energy':
+        questions.append(_question(key + '.path.normalized_kinetic_energy_below',
+                         'Normalized kinetic energy threshold', 1e-6, _positive_float,
+                         explanation=OBSERVABLE_EXPLANATIONS['normalized_kinetic_energy']))
+    else:
+        questions.append(_question(key + '.path.kinetic_energy_below', 'Kinetic energy threshold (J)',
+                         1e-8, _positive_float,
+                         explanation='Require total translational and rotational kinetic energy below this threshold.'))
+    questions.extend([
         _question(key + '.path.unbalanced_force_below', 'Unbalanced force threshold', 1e-3, _positive_float,
                   explanation='Require dimensionless force imbalance below this threshold.'),
         _question(key + '.path.hold_for', 'Hold all conditions for (s)', 0.005, _positive_float,
@@ -361,6 +374,7 @@ def build_protocol(answers, prefix='dem.protocol'):
                        'value': len(targets)}, max_duration=value('max_duration'))
         elif answers[key + '.kind'] == 'path':
             value = lambda field: answers[key + '.path.' + field]
+            energy_mode = answers.get(key + '.path.kinetic_energy_mode', 'kinetic_energy')
             stage['path'] = {
                 'observable': 'pressure',
                 'targets': {'start': value('start'), 'end': value('end'),
@@ -369,7 +383,7 @@ def build_protocol(answers, prefix='dem.protocol'):
                             **({'stress_ratios': value('stress_ratios')} if value('mode') == 'anisotropic' else {}),
                             **{field: value(field) for field in ('max_velocity', 'loading_factor', 'update_every_steps')}},
                 'acceptance': {'target_rtol': value('target_rtol'),
-                               'kinetic_energy_below': value('kinetic_energy_below'),
+                               energy_mode + '_below': value(energy_mode + '_below'),
                                'unbalanced_force_below': value('unbalanced_force_below'),
                                'hold_for': value('hold_for')},
                 'max_duration_per_target': value('max_duration_per_target'),
