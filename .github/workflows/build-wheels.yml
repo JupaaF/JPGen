@@ -3,6 +3,8 @@ name: Build JPGen wheels
 on:
   workflow_dispatch:
   push:
+    branches:
+      - master
     tags:
       - "v*"
 
