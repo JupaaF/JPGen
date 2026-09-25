@@ -1,0 +1,98 @@
+name: Build JPGen wheels
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: linux-x86_64
+            parallel: 4
+          - os: macos-15-intel
+            artifact: macos-x86_64
+            parallel: 4
+          - os: macos-15
+            artifact: macos-arm64
+            parallel: 2
+          - os: windows-2022
+            artifact: windows-x86_64
+            parallel: 4
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libboost-all-dev libeigen3-dev patchelf
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: brew install boost eigen
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install boost-headers:x64-windows eigen3:x64-windows
+
+      - name: Install Python build dependencies
+        run: python -m pip install "setuptools>=77" wheel "pybind11>=2.12,<4" numpy h5py scipy PyYAML questionary
+
+      - name: Prepare pinned Kratos source
+        run: python tools/prepare_kratos_source.py Kratos
+
+      - name: Build Linux and macOS wheel
+        if: runner.os != 'Windows'
+        run: python tools/build_release_wheel.py --parallel ${{ matrix.parallel }}
+
+      - name: Build Windows wheel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BOOST_ROOT = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          $env:CMAKE_TOOLCHAIN_FILE = "$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake"
+          python tools/build_release_wheel.py --parallel ${{ matrix.parallel }}
+
+      - name: Repair Linux wheel
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install auditwheel
+          python -m auditwheel repair dist/*.whl --wheel-dir wheelhouse
+
+      - name: Repair macOS wheel
+        if: runner.os == 'macOS'
+        run: |
+          python -m pip install delocate
+          delocate-wheel -w wheelhouse dist/*.whl
+
+      - name: Repair Windows wheel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install delvewheel
+          $wheel = (Get-ChildItem dist\*.whl | Select-Object -First 1).FullName
+          python -m delvewheel repair $wheel --wheel-dir wheelhouse
+
+      - name: Check artifact size
+        run: python -c "from pathlib import Path; wheels=list(Path('wheelhouse').glob('*.whl')); assert len(wheels)==1; assert wheels[0].stat().st_size < 100_000_000"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: jpgen-${{ matrix.artifact }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error

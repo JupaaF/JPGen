@@ -42,7 +42,6 @@ packing:
 dem:
   engine: kratos
   backend_options:
-    python: /home/jpfernandez/Documentos/JPGen/.venv/bin/python
     installation: null
     threads: 1
     timeout_seconds: null

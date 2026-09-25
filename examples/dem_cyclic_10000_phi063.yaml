@@ -1,5 +1,4 @@
 # Run from the project root:
-# source ./activate_kratos.sh
 # jpgen examples/dem_cyclic_10000_phi063.yaml
 # SI units. Pressure is isotropic contact stress, compression positive.
 # Initial solid fraction is 0.63 BEFORE DEM consolidation; it changes under servo control.

@@ -1,12 +1,21 @@
 # JPGen
 
-JPGen is a particle simulation pipeline. It creates reproducible packings of 3D spheres in axis-aligned rectangular boxes and optionally simulates them with a DEM engine. Kratos is the first implemented engine; the DEM stage uses an engine-independent case and backend contract. All physical quantities use SI units. Packing generation and export do not require a Kratos installation.
+JPGen is a particle simulation pipeline. It creates reproducible packings of 3D spheres in axis-aligned rectangular boxes and optionally simulates them with a DEM engine. Kratos is the first implemented engine; the DEM stage uses an engine-independent case and backend contract. All physical quantities use SI units. Release wheels include the JPGen C++ placement kernels and the pinned, modified Kratos DEM runtime. No separate Kratos installation is needed.
+
+After publication, install JPGen from the package index:
 
 ```bash
-python -m pip install -e .
-jpgen examples/fixed_count.yaml
+python -m pip install jpgen
+jpgen
 ```
 
+For the current local Linux build, install the wheel in `dist/` with
+`python -m pip install dist/jpgen-0.5.0-cp312-cp312-manylinux_2_39_x86_64.whl`.
+
+In an interactive terminal, `jpgen` starts the configuration wizard and runs
+the chosen pipeline. To use an existing YAML file, run `jpgen config.yaml`.
+Results are written to `./runs/` by default; use
+`jpgen config.yaml --output-dir /path/to/runs` to choose another location.
 The CLI prints progress directly by default. Select standard-library logging or
 disable progress output without changing the reproducible YAML configuration:
 
@@ -23,18 +32,11 @@ Programmatic callers can pass any `ProgressObserver` to
 `JPGenApplication.run(..., observer=...)`; omitting it is silent. The CLI alone
 chooses `ConsoleProgressObserver` as its default.
 
-Installation builds optional C++17 placement kernels when a compiler is
-available. They accelerate contact evaluation and sequential insertion while
-keeping NumPy's random stream and the existing placement configuration. Without
-the extension, JPGen uses the Python implementation. After editing the C++
-source, rerun the installation command to rebuild it.
-
-For an explicitly Python-only build, set `JPGEN_BUILD_NATIVE=0` when installing.
-At runtime, `JPGEN_PLACEMENT_BACKEND=python` forces Python and
-`JPGEN_PLACEMENT_BACKEND=native` requires the compiled extension; the default
-`auto` uses it when installed. See the
-[profiling study and dense packing captures](docs/placement-performance.md)
-for measurements and reproducibility commands.
+The wheel includes the C++17 placement kernels and uses them by default.
+`JPGEN_PLACEMENT_BACKEND=python` selects the Python implementation for
+comparison. `JPGEN_PLACEMENT_BACKEND=native` requires the compiled kernels.
+Each wheel also contains the pinned JPGen Kratos fork and its license notices.
+See building release wheels (`docs/packaging.md`) for source and platform details.
 
 Run `jpgen` without a file in an interactive terminal to create a complete YAML
 configuration with the guided wizard and immediately execute it. The wizard can
@@ -45,7 +47,7 @@ preview before saving. It writes a timestamped `.yaml` file in the current
 directory by default. If generation fails, a newly created file is removed or a
 replaced file is restored.
 
-Each invocation creates a unique directory under `runs/`:
+Each invocation creates a unique directory under `./runs/` or the selected `--output-dir`:
 
 - `configuration.yaml`: normalized pipeline configuration, defaults and actual seed; usable for replay.
 - `summary.json`: run status, dependency versions, final box and packing statistics.
@@ -66,7 +68,7 @@ state, then publishes the metadata after the archive is complete. Reading
 disables pickle and validates the exchange version, array names and dtypes
 before the existing physical consistency checks. `results.h5` is unchanged.
 
-Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A publication error rolls back moved files; `packing_outputs.json` appears only after the full set has been moved, so an interrupted publication can be identified by its missing marker. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml`.
+Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A publication error rolls back moved files; `packing_outputs.json` appears only after the full set has been moved, so an interrupted publication can be identified by its missing marker. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml` from the directory containing `runs/`.
 
 ## Pipeline boundaries
 
@@ -196,26 +198,19 @@ These methods are geometric heuristics. They do not guarantee convergence, calcu
 
 ## DEM simulation
 
-See the [local Kratos profiling study](docs/kratos-performance.md) for measured
-thread scaling and neighbour-search tradeoffs with 4000 particles at solid
-fraction 0.60, including reproducible inputs and numerical comparisons.
-The archived [C++ optimization study](docs/kratos-cpp-optimizations.md) records
-measurements of reusable search storage and indexed neighbour reconstruction.
-Those experimental changes have been rolled back; the report and patch remain
-available for future incremental work.
+Archived measurements are available in
+Kratos profiling results (`docs/kratos-performance-results.json`).
+The archived C++ optimization measurements remain under `docs/`; those
+experimental changes are not part of the release.
 
 `ParticlePacking` contains IDs, geometry, initial velocities, its box and `PackingMetadata`. It intentionally contains no material properties, masses, contact laws or solver state. Those belong to `jpgen.dem`. `DemState` represents the final state separately because particles may leave the initial packing box through open boundaries.
 
-Run the complete example with the local Kratos build:
-
-```bash
-source ./activate_kratos.sh
-jpgen examples/packing_with_dem.yaml
-```
-
-Alternatively set `dem.backend_options.installation: Kratos/bin/Release`.
-This directory must contain `KratosMultiphysics/` and the build's `libs/`.
-Without it, the worker inherits the current environment. `python` selects an
+The release wheel uses its bundled Kratos runtime automatically. The
+DEM example (`examples/packing_with_dem.yaml`) can be downloaded from the source
+repository and run with `jpgen packing_with_dem.yaml`. Developers can override
+the bundled runtime with `dem.backend_options.installation`; that directory
+must contain `KratosMultiphysics/` and `libs/`. Without a bundled or explicit
+installation, the worker uses the active environment. `python` selects an
 alternative interpreter (defaults to the current interpreter); `threads` defaults
 to 1; `timeout_seconds` defaults to null (no timeout). Paths are relative to the
 launch directory and are normalized to absolute paths in the run configuration.
@@ -294,7 +289,7 @@ wizard questions. The common wizard uses this registry to select the engine,
 contact law and integration pair. Contact specifications have their own validators
 in `CONTACT_MODELS`. Plans retain the resolved backend; backend objects never
 cross into the particle domain or common result format. See the
-[engine extension guide](docs/dem-backends.md) for contracts and physics semantics.
+engine extension guide (`docs/dem-backends.md`) for contracts and physics semantics.
 
 The optional packing-only MDPA exporter writes `SphericParticle3D` elements and
 free nodal velocities. Its empty `Properties 1` block is a structural
@@ -331,7 +326,7 @@ Use `dem.protocol` instead of `dem.end_time` to compose a simulation from stages
 Both forms remain supported, but cannot appear together. The interactive wizard
 can build stages and nested repeat blocks, or import a protocol from YAML.
 Imported protocols are embedded in the generated configuration, so replay does
-not depend on the imported file. See [dem_protocol.yaml](examples/dem_protocol.yaml)
+not depend on the imported file. See dem_protocol.yaml (`examples/dem_protocol.yaml`)
 for a complete free evolution → consolidation → pressure cycles → relaxation case.
 
 ```yaml
@@ -545,8 +540,8 @@ maintains the configured pressure. Targets must be strictly increasing, with
 a separation greater than twice `density_atol`. Acceptance requires the target
 density, pressure tolerance, kinetic energy, force imbalance and density
 stability to hold together. A transient crossing never publishes a target.
-See the [complete protocol](docs/density-continuation-protocol.md) and the
-[small runnable example](examples/dem_density_continuation.yaml).
+See the complete protocol (`docs/density-continuation-protocol.md`) and the
+small runnable example (`examples/dem_density_continuation.yaml`).
 
 A failed increment restores the preceding solver checkpoint and retries with a
 smaller friction decrement. `max_duration` counts all integrated attempts,
@@ -561,10 +556,10 @@ for this controller so restored contact forces reproduce the uninterrupted
 trajectory.
 
 Density rollback requires the JPGen Kratos DEM patch in
-[patches/kratos-dem-density-restart.patch](patches/kratos-dem-density-restart.patch).
+vendor/kratos-dem-restart.patch (`vendor/kratos-dem-restart.patch`).
 The runtime checks for its version marker before creating a run. Apply the
 patch to the matching Kratos source and rebuild `KratosDEMCore` and
-`KratosDEMApplication`, or use the already patched local `Kratos/` build.
+`KratosDEMApplication`, or use the bundled wheel, which includes this modification.
 The serialized checkpoint includes the portable controller state for audit;
 CLI resume after a process exit is not implemented. Rollback is performed
 inside the active worker run.

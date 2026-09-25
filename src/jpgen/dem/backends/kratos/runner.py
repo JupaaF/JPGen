@@ -250,7 +250,11 @@ def main():
         "control": {"implementation": "jpgen_portable",
                     "actuators": ["cell_strain_rate", "symmetric_wall_velocity"],
                     "unbalanced_force_definition": "RMS particle force imbalance / RMS contact force; excludes moments; zero without contacts"},
-        "versions": {"kratos": KM.Kernel.Version(), "python": platform.python_version()},
+        "versions": {
+            "kratos": KM.Kernel.Version(),
+            "kratos_source_revision": os.environ.get("JPGEN_KRATOS_REVISION"),
+            "python": platform.python_version(),
+        },
     }, indent=2), encoding="utf-8")
 
 

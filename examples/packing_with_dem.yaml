@@ -1,5 +1,4 @@
 # SI units. Activate the Kratos environment before running this example:
-# source ./activate_kratos.sh
 # jpgen examples/packing_with_dem.yaml
 packing:
   sizing_method: variable_box_fraction

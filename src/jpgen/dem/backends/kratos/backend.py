@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
+from ....kratos_runtime import bundled_installation, bundled_revision
 from ...protocol import STRESS_OBSERVABLES, required_observables, control_types, iter_stages
 from ...domain import DemState
 from ...state_exchange import read_state
@@ -60,10 +61,22 @@ class KratosBackend:
     def environment(self):
         environment = os.environ.copy()
         environment["OMP_NUM_THREADS"] = str(self.threads)
-        if self.installation:
-            for key, path in (("PYTHONPATH", self.installation),
-                              ("LD_LIBRARY_PATH", str(Path(self.installation) / "libs"))):
-                environment[key] = path + (os.pathsep + environment[key] if environment.get(key) else "")
+        installation = self.installation or bundled_installation()
+        if self.installation is None:
+            revision = bundled_revision()
+            if revision:
+                environment["JPGEN_KRATOS_REVISION"] = revision
+        if installation:
+            library_key = "PATH" if os.name == "nt" else (
+                "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+            )
+            for key, path in (
+                ("PYTHONPATH", str(installation)),
+                (library_key, str(Path(installation) / "libs")),
+            ):
+                environment[key] = path + (
+                    os.pathsep + environment[key] if environment.get(key) else ""
+                )
         return environment
 
     def validate(self, plan):

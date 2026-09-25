@@ -1,4 +1,4 @@
-# SI units. Activate Kratos with: source ./activate_kratos.sh
+# SI units. The JPGen wheel includes the Kratos DEM runtime.
 # A bounded protocol: unmet conditions produce diagnostics, not success.
 packing:
   sizing_method: fixed_count

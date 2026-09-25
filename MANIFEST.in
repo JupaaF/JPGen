@@ -1,1 +1,8 @@
 include src/jpgen/packing/placement/_kernels.cpp
+include vendor/kratos-revision.txt
+include vendor/kratos-base-revision.txt
+include vendor/kratos-dem-restart.patch
+include LICENSE THIRD_PARTY_NOTICES.md
+include tools/prepare_kratos_source.py tools/build_release_wheel.py
+recursive-include examples *.yaml
+recursive-include docs *.md *.json

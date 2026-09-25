@@ -1,7 +1,7 @@
 # Protocolo DEM: `density_continuation`
 
 Estado: implementado en JPGen y en el Kratos local con
-[el parche DEM de reinicio](../patches/kratos-dem-density-restart.patch). La
+[el parche DEM de reinicio](../vendor/kratos-dem-restart.patch). La
 prevalidación exige el marcador de compatibilidad del binario antes de iniciar
 una ejecución. El rollback restaura un checkpoint completo en un nuevo análisis
 del mismo proceso y conserva los contadores de trabajo. Los checkpoints guardan

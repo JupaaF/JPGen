@@ -36,6 +36,10 @@ def main():
         default="console",
         help="Progress destination (default: console)",
     )
+    parser.add_argument(
+        "--output-dir",
+        help="Directory for run results (default: ./runs)",
+    )
     args = parser.parse_args()
     generated = None
     try:
@@ -47,7 +51,7 @@ def main():
             if generated is None:
                 return 0
             args.file_path = generated.path
-        build_application().run(
+        build_application(args.output_dir).run(
             load_config(args.file_path),
             observer=_progress_observer(args.progress),
         )

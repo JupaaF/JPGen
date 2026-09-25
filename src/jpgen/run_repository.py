@@ -73,7 +73,7 @@ class FileRunRepository:
     root: Path
 
     def create(self, configuration, initial_summary):
-        self.root.mkdir(exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ_")
         directory = Path(tempfile.mkdtemp(prefix=stamp, dir=self.root))
         workspace = RunWorkspace(directory)

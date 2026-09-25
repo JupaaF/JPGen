@@ -34,9 +34,6 @@ from .progress import (
 )
 from .run_repository import FileRunRepository, RunRepository
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
 def runtime_versions():
     return {
         "jpgen": __version__,
@@ -139,15 +136,16 @@ class JPGenApplication:
             raise
 
 
-def build_application():
+def build_application(run_directory=None):
     """Compose the adapters used by the command-line application."""
+    root = Path.cwd() / "runs" if run_directory is None else Path(run_directory).expanduser()
     return JPGenApplication(
         packing=PackingApplication(
             generator=PackingGenerator(),
             store=Hdf5PackingStore(),
             exporters=build_packing_exporters(),
         ),
-        runs=FileRunRepository(PROJECT_ROOT / "runs"),
+        runs=FileRunRepository(root.resolve()),
         version_provider=runtime_versions,
         dem=DemApplication(store=Hdf5DemResultStore(), backends=DEM_BACKENDS),
     )
