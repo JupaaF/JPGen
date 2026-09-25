@@ -52,7 +52,9 @@ environment outside the source checkout. Confirm the native placement backend,
 the `KRATOS-REVISION` marker, and a short DEM run using the bundled runtime.
 Check binary library dependencies and platform compatibility tags. For broad
 Linux compatibility, build in a suitable manylinux environment and repair
-the wheel; for Windows, inspect and bundle the corresponding native library
+the wheel. On Ubuntu 22.04, install `patchelf` 0.19.1.0 from PyPI for
+`auditwheel` 6.8.2; the distribution package is too old. For Windows,
+inspect and bundle the corresponding native library
 dependencies. Ensure each uploaded file fits PyPI's size limit.
 
 Publish only after Linux and Windows wheels for the advertised Python version
