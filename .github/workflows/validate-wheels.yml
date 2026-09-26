@@ -1,0 +1,154 @@
+name: Validate JPGen wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Build JPGen wheels run ID (empty: latest successful master build)"
+        required: false
+        type: string
+  workflow_run:
+    workflows: [Build JPGen wheels]
+    types: [completed]
+  push:
+    branches: [master]
+    paths: [.github/workflows/validate-wheels.yml]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  install-and-run:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: jpgen-linux-x86_64
+          - os: windows-2022
+            artifact: jpgen-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Select existing build
+        id: build
+        shell: python {0}
+        env:
+          REQUESTED_RUN: ${{ inputs.run_id || github.event.workflow_run.id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          import json, os, urllib.request
+          run_id = os.environ.get("REQUESTED_RUN", "")
+          if not run_id:
+              url = (f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}"
+                     "/actions/workflows/build-wheels.yml/runs?status=success&branch=master&per_page=1")
+              request = urllib.request.Request(url, headers={
+                  "Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
+                  "Accept": "application/vnd.github+json",
+              })
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  runs = json.load(response)["workflow_runs"]
+              if not runs:
+                  raise SystemExit("No successful build is available.")
+              run_id = str(runs[0]["id"])
+          if not run_id.isdigit():
+              raise SystemExit("run_id must be a numeric workflow run ID.")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"run_id={run_id}\n")
+          print(f"Validating artifacts from build run {run_id}")
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ runner.temp }}/jpgen-wheels
+          run-id: ${{ steps.build.outputs.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+
+      - name: Install and run in a clean environment
+        shell: python {0}
+        env:
+          BUILD_RUN_ID: ${{ steps.build.outputs.run_id }}
+        run: |
+          import hashlib, json, os, platform, subprocess, venv
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "jpgen-wheel-validation"
+          root.mkdir()
+          wheels = list((root.parent / "jpgen-wheels").glob("*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected one wheel, found {len(wheels)}.")
+          wheel = wheels[0]
+          venv.EnvBuilder(with_pip=True).create(root / "venv")
+          scripts = root / "venv" / ("Scripts" if os.name == "nt" else "bin")
+          python = scripts / ("python.exe" if os.name == "nt" else "python")
+          cli = scripts / ("jpgen.exe" if os.name == "nt" else "jpgen")
+          env = os.environ.copy()
+          for key in ("PYTHONPATH", "PYTHONHOME", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+                      "JPGEN_KRATOS_SOURCE", "JPGEN_KRATOS_INSTALL", "JPGEN_KRATOS_REVISION"):
+              env.pop(key, None)
+          env["JPGEN_PLACEMENT_BACKEND"] = "native"
+          def run(*args):
+              subprocess.run([str(arg) for arg in args], cwd=root, env=env, check=True)
+
+          run(python, "-m", "pip", "install", wheel)
+          run(python, "-m", "pip", "check")
+          run(python, "-c", "from jpgen.packing.placement import _backend; "
+              "from jpgen.kratos_runtime import bundled_installation, bundled_revision; "
+              "print('Placement:', _backend.name, _backend.native.__file__); "
+              "print('Kratos:', bundled_installation(), bundled_revision())")
+          run(python, "-c", "import subprocess,sys; "
+              "from jpgen.dem.backends.kratos.backend import KratosBackend; "
+              "subprocess.run([sys.executable, '-c', "
+              "'import KratosMultiphysics.DEMApplication as DEM; "
+              "print(DEM.JPGEN_DENSITY_RESTART_VERSION)'], "
+              "env=KratosBackend.from_config({}).environment(), check=True)")
+          case = {
+              "packing": {
+                  "sizing_method": "fixed_count", "count": 2, "seed": 14, "exports": [],
+                  "box": {"origin": [0, 0, 0], "lengths": [0.1, 0.1, 0.1], "periodic": False},
+                  "radii": {"type": "constant", "value": 0.001},
+                  "placement": {"method": "random_sequential", "max_overlap": 0.0,
+                                "position_attempts": 100},
+              },
+              "dem": {
+                  "engine": "kratos", "boundary": "open", "gravity": [0, 0, 0],
+                  "material": {"density": 2500, "young_modulus": 1e7, "poisson_ratio": 0.25},
+                  "contact": {"model": "hertz_viscous_coulomb", "static_friction": 0.5,
+                              "dynamic_friction": 0.4, "restitution": 0.8},
+                  "time_step": 1e-6, "end_time": 2e-6,
+                  "backend_options": {"timeout_seconds": 120},
+              },
+          }
+          subprocess.run(
+              [str(python), "-c", "import json,sys,yaml; from pathlib import Path; "
+               "Path('configuration.yaml').write_text(yaml.safe_dump(json.load(sys.stdin)), encoding='utf-8')"],
+              input=json.dumps(case), text=True, cwd=root, env=env, check=True,
+          )
+          run(cli, root / "configuration.yaml", "--output-dir", root / "runs", "--progress", "logging")
+          report = {
+              "build_run_id": os.environ["BUILD_RUN_ID"], "wheel": wheel.name,
+              "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+              "platform": platform.platform(), "python": platform.python_version(),
+              "summary": json.loads(next((root / "runs").glob("*/summary.json")).read_text()),
+          }
+          (root / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+              output.write(f"Installed and executed `{wheel.name}` from run {report['build_run_id']}.\n")
+              output.write(f"\nPacking and DEM: `{report['summary']['status']}`.\n")
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: validation-${{ matrix.artifact }}
+          path: |
+            ${{ runner.temp }}/jpgen-wheel-validation/report.json
+            ${{ runner.temp }}/jpgen-wheel-validation/configuration.yaml
+            ${{ runner.temp }}/jpgen-wheel-validation/runs/
+          if-no-files-found: ignore

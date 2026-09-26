@@ -9,9 +9,8 @@ revision or uncommitted Kratos source changes.
 
 Build a separate wheel on every supported operating system, architecture and
 CPython version. The initial release targets Linux x86_64 and Windows x86_64
-on CPython 3.12. The locally built and exercised artifact is Linux x86_64. The
-Windows wheel must be built and checked on its own runner before release. A
-Linux wheel cannot serve Windows.
+on CPython 3.12. Both wheels must be installed and exercised on their own
+platform before release. A Linux wheel cannot serve Windows.
 
 ## Source preparation
 
@@ -63,3 +62,25 @@ size limit.
 Publish only after Linux and Windows wheels for the advertised Python version
 have passed these checks. Keep the Kratos Core and DEM license files
 and `THIRD_PARTY_NOTICES.md` in every artifact.
+
+## Validate existing Actions artifacts
+
+The `Validate JPGen wheels` workflow downloads the artifacts from a successful
+`Build JPGen wheels` run. It runs automatically after successful builds, and
+can also be started from Actions with an optional build `run_id`. Leaving that
+input empty selects the latest successful build on `master`. Changes to the
+validation workflow on `master` also trigger validation of existing artifacts.
+
+Each Linux/Windows runner creates a fresh Python 3.12 virtual environment,
+installs the wheel with its dependencies, and runs `pip check`. It requires
+the native C++ placement backend, reports the bundled Kratos revision, imports
+the fork's density restart marker, and executes a two-particle packing and a
+short DEM simulation. It does not check out JPGen or build Kratos; all native
+code must come from the downloaded wheel.
+
+Download the `validation-jpgen-linux-x86_64` and
+`validation-jpgen-windows-x86_64` artifacts to review `report.json`, the input
+configuration and execution outputs. The report records the source build run,
+wheel SHA256, platform, Python version and execution summary. Check that both
+validation jobs passed for the exact build being released. A successful wheel
+build alone does not establish that the installed package works.
