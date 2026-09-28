@@ -84,3 +84,50 @@ configuration and execution outputs. The report records the source build run,
 wheel SHA256, platform, Python version and execution summary. Check that both
 validation jobs passed for the exact build being released. A successful wheel
 build alone does not establish that the installed package works.
+
+## Publishing a release
+
+The initial PyPI publication contains **only Linux x86_64 and Windows x86_64
+wheels for CPython 3.12**. No source distribution is uploaded: the current
+`setup.py` needs a prepared, compiled copy of the pinned Kratos fork to build a
+wheel, so an sdist would not provide the usual direct `pip install` experience.
+The complete JPGen source, Kratos base revision and patch remain available in
+the GitHub repository and its release tag. Unsupported platforms and Python
+versions will receive no matching distribution from PyPI.
+
+`Release JPGen` is a manually started workflow. It downloads the already built
+wheels and their clean-install validation reports. It checks the release tag,
+source commit, package version, artifact names, wheel hashes, bundled Kratos
+revision, licenses and completed packing/DEM results. It uploads exactly those
+wheel files to PyPI and then attaches the same files plus a SHA256 manifest to
+a GitHub Release. The workflow does not rebuild them.
+
+Prepare the first release as follows:
+
+1. Push the release changes to `master` and wait for `Build JPGen wheels` and
+   its subsequent `Validate JPGen wheels` run to succeed. Record both run IDs.
+2. In GitHub repository Settings → Environments, create `pypi` and require a
+   reviewer for deployments to it. Register a PyPI [pending trusted
+   publisher](https://pypi.org/manage/account/publishing/) for project `jpgen`,
+   owner `JupaaF`, repository `JPGen`, workflow `release.yml`, environment
+   `pypi`. If `jpgen` is already registered to an account you control, add this
+   publisher to that project's Publishing settings instead. The pending
+   publisher does not reserve the name until the first upload.
+3. Tag the **same commit as the successful build** with `v0.5.0`, then push the
+   tag. For example, after checking `git rev-parse HEAD` against the build's
+   `head_sha`, use `git tag -a v0.5.0 -m "JPGen 0.5.0"` and
+   `git push origin v0.5.0`.
+4. On GitHub Actions → `Release JPGen` → Run workflow, select `master` and enter
+   `v0.5.0`, the build run ID and the validation run ID. Review the `verify`
+   job and approve the `pypi` environment deployment. The later GitHub Release
+   job runs only if PyPI publication succeeds.
+5. Install from PyPI in fresh Linux and Windows Python 3.12 environments with
+   `python -m pip install --only-binary=:all: jpgen==0.5.0` and check `jpgen`
+   starts. Check that the two wheels and release manifest appear on GitHub
+   Releases. Publication is irreversible for a given version and wheel
+   filename; a fix requires a new version.
+
+PyPI's default per-file limit is 100 MB. The build and release workflows reject
+larger wheels. A pending publisher or GitHub environment must be configured by
+an account owner before this workflow can publish. GitHub Actions artifacts
+expire; GitHub Releases and PyPI are the permanent download locations.

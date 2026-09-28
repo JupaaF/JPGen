@@ -2,15 +2,21 @@
 
 JPGen is a particle simulation pipeline. It creates reproducible packings of 3D spheres in axis-aligned rectangular boxes and optionally simulates them with a DEM engine. Kratos is the first implemented engine; the DEM stage uses an engine-independent case and backend contract. All physical quantities use SI units. Release wheels include the JPGen C++ placement kernels and the pinned, modified Kratos DEM runtime. No separate Kratos installation is needed.
 
-After publication, install JPGen from the package index:
+The first release supports CPython 3.12 on Linux x86_64 and Windows x86_64.
+The wheels contain the native placement module and the pinned Kratos fork.
+After publication, install JPGen from PyPI:
 
 ```bash
 python -m pip install jpgen
 jpgen
 ```
 
-For the current local Linux build, install the wheel in `dist/` with
-`python -m pip install dist/jpgen-0.5.0-cp312-cp312-manylinux_2_39_x86_64.whl`.
+Before publication, download the wheel for your platform from the
+[GitHub Actions build](https://github.com/JupaaF/JPGen/actions/workflows/build-wheels.yml)
+and install it with `python -m pip install /path/to/jpgen-0.5.0-*.whl`.
+The [release process](docs/packaging.md#publishing-a-release) describes how
+validated wheels are published. macOS and other Python versions are not covered
+by this release.
 
 In an interactive terminal, `jpgen` starts the configuration wizard and runs
 the chosen pipeline. To use an existing YAML file, run `jpgen config.yaml`.

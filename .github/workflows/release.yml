@@ -1,0 +1,150 @@
+name: Release JPGen
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, for example v0.5.0"
+        required: true
+        type: string
+      build_run_id:
+        description: "Successful Build JPGen wheels run ID for this tag"
+        required: true
+        type: string
+      validation_run_id:
+        description: "Successful Validate JPGen wheels run ID for that build"
+        required: true
+        type: string
+
+concurrency:
+  group: jpgen-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: jpgen-linux-x86_64
+          path: downloaded/wheels/linux
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        with:
+          name: jpgen-windows-x86_64
+          path: downloaded/wheels/windows
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        with:
+          name: validation-jpgen-linux-x86_64
+          path: downloaded/reports/linux
+          run-id: ${{ inputs.validation_run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        with:
+          name: validation-jpgen-windows-x86_64
+          path: downloaded/reports/windows
+          run-id: ${{ inputs.validation_run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Verify tag, build, reports and wheel hashes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          BUILD_RUN: ${{ inputs.build_run_id }}
+          VALIDATION_RUN: ${{ inputs.validation_run_id }}
+        run: |
+          python tools/verify_release_artifacts.py \
+            --tag "$RELEASE_TAG" --build-run "$BUILD_RUN" \
+            --validation-run "$VALIDATION_RUN" \
+            --wheel-dir downloaded/wheels --report-dir downloaded/reports
+          mkdir dist
+          cp downloaded/wheels/linux/*.whl downloaded/wheels/windows/*.whl dist/
+          cp downloaded/wheels/release-manifest.json release-manifest.json
+      - uses: actions/upload-artifact@v6
+        with:
+          name: jpgen-verified-release-wheels
+          path: dist/*.whl
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        with:
+          name: jpgen-release-manifest
+          path: release-manifest.json
+          if-no-files-found: error
+
+  publish-pypi:
+    needs: verify
+    runs-on: ubuntu-22.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/jpgen/
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: jpgen-verified-release-wheels
+          path: dist
+          digest-mismatch: error
+      - name: Publish verified wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  publish-github:
+    needs: publish-pypi
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: jpgen-verified-release-wheels
+          path: dist
+          digest-mismatch: error
+      - uses: actions/download-artifact@v8
+        with:
+          name: jpgen-release-manifest
+          path: dist
+          digest-mismatch: error
+      - name: Publish GitHub release with the same wheels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('dist/release-manifest.json').read_text())
+          lines = [
+              f"JPGen {manifest['tag']} for CPython 3.12 on Linux x86_64 and Windows x86_64.",
+              "Both wheels include the native C++ placement module and the pinned Kratos Core/DEM fork.",
+              f"Build run: https://github.com/JupaaF/JPGen/actions/runs/{manifest['build_run_id']}",
+              f"Validation run: https://github.com/JupaaF/JPGen/actions/runs/{manifest['validation_run_id']}",
+              f"Kratos revision: {manifest['kratos_revision']}",
+              "The attached manifest records the SHA256 of each wheel.",
+          ]
+          Path('release-notes.md').write_text('\n\n'.join(lines) + '\n')
+          PY
+          gh release create "$RELEASE_TAG" dist/*.whl dist/release-manifest.json \
+            --verify-tag --title "JPGen $RELEASE_TAG" --notes-file release-notes.md
