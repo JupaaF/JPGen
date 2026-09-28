@@ -23,7 +23,7 @@ def main():
     source = args.source.resolve()
     expected = (ROOT / "vendor/kratos-revision.txt").read_text().strip()
     actual = subprocess.check_output(
-        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ["git", "rev-parse", "HEAD"], cwd=source, text=True
     ).strip()
     if actual != expected:
         raise SystemExit(f"Kratos revision mismatch: expected {expected}, got {actual}")
@@ -42,6 +42,7 @@ def main():
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DCMAKE_INSTALL_PREFIX={install}",
         "-DUSE_MPI=OFF", "-DUSE_EIGEN_MKL=OFF",
+        "-DKRATOS_BUILD_TESTING=OFF", "-DKRATOS_BUILD_BENCHMARK=OFF",
         "-DKRATOS_GENERATE_PYTHON_STUBS=OFF",
     ]
     if environment.get("CMAKE_TOOLCHAIN_FILE"):
@@ -55,7 +56,7 @@ def main():
         env=environment,
     )
     run(
-        [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation",
+        [sys.executable, "-m", "pip", "wheel", "--no-index", "--no-deps", "--no-build-isolation",
          "--wheel-dir", args.wheel_dir.resolve(), ROOT],
         env=environment,
     )

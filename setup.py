@@ -34,7 +34,7 @@ class BuildWithKratos(build_py):
         install = Path(os.environ.get("JPGEN_KRATOS_INSTALL", source / "bin/Release")).resolve()
         try:
             revision = subprocess.check_output(
-                ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+                ["git", "rev-parse", "HEAD"], cwd=source, text=True
             ).strip()
         except (OSError, subprocess.CalledProcessError) as error:
             raise RuntimeError(
@@ -46,7 +46,7 @@ class BuildWithKratos(build_py):
                 f"Kratos revision {revision} does not match the pinned {KRATOS_REVISION}"
             )
         if subprocess.check_output(
-            ["git", "-C", str(source), "status", "--porcelain"], text=True
+            ["git", "status", "--porcelain"], cwd=source, text=True
         ).strip():
             raise RuntimeError("Kratos has uncommitted source changes.")
 

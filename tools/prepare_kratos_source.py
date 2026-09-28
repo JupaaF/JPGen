@@ -24,7 +24,7 @@ def main():
     if destination.exists():
         raise SystemExit(f"Destination already exists: {destination}")
     subprocess.run(
-        ["git", "clone", "--branch", BRANCH, "--single-branch", UPSTREAM, str(destination)],
+        ["git", "clone", "--depth", "1", "--branch", BRANCH, "--single-branch", UPSTREAM, str(destination)],
         check=True,
     )
     git("checkout", "--detach", base, cwd=destination)

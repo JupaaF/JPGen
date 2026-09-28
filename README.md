@@ -1,5 +1,8 @@
 # JPGen
 
+Para ejecutar JPGen en el clúster Acuario de CIMNE, consulta la
+[guía de Acuario](docs/acuario.md).
+
 JPGen is a particle simulation pipeline. It creates reproducible packings of 3D spheres in axis-aligned rectangular boxes and optionally simulates them with a DEM engine. Kratos is the first implemented engine; the DEM stage uses an engine-independent case and backend contract. All physical quantities use SI units. Release wheels include the JPGen C++ placement kernels and the pinned, modified Kratos DEM runtime. No separate Kratos installation is needed.
 
 The first release supports CPython 3.12 on Linux x86_64 and Windows x86_64.

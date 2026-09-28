@@ -12,3 +12,6 @@ Kratos/
 benchmarks/
 runs/
 __pycache__/
+# Wizard configurations and temporary transfer archives in the repository root
+/jpgen_*.yaml
+/jpgen-source.tar.gz

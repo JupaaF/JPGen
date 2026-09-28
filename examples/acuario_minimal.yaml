@@ -1,0 +1,36 @@
+# Ejemplo corto de JPGen con Kratos para el clúster Acuario. Unidades SI.
+packing:
+  sizing_method: fixed_count
+  count: 2
+  seed: 20260928
+  exports: []
+  box:
+    origin: [0.0, 0.0, 0.0]
+    lengths: [0.1, 0.1, 0.1]
+    periodic: false
+  radii: {type: constant, value: 0.005}
+  velocity: {type: constant, value: 0.0}
+  angular_velocity: {type: constant, value: 0.0}
+  placement:
+    method: random_sequential
+    max_overlap: 0.0
+    position_attempts: 100
+
+dem:
+  engine: kratos
+  material:
+    density: 2500.0
+    young_modulus: 1.0e+7
+    poisson_ratio: 0.25
+  contact:
+    model: hertz_viscous_coulomb
+    static_friction: 0.5
+    dynamic_friction: 0.4
+    restitution: 0.8
+  boundary: open
+  gravity: [0.0, 0.0, -9.81]
+  time_step: 1.0e-5
+  end_time: 1.0e-4
+  backend_options:
+    threads: 1
+    timeout_seconds: 120.0
