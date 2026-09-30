@@ -17,6 +17,8 @@ METRICS = {
     "bulk_density": {"unit": "kg/m^3", "definition": "Particle mass / cell volume"},
     "pressure": {"unit": "Pa", "definition": "Trace of contact stress / 3; compression positive; no kinetic contribution"},
     "unbalanced_force": {"unit": "1", "definition": "RMS particle force imbalance / RMS contact force; excludes moments; zero without contacts"},
+    "thermal_conductivity": {"unit": "1", "definition": "3x3 DEMGen contact geometry tensor: sum(contact area * branch length * direction outer product) / periodic cell volume; not W/(m*K)"},
+    "thermal_conductivity_trace": {"unit": "1", "definition": "Trace of the contact geometry tensor / 3"},
     **{f"stress_{axis}": {"unit": "Pa", "definition": "Contact-force stress; no kinetic contribution"}
        for axis in ("xx", "yy", "zz", "xy", "xz", "yz")},
 }

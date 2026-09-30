@@ -40,7 +40,7 @@ def write_case(case, directory, *, retention="full"):
         "material_assignation_table": [["SpheresPart", "particles"]],
     }
     requested = required_observables(case.protocol["stages"]) if case.protocol else set()
-    needs_contacts = bool(requested & CONTACT_OBSERVABLES)
+    needs_contacts = bool(requested & CONTACT_OBSERVABLES) or case.boundary == "periodic"
     needs_stress = bool(requested & STRESS_OBSERVABLES)
     particle_diameter_d50 = float(2 * np.median(case.packing.radii))
     parameters = {

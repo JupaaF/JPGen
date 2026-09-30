@@ -124,6 +124,17 @@ to mark an abandoned running run as interrupted and reconcile its outputs.
 See [the run-format contract](docs/run-format.md) for schemas, partial results,
 legacy import, comparison semantics and browser integration.
 
+## Viewer prototypes
+
+Three interactive HTML concepts are available in
+[the viewer prototype gallery](prototypes/run-viewer/index.html): **Observatorio**
+for comparing runs, **Atlas** for browsing samples, and **Protocolo** for inspecting
+saved states. Open the gallery directly in a browser; no installation is needed.
+The prototypes distinguish synthetic demonstration data from the included real
+archived run, and can load exported `view/` folders locally. See the
+[prototype guide](prototypes/run-viewer/README.md) for interactions and limitations.
+These are design prototypes, separate from the simulation and persistence code.
+
 ## Pipeline boundaries
 
 `src/` is the source root and `src/jpgen/` is the Python package. The package is organized around the complete pipeline rather than treating packing generation as the entire application:
@@ -482,6 +493,17 @@ Walls and shear deformation are not provided by these controllers.
 | `bulk_density` | Particle mass / current cell volume, kg/m³ |
 | `pressure` | Trace of the contact stress tensor / 3, Pa, compression positive |
 | `stress_xx`, `stress_yy`, `stress_zz`, `stress_xy`, `stress_xz`, `stress_yz` | Components of the contact stress tensor, Pa |
+| `thermal_conductivity` | DEMGen contact geometry tensor, 3×3, dimensionless; periodic cells only |
+| `thermal_conductivity_trace` | Tensor trace / 3, dimensionless |
+
+`thermal_conductivity` follows DEMGen's geometric definition: each overlapping
+contact contributes its intersection-circle area times its center distance times
+the outer product of its unit branch direction; the sum is divided by the current
+periodic cell volume. It uses neither contact forces nor temperatures and is not
+a thermal conductivity in W/(m·K). The full tensor and its trace mean are
+recorded at protocol samples and stage exits, and in the final DEM result.
+Kratos's native DEM measurement is required. Runs with open boundaries omit
+this cell-based measurement.
 
 Stress is the contact-force/branch-vector contribution measured by Kratos,
 without a kinetic stress contribution. Density, stress and normalized kinetic energy conditions require a

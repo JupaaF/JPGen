@@ -96,7 +96,7 @@ class KratosProtocolAdapter:
         if self.periodic and observables & {'solid_fraction', 'bulk_density'}:
             fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
-        if 'unbalanced_force' in observables or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
+        if 'unbalanced_force' in observables or 'thermal_conductivity' in observables or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
         if 'unbalanced_force' in observables:
             if self.contact_physics is None:
@@ -111,7 +111,14 @@ class KratosProtocolAdapter:
         if 'normalized_kinetic_energy' in observables and result['pressure'] > 0:
             result['normalized_kinetic_energy'] = (result['kinetic_energy'] /
                                                    (result['pressure'] * math.prod(self.box()['lengths'])))
-        if not all(math.isfinite(value) for value in result.values()):
+        if 'thermal_conductivity' in observables and self.periodic:
+            tensor, trace = self.analysis.MeasureGlobalConductivityTensor()
+            tensor = np.asarray(tensor, dtype=float)
+            if tensor.shape != (3, 3) or not np.all(np.isfinite(tensor)) or not math.isfinite(trace):
+                raise ValueError('Invalid Kratos conductivity tensor.')
+            result['thermal_conductivity'] = tensor.tolist()
+            result['thermal_conductivity_trace'] = float(trace)
+        if not all(math.isfinite(value) for key, value in result.items() if key != 'thermal_conductivity'):
             raise ValueError('Nonfinite DEM observable.')
         # Keep components obtained by the same reduction to avoid repeating it
         # when a sample or stage exit requests the rest of the stress tensor.

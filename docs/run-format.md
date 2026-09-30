@@ -109,6 +109,12 @@ state uniquely. Parent-branch and rollback events preserve execution history.
 
 `RunReader.series()` excludes discarded and pending attempts by default. Use
 `include_discarded=True` to inspect all work, with a `disposition` on each sample.
+Periodic DEM samples include `thermal_conductivity` as a full 3×3 nested array
+and `thermal_conductivity_trace` as its trace divided by three. Both are
+adimensional DEMGen contact geometry measures, not thermal transport coefficients
+in W/(m·K). The final report in `final.h5` contains the same fields. Open-boundary
+runs omit them.
+
 Missing observables remain missing. The metrics dictionary records SI units and
 physical meaning, including compression-positive contact pressure and nominal
 solid fraction. Unknown legacy branch membership is never presented as accepted.

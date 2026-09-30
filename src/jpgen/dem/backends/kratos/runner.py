@@ -103,10 +103,10 @@ def main():
                         self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy'}
                     if execution['boundary'] == 'periodic':
-                        self.output_observables |= {'solid_fraction', 'bulk_density'}
+                        self.output_observables |= {'solid_fraction', 'bulk_density', 'thermal_conductivity'}
                     requested = required_observables(specification['stages'])
                     self.needs_stress = bool(requested & STRESS_OBSERVABLES)
-                    self.needs_contacts = bool(requested & CONTACT_OBSERVABLES)
+                    self.needs_contacts = bool(requested & CONTACT_OBSERVABLES) or execution['boundary'] == 'periodic'
                     if self.needs_stress:
                         self.output_observables |= STRESS_OBSERVABLES | {'normalized_kinetic_energy'}
                     if 'unbalanced_force' in requested:
@@ -221,6 +221,12 @@ def main():
             if self.rollback_checkpoint is not None:
                 super().Finalize()
                 return
+            if execution['boundary'] == 'periodic' and self.protocol is None:
+                self.adapter = KratosProtocolAdapter(self, execution)
+                self.observables = self.adapter.observe({'thermal_conductivity'})
+                store.sample({"step": self.completed_steps, "physical_step": self.completed_steps,
+                              "stage": None, "observables": self.observables,
+                              "box": self.adapter.box(), "time_step": {"dt": execution['end_time'] / execution['steps']}})
             self.final_state = {
                 "time": self.time,
                 "box": self.adapter.box() if self.adapter else {
