@@ -21,11 +21,18 @@ def _progress_observer(mode):
         return ConsoleProgressObserver()
     if mode == "logging":
         logging.basicConfig(level=logging.INFO)
-        return LoggingProgressObserver(run_filename="jpgen.log")
+        return LoggingProgressObserver()
     return None
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "runs":
+        from .run_management import main as runs_main
+        try:
+            return runs_main(sys.argv[2:])
+        except (ValueError, OSError, KeyError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
     parser = argparse.ArgumentParser(
         description="JPGen: particle packing and DEM simulation pipeline."
     )
@@ -40,6 +47,11 @@ def main():
         "--output-dir",
         help="Directory for run results (default: ./runs)",
     )
+    parser.add_argument("--label", help="Human-readable run label")
+    parser.add_argument("--tag", action="append", default=[], help="Run tag (repeatable)")
+    parser.add_argument("--experiment", help="Experiment identifier for grouping runs")
+    parser.add_argument("--retention", choices=("full", "analysis"), default="full",
+                        help="Retain native checkpoints (full) or analysis results only")
     args = parser.parse_args()
     generated = None
     try:
@@ -54,6 +66,7 @@ def main():
         build_application(args.output_dir).run(
             load_config(args.file_path),
             observer=_progress_observer(args.progress),
+            label=args.label, tags=args.tag, experiment_id=args.experiment, retention=args.retention,
         )
     except (ValueError, OSError, KeyError, OverflowError) as error:
         _rollback(generated)

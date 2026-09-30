@@ -15,12 +15,12 @@ ROTATION_SCHEMES = {"direct": "Direct_Integration"}
 CONTACT_LAWS = {"hertz_viscous_coulomb": "DEM_D_Hertz_viscous_Coulomb"}
 
 
-def write_case(case, directory):
-    directory.mkdir(parents=True, exist_ok=False)
-    inputs = directory / "input"
-    inputs.mkdir()
+def write_case(case, directory, *, retention="full"):
+    directory.mkdir(parents=True, exist_ok=True)
+    inputs = directory / "backend/kratos/input"
+    inputs.mkdir(parents=True, exist_ok=False)
     (directory / "logs").mkdir()
-    (directory / "native_results").mkdir()
+    (directory / "backend/kratos/native").mkdir()
     KratosExporter().export(inputs / "particlesDEM.mdpa", case.packing)
     material = case.material
     contact = case.contact
@@ -72,7 +72,7 @@ def write_case(case, directory):
         parameters[f"BoundingBoxMin{letter}"] = float(case.packing.box.origin[axis])
         parameters[f"BoundingBoxMax{letter}"] = float(case.packing.box.origin[axis] + case.packing.box.lengths[axis])
     for name, value in (("ProjectParametersDEM.json", parameters), ("MaterialsDEM.json", materials),
-                        ("execution.json", {"steps": case.steps, "protocol": case.protocol,
+                        ("execution.json", {"retention": retention, "steps": case.steps, "protocol": case.protocol,
                                              "density": case.material.density, "boundary": case.boundary,
                                              "particle_diameter_d50": particle_diameter_d50,
                                              "young_modulus": material.young_modulus, "poisson_ratio": material.poisson_ratio,
@@ -88,3 +88,5 @@ def write_case(case, directory):
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
     shutil.copyfile(Path(__file__).parents[2] / "commands.py", inputs / "commands.py")
     shutil.copyfile(Path(__file__).parents[2] / "state_exchange.py", inputs / "state_exchange.py")
+
+    shutil.copyfile(Path(__file__).parents[2] / "output_writer.py", inputs / "output_writer.py")

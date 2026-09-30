@@ -140,8 +140,8 @@ def main():
         require(report["wheel"] == wheel.name and report["sha256"] == checksum,
                 f"Validation does not match the {platform} wheel bytes")
         summary = report["summary"]
-        require(summary["status"] == "complete" and summary["packing"]["status"] == "complete"
-                and summary["dem"]["status"] == "complete", f"{platform} execution incomplete")
+        require(summary["status"] == "completed" and summary["packing"]["status"] == "completed"
+                and summary["dem"]["status"] == "completed", f"{platform} execution incomplete")
         require(summary["dem"]["versions"]["kratos_source_revision"] == KRATOS_REVISION,
                 f"{platform} used a different Kratos fork")
         require(summary["packing"]["count"] == 2 and summary["dem"]["steps"] == 2,

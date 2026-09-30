@@ -33,9 +33,9 @@ jpgen examples/fixed_count.yaml --progress logging
 jpgen examples/fixed_count.yaml --progress none
 ```
 
-The `logging` mode writes to standard error and to `jpgen.log` inside the
-created run directory. The file handler is closed when the run completes or
-fails.
+The `logging` mode writes progress to standard error. Every run independently
+records structured progress in `logs/events.jsonl` and a readable `logs/jpgen.log`,
+including when console progress is disabled.
 
 Programmatic callers can pass any `ProgressObserver` to
 `JPGenApplication.run(..., observer=...)`; omitting it is silent. The CLI alone
@@ -56,28 +56,73 @@ preview before saving. It writes a timestamped `.yaml` file in the current
 directory by default. If generation fails, a newly created file is removed or a
 replaced file is restored.
 
-Each invocation creates a unique directory under `./runs/` or the selected `--output-dir`:
+Each invocation creates a versioned, self-contained run under `./runs/` or
+`--output-dir`, named `2026-09-30_14-32-08Z__label__a7c92e31`. Its UUID is
+independent of the directory name. Use `--label`, repeatable `--tag` and
+`--experiment` to organize runs without changing their physical configuration.
 
-- `configuration.yaml`: normalized pipeline configuration, defaults and actual seed; usable for replay.
-- `summary.json`: run status, dependency versions, final box and packing statistics.
-- `packing.h5`: versioned packing dataset with geometry, initial velocities, configuration and metadata.
-- `packing_outputs.json`: completion marker listing the published packing files.
-- `particlesDEM.mdpa`: optional Kratos packing export, produced by `exports: [kratos]`.
-- `particles.vtp`: optional VTK XML PolyData, produced by `exports: [vtk]`.
+```text
+<run>/
+  run.json                         # Identity, lifecycle, stage references and result availability
+  artifacts.json                   # Published files, roles, validation and SHA-256 hashes
+  config/{requested,effective}.yaml
+  provenance/{environment,sources}.json
+  stages/packing/
+    summary.json
+    results/packing.h5
+    exports/                       # Optional VTK and MDPA exports
+  stages/dem/                      # When DEM is configured
+    summary.json
+    results/final.h5
+    results/observables.jsonl
+    results/states.jsonl
+    results/states/                 # Common particle states and target metadata
+    execution/                     # Attempts and rollback events
+    backend/kratos/{input,native,checkpoints}/
+    logs/{stdout,stderr}.log
+  logs/{events.jsonl,jpgen.log}
+  view/                            # Regenerable JSON summaries, series and packing preview
+```
 
-When DEM is enabled, `dem/input/` contains the runnable engine case,
-`dem/logs/` captures the solver output, `dem/native_results/` retains native
-artifacts and `dem/results.h5` stores the validated final particle state.
+`run.json` uses schema `JPGen.run`, version `1.0`. Packing and DEM share the
+same lifecycle vocabulary: `pending`, `running`, `completed`, `failed`,
+`cancelled`, `interrupted`, and `skipped` where applicable. Run success and
+result availability are separate: failed protocols retain earlier states and
+observables. Common scientific outputs live outside the engine directory.
+All artifact and state references are relative to the run root.
 
-Kratos transfers its final particle arrays through `dem/native_results/final_state.npz`
-(uncompressed NumPy arrays, int64 IDs and float64 geometry/velocities).
-`final_state.json` contains only schema/version, SI units, final time and box
-metadata. The worker writes arrays sequentially before releasing the solver
-state, then publishes the metadata after the archive is complete. Reading
-disables pickle and validates the exchange version, array names and dtypes
-before the existing physical consistency checks. `results.h5` is unchanged.
+Invalid configuration or an unavailable runtime fails before creating a run.
+Packing and final DEM HDF5 outputs are published after validation and readback;
+`artifacts.json` is their publication marker. Interrupted multi-file publication
+may leave unlisted files; explicit recovery validates HDF5 before registering
+it. State indices are appended only after their NPZ/JSON pair is complete.
+A torn final JSONL record is ignored by the reader. Existing runs are never
+overwritten. Replay with `jpgen runs/<run>/config/effective.yaml`; imported
+packing references resolve to the run's own snapshot, even after moving it.
 
-Invalid configuration or an unavailable DEM runtime fails before a run directory is created. Packing failures return a nonzero exit code and preserve the effective configuration, seed and error. Packing outputs are published only after generation and HDF5 readback succeed. A publication error rolls back moved files; `packing_outputs.json` appears only after the full set has been moved, so an interrupted publication can be identified by its missing marker. A DEM failure preserves the completed packing, case inputs and solver logs, and marks only DEM as failed. Existing runs are never overwritten. Replay with `jpgen runs/<run>/configuration.yaml` from the directory containing `runs/`.
+The default `--retention full` keeps native checkpoints. `--retention analysis`
+keeps scientific states, logs and engine inputs, skips ordinary boundary
+restart exports and removes internal rollback checkpoints after execution.
+Density continuation still creates the checkpoints required for live rollback.
+Neither policy enables CLI resume.
+
+```bash
+jpgen config.yaml --label compression --tag baseline --experiment pressure-sweep
+jpgen runs list runs
+jpgen runs show runs/<run>
+jpgen runs compare runs/<first> runs/<second>
+jpgen runs verify runs/<run>
+jpgen runs export runs/<run>
+jpgen runs index runs
+jpgen runs import /path/to/old-run --output-dir runs
+```
+
+`catalog.json` is a rebuildable discovery cache. `RunReader` exposes metadata,
+configuration differences, state loading, observables and browser projections.
+Only after the executing process has stopped, use `jpgen runs recover <run>`
+to mark an abandoned running run as interrupted and reconcile its outputs.
+See [the run-format contract](docs/run-format.md) for schemas, partial results,
+legacy import, comparison semantics and browser integration.
 
 ## Pipeline boundaries
 
@@ -91,7 +136,9 @@ Invalid configuration or an unavailable DEM runtime fails before a run directory
 | `jpgen/configuration_values.py` | Scalar, vector and mapping validation shared by stages |
 | `jpgen/errors.py` | Pipeline and stage errors |
 | `jpgen/progress.py` | Run-level and stage-level progress events |
-| `jpgen/run_repository.py` | Run workspaces, summaries and atomic output publication |
+| `jpgen/run_repository.py` | Versioned workspaces, manifests, inventories and publication |
+| `jpgen/run_reader.py` | Backend-independent queries, comparison and browser projections |
+| `jpgen/run_management.py` | Explicit recovery and non-destructive legacy import |
 | `jpgen/packing/application.py` | Packing stage orchestration |
 | `jpgen/packing/configuration.py` | `PackingPlan`, `PackingSourcePlan` and packing configuration validation |
 | `jpgen/packing/sizing.py` | Resolve the box and particle population |
@@ -267,11 +314,13 @@ multiple materials, particle trajectories and automatic restart from saved state
 Protocols support physical stopping criteria and deformation of periodic cells. Existing geometric overlaps are passed unchanged to DEM;
 geometric relaxation is not mechanical equilibration.
 
-The backend writes a standalone `dem/input/run.py`. It can be rerun manually
-with the configured interpreter and environment. It preserves particle IDs,
+The backend writes a standalone `stages/dem/backend/kratos/input/run.py`. It can be rerun manually
+with the configured interpreter and environment, passing `--output-dir` with a
+new stage directory. In-place reruns are rejected to preserve the original run.
+It preserves particle IDs,
 captures the state before Kratos deletes its model parts, and records the actual
 solver version and resolved Kratos parameters. Failed runs retain diagnostic
-artifacts; timeout and interruption terminate the worker. `results.h5` is only
+artifacts; timeout and interruption terminate the worker. `final.h5` is only
 published after successful execution and result validation. Periodic final
 positions are mapped into the primary box, including crossings on the last step.
 
@@ -279,13 +328,13 @@ Reuse an existing packing by replacing the complete `packing` section with:
 
 ```yaml
 packing_source:
-  file: runs/<previous-run>/packing.h5
+  file: runs/<previous-run>/stages/packing/results/packing.h5
   exports: [vtk]
 # dem: ... use the same DEM section as above
 ```
 
 The source is validated before creating the run. Its absolute path and SHA-256
-are recorded; replay rejects a changed source. The new run also stores a packing
+are recorded in provenance; replay validates the local snapshot hash. The new run also stores a packing
 snapshot and only the fresh geometry exports selected by `packing_source.exports`;
 the source run's export selection is ignored. This initializes a new DEM
 simulation from the packing's velocities, not from a previous simulation's
@@ -304,7 +353,7 @@ The optional packing-only MDPA exporter writes `SphericParticle3D` elements and
 free nodal velocities. Its empty `Properties 1` block is a structural
 placeholder, not a material assignment. That file alone is not a runnable DEM
 case. When `dem.engine: kratos` is selected, the backend always creates its own
-`dem/input/particlesDEM.mdpa` regardless of `exports`; it also supplies
+`stages/dem/backend/kratos/input/particlesDEM.mdpa` regardless of `exports`; it also supplies
 materials, contact laws, time stepping and domain behavior.
 
 ## ParaView
@@ -530,16 +579,13 @@ are calculated once from the effective configuration; successful targets continu
 history intact. Each target has its own duration limit and hold timer. If any
 target fails, later targets are not attempted.
 
-Every target boundary is recorded in `snapshots.jsonl`. Successful target exits
-also appear in `dem/native_results/accepted_states.jsonl`, with the requested
-pressure, measured observables, time, particle-state path and native restart
-path. This append-only index remains available for earlier accepted targets
-if a later target fails. A failed target has a diagnostic boundary snapshot
-but is never listed as accepted. The run summary reports `accepted_targets`
-and the index path on success. The state archives are analysis snapshots;
-their associated Kratos restart files are not yet usable for JPGen resume.
-The wizard offers this path as a protocol piece when the selected backend
-supports pressure control and the required observables.
+Every target boundary is recorded in `stages/dem/results/states.jsonl`.
+Successful targets have `accepted: true`, their requested target, measured
+observables, time and a common particle-state reference. A failed target remains
+a diagnostic boundary, never an accepted target. Earlier accepted targets remain
+available after later failures. The same index is used for pressure and density
+objectives. Native checkpoint references have explicit analysis/rollback/resume
+capabilities; ordinary boundary restart files do not promise JPGen resume.
 
 ### Density continuation
 
@@ -556,13 +602,13 @@ A failed increment restores the preceding solver checkpoint and retries with a
 smaller friction decrement. `max_duration` counts all integrated attempts,
 including discarded branches. The physical time in the final state follows
 only the accepted branch; `attempted_duration` reports total integrated work.
-Each accepted target is published under `dem/density_targets/target_0001/`,
-with particle arrays, native Kratos model parts, `checkpoint.json` and
-`target.json`. `dem/native_results/density_attempts.jsonl` records attempts,
-transient crossings, discards and acceptances. Earlier accepted targets remain
-available if a later target fails. Kratos uses neighbour search on every step
-for this controller so restored contact forces reproduce the uninterrupted
-trajectory.
+Each accepted target is published in `stages/dem/results/states/`, with a
+common particle state and a `.target.json` file. Its native checkpoint stays in
+`stages/dem/backend/kratos/checkpoints/` under full retention.
+`stages/dem/execution/attempts.jsonl` records attempts, transient crossings,
+discards and acceptances. Earlier targets remain available after later failures.
+Kratos uses neighbour search on every step for this controller so restored
+contact forces reproduce the uninterrupted trajectory.
 
 Density rollback requires the JPGen Kratos DEM patch in
 vendor/kratos-dem-restart.patch (`vendor/kratos-dem-restart.patch`).
@@ -575,28 +621,18 @@ inside the active worker run.
 
 ### Results and extension points
 
-For DEM protocols, Kratos also exports particle snapshots at the start and end
-of every leaf stage and every repetition of a sequence block, including nested
-blocks. `dem/native_results/snapshots.jsonl` lists each boundary with its `kind`
-(`stage` or `block`), `phase` (`start` or `end`), path, step, time and `state`
-path. Each distinct boundary step has one `snapshots/step_<step>.npz` array
-archive and matching `.json` metadata file; simultaneous boundaries refer to
-the same state. These files contain IDs, positions, radii, linear and angular
-velocities, and the current box. Backends must declare particle snapshot support
-to run a protocol. Kratos additionally writes `dem/native_results/restarts/step_<step>/SpheresPart.rest`
-at each distinct boundary step, with a `restart.json` recording the step, time,
-box and Kratos version. The index links each boundary to both files. The `.rest`
-uses Kratos' native `FileSerializer` and contains the sphere `ModelPart`.
-These ordinary stage-boundary exports remain analysis artifacts; density
-continuation uses its separate complete checkpoints for rollback.
+For DEM protocols, every leaf-stage and repeated-block boundary is indexed in
+`stages/dem/results/states.jsonl`. Simultaneous boundaries share a `state_id`.
+States contain IDs, positions, radii, velocities, angular velocities and box
+geometry in a versioned NPZ/JSON pair. Native checkpoints remain separate.
 
-`dem/native_results/observables.jsonl` records sampled observables and current
-cell geometry, including every stage exit. Execution reports include the real
-step count, completed stage count, failed stage when applicable, and stop reason.
-Successful HDF5 results retain these summary values, final observations and both
-domain geometries; final particle positions are wrapped using the final cell.
-Failed protocols retain native final state and the execution report for diagnosis.
-No `protocol_history` files are written.
+`stages/dem/results/observables.jsonl` records sampled observables and geometry,
+including stage exits. Records include an event sequence, branch and attempt
+identity; physical time can decrease after rollback. `RunReader.series()`
+excludes discarded and unresolved attempts by default; pass
+`include_discarded=True` for diagnostic history. Final HDF5 retains the report,
+observables and domain geometries. Failed protocols keep diagnostic states and
+execution artifacts without publishing a successful `final.h5`.
 
 `jpgen/dem/protocol.py` contains solver-independent validation, conditions,
 signals, controller functions and the lazy `ProtocolRunner`. Controllers emit typed commands (`NoActuation`, `CellStrainRate` or

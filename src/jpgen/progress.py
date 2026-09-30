@@ -168,7 +168,7 @@ class LoggingProgressObserver:
             self.logger.info("Run completed: %s", event.directory)
         elif isinstance(event, DemStarted):
             self.logger.info(
-                "DEM started with %s; solver output is saved under dem/logs.",
+                "DEM started with %s; solver output is saved under stages/dem/logs.",
                 event.engine,
             )
         elif isinstance(event, DemCompleted):
@@ -234,7 +234,7 @@ class ConsoleProgressObserver:
         elif isinstance(event, RunCompleted):
             print(f"Run completed: {event.directory}")
         elif isinstance(event, DemStarted):
-            print(f"DEM started with {event.engine}; solver output is saved under dem/logs.")
+            print(f"DEM started with {event.engine}; solver output is saved under stages/dem/logs.")
         elif isinstance(event, DemCompleted):
             print(f"DEM reached {event.time:.9g} s; saved {', '.join(event.filenames)}")
         elif isinstance(event, DemFailed):

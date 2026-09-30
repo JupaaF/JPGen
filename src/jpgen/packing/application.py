@@ -5,8 +5,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+import yaml
+
 from ..configuration_values import mapping
 from ..errors import ConfigurationError
+from ..run_repository import file_hash
 from .configuration import (
     PackingPlan,
     PackingSourcePlan,
@@ -78,22 +81,32 @@ class PackingApplication:
         restored, filenames = self._publish(packing, effective, plan.exports, workspace)
         summary = restored.metadata.to_dict()
         summary.update(
-            status="complete",
+            status="completed",
             box_origin=restored.box.origin.tolist(),
             box_lengths=restored.box.lengths.tolist(),
             periodic=restored.box.periodic,
         )
         if isinstance(plan, PackingSourcePlan):
-            summary["source"] = plan.to_config()
+            summary["source"] = {"sha256": plan.sha256, "provenance": "provenance/sources.json"}
+            effective_pipeline = plan.to_pipeline_config()
+            snapshot = workspace.directory / "stages/packing/results/packing.h5"
+            effective_pipeline["packing_source"].update(file="../stages/packing/results/packing.h5", sha256=file_hash(snapshot))
+            current = yaml.safe_load((workspace.directory / "config/effective.yaml").read_text())
+            current["packing_source"] = effective_pipeline["packing_source"]
+            workspace.save_configuration(current)
         return PackingStageResult(restored, filenames, summary)
 
     def _publish(self, packing, effective, export_formats, workspace):
         exporters = tuple(self.exporters[name] for name in export_formats)
         filenames = (self.store.filename, *(exporter.filename for exporter in exporters))
+        files = {
+            name: (f"stages/packing/{'results' if name == self.store.filename else 'exports'}/{name}",
+                   "packing" if name == self.store.filename else "export") for name in filenames
+        }
         with workspace.stage_outputs() as staging:
             self.store.save(staging / self.store.filename, packing, effective)
             restored, _ = self.store.load(staging / self.store.filename)
             for exporter in exporters:
                 exporter.export(staging / exporter.filename, restored)
-            workspace.publish(staging, filenames)
-        return restored, filenames
+            workspace.publish(staging, files)
+        return restored, tuple(relative for relative, _ in files.values())

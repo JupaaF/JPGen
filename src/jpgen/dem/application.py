@@ -26,7 +26,8 @@ class DemApplication:
 
     def execute(self, plan, packing, workspace, observer=None):
         case = plan.create_case(packing)
-        prepared = plan.backend.prepare(case, workspace.directory / "dem")
+        prepared = plan.backend.prepare(case, workspace.directory / "stages/dem",
+                                        retention=workspace.read_manifest()["retention"])
         report = plan.backend.run(prepared, observer)
         try:
             validate_execution_report(case, report)
@@ -42,12 +43,13 @@ class DemApplication:
             kinetic_energy = float(np.sum(translation + rotation))
         if not np.isfinite(kinetic_energy):
             raise DemExecutionError("DEM final kinetic energy is not finite.")
-        destination = prepared.directory / self.store.filename
-        temporary = destination.with_suffix(".h5.tmp")
-        self.store.save(temporary, state, case, plan.to_config(), report)
-        temporary.replace(destination)
+        with workspace.stage_outputs() as staging:
+            temporary = staging / self.store.filename
+            self.store.save(temporary, state, case, plan.to_config(), report)
+            self.store.load(temporary)
+            workspace.publish(staging, {self.store.filename: ("stages/dem/results/final.h5", "dem_final")})
         return DemStageResult({
-            "status": "complete", "engine": plan.backend.name, "time": state.time,
+            "status": "completed", "engine": plan.backend.name, "time": state.time,
             "steps": report.steps, "particle_count": len(state.ids),
             "kinetic_energy": kinetic_energy, "kinetic_energy_units": "J",
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
@@ -55,9 +57,9 @@ class DemApplication:
             "completed_stages": report.completed_stages, "accepted_targets": report.accepted_targets,
             "attempted_duration": report.attempted_duration,
             "diagnostics": report.diagnostics,
-            **({"accepted_states_index": "dem/native_results/accepted_states.jsonl"}
+            **({"accepted_states_index": "stages/dem/results/states.jsonl"}
                if report.accepted_targets else {}),
             "observables": report.observables,
             "time_step": report.time_step, "control": report.control,
             "backend_capabilities": plan.backend.capabilities.to_config(),
-        }, ("dem/" + self.store.filename,))
+        }, ("stages/dem/results/final.h5",))

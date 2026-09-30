@@ -1,6 +1,8 @@
 """JPGen pipeline orchestration and default dependency composition."""
 
+import json
 import platform
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,7 +34,7 @@ from .progress import (
     RunStarted,
     emit,
 )
-from .run_repository import FileRunRepository, RunRepository
+from .run_repository import FileRunRepository, RunRepository, atomic_json
 
 def runtime_versions():
     return {
@@ -52,9 +54,17 @@ class JPGenApplication:
     version_provider: Callable[[], dict]
     dem: DemApplication | None = None
 
-    def run(self, raw, observer=None):
+    def run(self, raw, observer=None, *, label=None, tags=(), experiment_id=None, retention="full"):
         """Execute the configured pipeline and publish one run."""
 
+        if label is not None and (not isinstance(label, str) or not label.strip()):
+            raise ConfigurationError("Run label must be nonempty text.")
+        if not isinstance(tags, (tuple, list)) or any(not isinstance(tag, str) or not tag.strip() for tag in tags):
+            raise ConfigurationError("Run tags must be nonempty strings.")
+        if experiment_id is not None and not isinstance(experiment_id, str):
+            raise ConfigurationError("experiment_id must be text.")
+        if retention not in {"full", "analysis"}:
+            raise ConfigurationError("retention must be full or analysis.")
         mapping(raw, "pipeline", {"packing", "packing_source", "dem"})
 
         plan = self.packing.prepare(raw)
@@ -76,12 +86,27 @@ class JPGenApplication:
         }
         if dem_plan is not None:
             status["dem"] = {"status": "pending", "engine": dem_plan.backend.name}
-        workspace = self.runs.create(effective, status)
+        workspace = self.runs.create(effective, status, requested=raw,
+                                     metadata={"label": label, "tags": list(tags),
+                                               "experiment_id": experiment_id, "retention": retention})
+        destination_observer = observer
+        def observer(event):
+            workspace.record_event(event)
+            emit(destination_observer, event)
 
-        emit(observer, RunStarted(workspace.directory))
-        emit(observer, PackingStarted(seed))
         active_stage = "packing"
         try:
+            if hasattr(plan, "path"):
+                source = {"relationship": "uses_packing", "original_path": str(plan.path),
+                          "sha256": plan.sha256, "snapshot": "stages/packing/results/packing.h5"}
+                for parent in plan.path.parents:
+                    if (parent / "run.json").is_file():
+                        source["run_id"] = json.loads((parent / "run.json").read_text())["run_id"]
+                        source["artifact_path"] = plan.path.relative_to(parent).as_posix()
+                        break
+                atomic_json(workspace.directory / "provenance/sources.json", {"sources": [source]})
+            emit(observer, RunStarted(workspace.directory))
+            emit(observer, PackingStarted(seed))
             result = self.packing.execute(plan, workspace, versions, observer)
             packing = result.packing
             status["packing"] = result.summary
@@ -105,15 +130,16 @@ class JPGenApplication:
                 workspace.save_summary(status)
                 emit(observer, DemCompleted(workspace.directory, dem_result.summary["time"], dem_result.filenames))
             active_stage = None
-            status["status"] = "complete"
+            status["status"] = "completed"
             workspace.save_summary(status)
             emit(observer, RunCompleted(workspace.directory))
             return workspace.directory
         except (Exception, KeyboardInterrupt) as error:
             message = str(error) or "Run interrupted."
-            status.update(status="failed", error=message)
+            failure_status = "cancelled" if isinstance(error, KeyboardInterrupt) else "failed"
+            status.update(status=failure_status, error={"type": type(error).__name__, "message": message, "stage": active_stage})
             if active_stage is not None:
-                status[active_stage].update(status="failed", error=message)
+                status[active_stage].update(status=failure_status, error=status["error"])
             if active_stage == "dem" and hasattr(error, "execution_report"):
                 report = error.execution_report
                 status["dem"].update(
@@ -124,7 +150,7 @@ class JPGenApplication:
                     stop_reason=report.stop_reason,
                 )
                 if report.accepted_targets:
-                    status["dem"]["accepted_states_index"] = "dem/native_results/accepted_states.jsonl"
+                    status["dem"]["accepted_states_index"] = "stages/dem/results/states.jsonl"
             if active_stage == "packing" and dem_plan is not None:
                 status["dem"]["status"] = "skipped"
             workspace.save_summary(status)
@@ -134,6 +160,14 @@ class JPGenApplication:
                 emit(observer, DemFailed(workspace.directory, message))
             emit(observer, RunFailed(workspace.directory, message))
             raise
+        finally:
+            failure = sys.exception()
+            try:
+                workspace.finalize()
+            except Exception as storage_error:
+                if failure is None:
+                    raise
+                failure.add_note(f"Run finalization also failed: {storage_error}")
 
 
 def build_application(run_directory=None):

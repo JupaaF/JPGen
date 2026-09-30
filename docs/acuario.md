@@ -132,8 +132,8 @@ sbatch --export=ALL,JPGEN_OUTPUT_DIR=/ruta/resultados \
 ```
 
 Revisa `jpgen-ID.out`, `jpgen-ID.err` y, para DEM,
-`runs/<ejecución>/dem/logs/`. El YAML efectivo queda en
-`runs/<ejecución>/configuration.yaml`, y el estado en `summary.json`.
+`runs/<ejecución>/stages/dem/logs/`. El YAML efectivo queda en
+`runs/<ejecución>/config/effective.yaml`, y el estado en `run.json`.
 
 La [documentación de CIMNE](https://hpc.cimne.upc.edu/getting-started/) describe
 el acceso, las particiones y las reservas de Slurm; comprueba con `sinfo` las

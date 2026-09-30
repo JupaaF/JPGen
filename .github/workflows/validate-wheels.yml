@@ -134,11 +134,16 @@ jobs:
               input=json.dumps(case), text=True, cwd=root, env=env, check=True,
           )
           run(cli, root / "configuration.yaml", "--output-dir", root / "runs", "--progress", "logging")
+          run_directory = next((root / "runs").glob("*/run.json")).parent
           report = {
               "build_run_id": os.environ["BUILD_RUN_ID"], "wheel": wheel.name,
               "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
               "platform": platform.platform(), "python": platform.python_version(),
-              "summary": json.loads(next((root / "runs").glob("*/summary.json")).read_text()),
+              "summary": {
+                  "status": json.loads((run_directory / "run.json").read_text())["status"],
+                  "packing": json.loads((run_directory / "stages/packing/summary.json").read_text()),
+                  "dem": json.loads((run_directory / "stages/dem/summary.json").read_text()),
+              },
           }
           (root / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:

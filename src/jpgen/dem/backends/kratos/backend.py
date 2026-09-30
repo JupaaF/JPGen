@@ -120,20 +120,20 @@ class KratosBackend:
         if probe.returncode:
             raise ConfigurationError(f"Kratos DEM runtime is unavailable: {(probe.stderr or probe.stdout)[-4000:]}")
 
-    def prepare(self, case, directory):
-        write_case(case, directory)
+    def prepare(self, case, directory, *, retention="full"):
+        write_case(case, directory, retention=retention)
         return PreparedDemCase(directory.resolve(), case)
 
     def run(self, prepared, observer=None):
         directory = prepared.directory
-        command = [self.python, str(directory / "input" / "run.py")]
-        (directory / "input" / "runtime.json").write_text(json.dumps({
+        command = [self.python, str(directory / "backend/kratos/input" / "run.py")]
+        (directory / "backend/kratos/input" / "runtime.json").write_text(json.dumps({
             "command": command, "backend_options": self.to_config(),
         }, indent=2) + "\n", encoding="utf-8")
         start = time.monotonic()
         with (directory / "logs" / "stdout.log").open("w") as stdout, (directory / "logs" / "stderr.log").open("w") as stderr:
             try:
-                process = subprocess.Popen(command, cwd=directory / "native_results", env=self.environment(),
+                process = subprocess.Popen(command, cwd=directory / "backend/kratos/native", env=self.environment(),
                                            stdout=stdout, stderr=stderr)
                 try:
                     return_code = process.wait(timeout=self.timeout_seconds)
@@ -153,9 +153,9 @@ class KratosBackend:
         if return_code:
             raise DemExecutionError(f"Kratos exited with code {return_code}; see {directory / 'logs'}.")
         try:
-            result = json.loads((directory / "native_results" / "execution_report.json").read_text())
+            result = json.loads((directory / "backend/kratos/native" / "execution_report.json").read_text())
             if prepared.case.protocol:
-                _validate_accepted_states(directory / "native_results", result.get("accepted_targets", 0),
+                _validate_accepted_states(directory, result.get("accepted_targets", 0),
                                           prepared.case.protocol["stages"])
             return ExecutionReport(
                 return_code=return_code, elapsed_seconds=elapsed, versions=result["versions"],
@@ -173,7 +173,7 @@ class KratosBackend:
 
     def collect(self, prepared, report):
         try:
-            raw = read_state(prepared.directory / "native_results")
+            raw = read_state(prepared.directory / "backend/kratos/native")
             raw["box"] = Box(**raw["box"])
             state = DemState(**raw)
             if prepared.case.boundary == "periodic":
@@ -190,7 +190,9 @@ def _validate_accepted_states(directory, expected_count, stages):
     """Check accepted pressure and density targets and their published files."""
     if type(expected_count) is not int or expected_count < 0:
         raise ValueError("Invalid accepted target count.")
-    records = (directory / "accepted_states.jsonl").read_text(encoding="utf-8").splitlines()
+    from ....run_reader import read_jsonl
+    records = [item for item in read_jsonl(directory / "results/states.jsonl")
+               if item.get("accepted") is True and "target" in item]
     if len(records) != expected_count:
         raise ValueError("Accepted state index does not match the execution report.")
     expected = []
@@ -204,8 +206,7 @@ def _validate_accepted_states(directory, expected_count, stages):
     if expected_count > len(expected):
         raise ValueError("Accepted target count exceeds configured path targets.")
     previous_step = -1
-    for line, (path, target_spec, kind) in zip(records, expected):
-        item = json.loads(line)
+    for item, (path, target_spec, kind) in zip(records, expected):
         step = item["step"]
         if (item.get("accepted") is not True or item.get("phase") != "end"
                 or item.get("kind") != kind or type(step) is not int
@@ -213,11 +214,11 @@ def _validate_accepted_states(directory, expected_count, stages):
                 or item.get("target") != target_spec):
             raise ValueError("Invalid accepted state index entry.")
         previous_step = step
-        root = directory.parent if kind == 'density_target' else directory
+        root = directory.parent.parent
         for suffix in (".json", ".npz"):
             if not (root / (item["state"] + suffix)).is_file():
                 raise ValueError("Accepted particle state is missing.")
-        if not (root / item["restart"]).is_file():
+        if item.get("restart") and not (root / item["restart"]).is_file():
             raise ValueError("Accepted native restart is missing.")
         if kind == 'density_target':
             metadata = json.loads((root / item['metadata']).read_text(encoding='utf-8'))

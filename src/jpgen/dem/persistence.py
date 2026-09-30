@@ -21,7 +21,7 @@ class DemResultStore(Protocol):
 
 
 class Hdf5DemResultStore:
-    filename = "results.h5"
+    filename = "final.h5"
 
     def save(self, path, state, case, configuration, report):
         with h5py.File(path, "w") as file:

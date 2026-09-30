@@ -34,15 +34,15 @@ at every protocol boundary: entry and exit of each leaf stage and each repetitio
 of a sequence block. A backend without this capability is rejected for protocols
 before execution. The snapshots are analysis outputs; this flag does not promise
 solver restart or rollback. Kratos writes one `JPGen.dem.state` archive per unique
-boundary step under `dem/native_results/snapshots/` and records all boundary
-events in `snapshots.jsonl`. Other engines may use their own storage format but
-must provide equivalent particle and box data and identify the associated events.
+boundary step under `stages/dem/results/states/` and records all boundary
+events in `states.jsonl`. All engines use the common state index and exchange schema; native checkpoints
+remain under `backend/<engine>/`. `StageOutput` is available to standalone workers.
 
 Pressure paths use the ordinary portable `stress_servo` command for each
 resolved target. A backend advertising pressure control, pressure/energy/force
 observables and particle snapshots can run the path; successful target exits
 must be distinguishable from failed diagnostic boundaries. Kratos publishes
-accepted exits through `accepted_states.jsonl`.
+accepted exits through `states.jsonl` with `accepted: true`.
 
 Density continuation additionally requires `state_restore`,
 `contact_parameter_updates`, `contact_history_checkpoint`, `rollback`,
@@ -60,7 +60,7 @@ target. Restarting the CLI from an earlier run is not implemented.
 and writes the native `SpheresPart.rest` for every unique protocol boundary step,
 using the same `FileSerializer` and pointer serialization flag as its restart
 utility. `restart.json` stores the step, time, box and Kratos version. The
-`snapshots.jsonl` event records the corresponding `.rest` path. This capability
+`states.jsonl` event records the corresponding `.rest` path. This capability
 only promises export of native solver files; it does not advertise a JPGen resume
 or rollback operation on its own. A future backend may produce a different native format,
 and a backend without this capability can still export particle snapshots.
@@ -187,3 +187,15 @@ current. Cell deformation uses
 `VariableUtils` bulk reads/writes with NumPy array arithmetic. The maximum
 particle radius is cached alongside solid volume; both require invalidation if
 future features change radii or particle population.
+
+## Run-format integration
+
+`prepare(case, directory, *, retention="full")` receives the stage directory
+(`stages/dem`), which may already contain its summary. Create engine files under
+`backend/<engine>/input`, native scratch under `backend/<engine>/native`, and
+solver logs under `logs/`. Preserve common results under `results/` and attempt
+history under `execution/`. Storage policy does not belong in the physics config.
+Every index path is relative to the run root. `analysis` retention omits archived
+restart files but must not disable checkpoints needed during live execution.
+Readers must be able to inspect common results without importing the engine.
+See [run-format.md](run-format.md) for the contract.

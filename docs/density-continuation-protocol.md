@@ -236,10 +236,12 @@ la rama física activa; tras rollback pueden aparecer tiempos repetidos.
 ## Resultados
 
 Publicar atómicamente una muestra por objetivo aceptado bajo
-`dem/density_targets/target_0001/`, etc. Cada directorio contiene:
+`stages/dem/results/states/`, indexada en `states.jsonl`. Cada muestra contiene:
 
 - Estado de partículas y celda para análisis, en el formato común correspondiente.
-- Checkpoint nativo reiniciable, con versión y compatibilidad del backend.
+- Referencia al checkpoint nativo bajo `backend/kratos/checkpoints/`, con versión
+  y capacidades explícitas. Con retención `analysis` se elimina al finalizar;
+  el checkpoint para rollback durante la ejecución sigue siendo obligatorio.
 - Metadatos: objetivo y densidad real, presión y tensor de tensiones, energía,
   desequilibrio, factor y coeficientes de fricción, tiempo físico, trabajo
   acumulado, intentos, tolerancias, semilla y procedencia.

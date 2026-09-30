@@ -1,6 +1,6 @@
 """Standalone Kratos worker; requires Kratos and NumPy.
 
-Run a prepared case with its configured Python: python dem/input/run.py.
+Run a prepared case with its configured Python: python stages/dem/backend/kratos/input/run.py.
 """
 
 import json
@@ -16,16 +16,36 @@ def main():
     from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage
 
     inputs = Path(__file__).resolve().parent
-    output = inputs.parent / "native_results"
+    import argparse
+    import shutil
+    parser = argparse.ArgumentParser(description="Execute a prepared Kratos case")
+    parser.add_argument("--output-dir", help="Fresh stage directory for a standalone rerun")
+    args = parser.parse_args()
+    if args.output_dir:
+        stage = Path(args.output_dir).resolve()
+        if stage.exists():
+            raise FileExistsError("Standalone output directory must not already exist.")
+        copied = stage / "backend/kratos/input"
+        shutil.copytree(inputs, copied)
+        inputs = copied
+    stage = inputs.parents[2]
+    output = stage / "backend/kratos/native"
+    output.mkdir(parents=True, exist_ok=True)
+    # Never silently overwrite an existing run's scientific results.
+    with (output / ".worker-started").open("x", encoding="utf-8") as marker:
+        marker.write("Use --output-dir for a fresh standalone execution.\n")
     os.chdir(output)
     execution = json.loads((inputs / "execution.json").read_text(encoding="utf-8"))
 
     from protocol import CONTACT_OBSERVABLES, ProtocolRunner, STRESS_OBSERVABLES, required_observables
     from protocol_adapter import KratosProtocolAdapter
     from state_exchange import write_state
+    from output_writer import StageOutput
+    store = StageOutput(stage, execution.get("retention", "full"), engine="kratos")
 
     class JPGenAnalysis(DEMAnalysisStage):
         def __init__(self, model, parameters, resume_runner=None, restart_checkpoint=None):
+            self.output_store = store
             self.completed_steps = resume_runner.attempted_steps if resume_runner else 0
             self.final_state = None
             self.protocol = resume_runner
@@ -80,10 +100,6 @@ def main():
                 if execution.get("protocol"):
                     specification = execution['protocol']
                     if self.protocol is None:
-                        (output / "observables.jsonl").write_text("", encoding="utf-8")
-                        (output / "snapshots.jsonl").write_text("", encoding="utf-8")
-                        (output / "accepted_states.jsonl").write_text("", encoding="utf-8")
-                        (output / "density_attempts.jsonl").write_text("", encoding="utf-8")
                         self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy'}
                     if execution['boundary'] == 'periodic':
@@ -128,6 +144,7 @@ def main():
             self.completed_steps += 1
             if self.protocol is not None:
                 stage_path = self.protocol.path
+                sample_context = store.context() if store.attempt_stage == stage_path else {"attempt_id": None, "branch_id": store.branch_id}
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
                 if self.protocol.restored:
                     return
@@ -140,10 +157,10 @@ def main():
                 # the observables log, including density and the stress tensor.
                 self._save_boundaries(output)
                 if sampled or stage_exited:
-                    with (output / "observables.jsonl").open("a", encoding="utf-8") as stream:
-                        stream.write(json.dumps({"step": self.completed_steps, "stage": stage_path, "observables": self.observables,
-                                                 "box": self.adapter.box(),
-                                                 "time_step": {"dt": self.protocol.dt}}, allow_nan=False) + "\n")
+                    store.sample({"step": self.completed_steps, "physical_step": self.protocol.steps,
+                                  "stage": stage_path, "observables": self.observables,
+                                  "box": self.adapter.box(), "time_step": {"dt": self.protocol.dt},
+                                  **sample_context})
                 if stage_exited and not self.protocol.done:
                     # Seed the next controller with measurements from the current
                     # state, never with stale values from an earlier stage.
@@ -166,7 +183,9 @@ def main():
                     dtype=np.float64, count=3 * count).reshape(count, 3)
 
         def _save_native_restart(self, output, stem, box):
-            directory = output / "restarts" / stem
+            if store.retention != "full":
+                return None
+            directory = store.checkpoints / stem
             directory.mkdir(parents=True, exist_ok=True)
             model_part = self.spheres_model_part
             temporary_stem = directory / "SpheresPart.tmp"
@@ -184,26 +203,19 @@ def main():
             temporary = directory / "restart.json.tmp"
             temporary.write_text(json.dumps(metadata, allow_nan=False) + "\n", encoding="utf-8")
             temporary.replace(directory / "restart.json")
-            return f"restarts/{stem}/SpheresPart.rest"
+            return store.relative(directory / "SpheresPart.rest")
 
         def _save_boundaries(self, output):
             boundaries = self.protocol.take_boundaries()
             if not boundaries:
                 return
-            snapshots = output / "snapshots"
-            snapshots.mkdir(exist_ok=True)
-            stem = f"step_{self.completed_steps:012d}"
             box = self.adapter.box()
-            write_state(snapshots, self._particle_arrays(), time=self.protocol.time,
-                        box=box, stem=stem)
-            restart = self._save_native_restart(output, stem, box)
-            with (output / "snapshots.jsonl").open("a", encoding="utf-8") as stream, \
-                    (output / "accepted_states.jsonl").open("a", encoding="utf-8") as accepted_stream:
-                for boundary in boundaries:
-                    record = {**boundary, "state": f"snapshots/{stem}", "restart": restart}
-                    stream.write(json.dumps(record, allow_nan=False) + "\n")
-                    if boundary.get("accepted") is True and "target" in boundary:
-                        accepted_stream.write(json.dumps(record, allow_nan=False) + "\n")
+            saved = store.state(self._particle_arrays(), time=self.protocol.time, box=box, key=self.completed_steps)
+            restart = self._save_native_restart(output, saved["state_id"], box)
+            for boundary in boundaries:
+                store.boundary({**saved, **boundary, "physical_step": boundary["step"],
+                                "step": self.completed_steps, "restart": restart,
+                                "checkpoint_capabilities": {"analysis": True, "rollback": False, "resume": False}})
 
         def Finalize(self):
             if self.rollback_checkpoint is not None:
@@ -218,6 +230,11 @@ def main():
             }
             # Stream numeric arrays before Kratos deletes its model parts.
             write_state(output, self._particle_arrays(), **self.final_state)
+            saved = store.state(source=output / "final_state", key=self.completed_steps, **self.final_state)
+            store.boundary({**saved, "kind": "diagnostic" if self.protocol and self.protocol.failed else "final",
+                            "phase": "end", "step": self.completed_steps,
+                            "stage": self.protocol.path if self.protocol else None,
+                            "accepted": False if self.protocol and self.protocol.failed else None})
             super().Finalize()
 
     runner = None

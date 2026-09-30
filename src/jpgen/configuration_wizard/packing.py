@@ -250,7 +250,7 @@ class PackingStageWizard:
                 key="packing_source.plan",
                 message="Path to packing.h5",
                 explanation="Existing JPGen packing file. The wizard resolves its absolute path, validates it and records its SHA-256.",
-                example="runs/20260918T120000_000000Z_example/packing.h5",
+                example="runs/<run>/stages/packing/results/packing.h5",
                 parser=lambda value, _answers: self._source_plan(value),
                 visible=lambda answers: answers.get("packing.input") == "source",
             ),
