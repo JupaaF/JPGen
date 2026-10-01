@@ -1,0 +1,6 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/jpfernandez/Documentos/JPGen/presentation/media/videos/presentation/720p30/partial_movie_files/JPGenPresentation/3395642696_3880968470_2905007374.mp4'
+file 'file:/home/jpfernandez/Documentos/JPGen/presentation/media/videos/presentation/720p30/partial_movie_files/JPGenPresentation/511089603_4262283919_3206685344.mp4'
+file 'file:/home/jpfernandez/Documentos/JPGen/presentation/media/videos/presentation/720p30/partial_movie_files/JPGenPresentation/511089603_1134853256_4043974176.mp4'
+file 'file:/home/jpfernandez/Documentos/JPGen/presentation/media/videos/presentation/720p30/partial_movie_files/JPGenPresentation/511089603_3641569372_2135800915.mp4'
+file 'file:/home/jpfernandez/Documentos/JPGen/presentation/media/videos/presentation/720p30/partial_movie_files/JPGenPresentation/511089603_3880968470_3694934856.mp4'
