@@ -12,4 +12,4 @@ python3.12 -m pip download \
     --dest dist/acuario-deps \
     pip 'setuptools>=77' wheel 'pybind11>=2.12,<4' \
     'numpy>=1.24,<3' 'h5py>=3.8,<4' 'scipy>=1.10,<2' \
-    'PyYAML>=6,<7' 'questionary>=2.1.1,<3' 'cmake>=3.15,<4'
+    'PyYAML>=6,<7' 'textual>=8.2.8,<9' 'cmake>=3.15,<4'

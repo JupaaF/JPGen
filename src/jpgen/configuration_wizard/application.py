@@ -9,12 +9,12 @@ from .output import GeneratedConfiguration, render_yaml
 from .packing import PackingStageWizard
 from .protocol import pressure_path_previews
 from .questions import (
-    InteractiveTerminal,
     MenuChoice,
     Navigation,
     Question,
     run_questions,
 )
+from .terminal import InteractiveTerminal
 
 
 class ConfigurationWizard:
@@ -27,6 +27,11 @@ class ConfigurationWizard:
         self.clock = clock or datetime.now
 
     def run(self):
+        if isinstance(self.terminal, InteractiveTerminal):
+            return self.terminal.run(self._run)
+        return self._run()
+
+    def _run(self):
         timestamp = self.clock().strftime("%Y-%m-%d_%H-%M-%S")
         default_name = f"jpgen_{timestamp}.yaml"
         answers = {}

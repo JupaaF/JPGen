@@ -4,9 +4,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 
-import questionary
-from questionary import Choice
-
 
 class Navigation(Enum):
     BACK = auto()
@@ -39,117 +36,6 @@ class Question:
         return self.choices(answers) if callable(self.choices) else self.choices
 
 
-class InteractiveTerminal:
-    """Questionary adapter with common navigation and inline help."""
-
-    BACK_VALUE = "__jpgen_back__"
-    CANCEL_VALUE = "__jpgen_cancel__"
-
-    def print(self, message, style=None):
-        questionary.print(message, style=style)
-
-    def ask(self, question, answers, *, can_go_back):
-        self.print(f"\n{question.explanation}", style="bold")
-        self.print(f"Example: {question.example}", style="italic")
-        if question.kind == "select":
-            result = self._select(question, answers, can_go_back)
-        elif question.kind == "checkbox":
-            result = self._checkbox(question, answers, can_go_back)
-        else:
-            result = self._text(question, answers, can_go_back)
-        if isinstance(result, Navigation) or question.after_answer is None:
-            return result
-        return question.after_answer(result, answers)
-
-    def choose(self, message, choices, *, can_go_back=True):
-        options = [Choice(choice.title, value=choice.value) for choice in choices]
-        if can_go_back:
-            options.append(Choice("← Back", value=self.BACK_VALUE))
-        options.append(Choice("✕ Cancel", value=self.CANCEL_VALUE))
-        value = questionary.select(message, choices=options).unsafe_ask()
-        return self._navigation(value)
-
-    def _select(self, question, answers, can_go_back):
-        choices = [
-            Choice(choice.title, value=choice.value)
-            for choice in question.resolved_choices(answers)
-        ]
-        if can_go_back:
-            choices.append(Choice("← Back", value=self.BACK_VALUE))
-        choices.append(Choice("✕ Cancel", value=self.CANCEL_VALUE))
-        default = question.resolved_default(answers)
-        value = questionary.select(
-            question.message,
-            choices=choices,
-            default=default,
-        ).unsafe_ask()
-        return self._navigation(value)
-
-    def _text(self, question, answers, can_go_back):
-        parser = question.parser or (lambda value, _answers: value)
-
-        def validate(value):
-            token = value.strip().lower()
-            if token == ":cancel" or (can_go_back and token == ":back"):
-                return True
-            try:
-                parser(value, answers)
-            except ValueError as error:
-                return str(error)
-            return True
-
-        navigation = ":cancel"
-        if can_go_back:
-            navigation = ":back or :cancel"
-        default = question.resolved_default(answers)
-        value = questionary.text(
-            question.message,
-            default="" if default is None else str(default),
-            instruction=f"(Enter {navigation})",
-            validate=validate,
-        ).unsafe_ask()
-        token = value.strip().lower()
-        if token == ":back" and can_go_back:
-            return Navigation.BACK
-        if token == ":cancel":
-            return Navigation.CANCEL
-        return parser(value, answers)
-
-    def _checkbox(self, question, answers, can_go_back):
-        selected = set(question.resolved_default(answers) or [])
-        choices = [
-            Choice(choice.title, value=choice.value, checked=choice.value in selected)
-            for choice in question.resolved_choices(answers)
-        ]
-        if can_go_back:
-            choices.append(Choice("← Back", value=self.BACK_VALUE))
-        choices.append(Choice("✕ Cancel", value=self.CANCEL_VALUE))
-
-        def validate(values):
-            navigation = {self.BACK_VALUE, self.CANCEL_VALUE}.intersection(values)
-            if navigation and len(values) != 1:
-                return "Back or Cancel must be selected without export formats."
-            return True
-
-        values = questionary.checkbox(
-            question.message,
-            choices=choices,
-            validate=validate,
-        ).unsafe_ask()
-        if self.CANCEL_VALUE in values:
-            return Navigation.CANCEL
-        if self.BACK_VALUE in values:
-            return Navigation.BACK
-        return values
-
-    def _navigation(self, value):
-        if value == self.BACK_VALUE:
-            return Navigation.BACK
-        if value == self.CANCEL_VALUE:
-            return Navigation.CANCEL
-        return value
-
-
 def run_questions(terminal, question_factory, answers=None, *, start_at=0):
     """Run a dynamic question list while preserving Back across branches."""
     answers = {} if answers is None else answers
@@ -170,6 +56,8 @@ def run_questions(terminal, question_factory, answers=None, *, start_at=0):
         if index >= len(questions):
             return answers
         question = questions[index]
+        if hasattr(terminal, "set_progress"):
+            terminal.set_progress(index + 1, len(questions))
         result = terminal.ask(question, answers, can_go_back=index > 0)
         if result is Navigation.CANCEL:
             return None

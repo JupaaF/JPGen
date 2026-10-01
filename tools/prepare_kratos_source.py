@@ -20,7 +20,8 @@ def main():
     destination = args.destination.resolve()
     base = (ROOT / "vendor/kratos-base-revision.txt").read_text().strip()
     expected = (ROOT / "vendor/kratos-revision.txt").read_text().strip()
-    patch = ROOT / "vendor/kratos-dem-restart.patch"
+    patches = [ROOT / "vendor/kratos-dem-restart.patch",
+               ROOT / "vendor/kratos-neighbour-optimizations.patch"]
     if destination.exists():
         raise SystemExit(f"Destination already exists: {destination}")
     subprocess.run(
@@ -32,7 +33,7 @@ def main():
         [
             "git", "-c", "user.name=Juan Pablo Fernandez",
             "-c", "user.email=jpfernandez@cimne.upc.edu",
-            "am", "--committer-date-is-author-date", str(patch),
+            "am", "--committer-date-is-author-date", *map(str, patches),
         ],
         cwd=destination,
         check=True,

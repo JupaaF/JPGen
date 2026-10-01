@@ -56,6 +56,14 @@ preview before saving. It writes a timestamped `.yaml` file in the current
 directory by default. If generation fails, a newly created file is removed or a
 replaced file is restored.
 
+The wizard uses Textual to display a full-screen interface with a section sidebar,
+progress through the currently applicable questions, scrollable forms and a YAML
+preview. In terminals with mouse support, click options and checkboxes, scroll
+with the wheel, and use the Continue, Back and Cancel buttons. Clicking inside
+a text field positions the cursor; typed text is always treated as input.
+Keyboard navigation uses Tab, arrow keys, Space and Enter; Alt+Left goes back
+and Ctrl+C cancels. The sidebar hides in narrow terminals to give forms more room.
+
 Each invocation creates a versioned, self-contained run under `./runs/` or
 `--output-dir`, named `2026-09-30_14-32-08Z__label__a7c92e31`. Its UUID is
 independent of the directory name. Use `--label`, repeatable `--tag` and

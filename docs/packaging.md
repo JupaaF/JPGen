@@ -3,8 +3,8 @@
 JPGen release wheels contain both native components: the pybind11 C++ placement
 extension and the pinned JPGen Kratos Core/DEM fork. The fork is based on Kratos
 commit `66dbb226f80dc78d5ff3985351effb03798ad2b8`, plus
-`vendor/kratos-dem-restart.patch`. The resulting commit is
-`64c7b4eb9b5e70ce6fbfbc304715e2ece28f6790`. The build rejects another
+`vendor/kratos-dem-restart.patch` and `vendor/kratos-neighbour-optimizations.patch`.
+The resulting commit is `b0bdba096f0cce09a0a520afb08e070cb1d4d33c`. The build rejects another
 revision or uncommitted Kratos source changes.
 
 Build a separate wheel on every supported operating system, architecture and
@@ -27,7 +27,7 @@ python tools/build_release_wheel.py --source Kratos
 ```
 
 The first command checks out the pinned Kratos base, applies the versioned
-patch and verifies the exact fork commit. The second builds only Kratos Core
+patches and verifies the exact fork commit. The second builds only Kratos Core
 and DEM, installs them under `Kratos/bin/Release`, and creates the JPGen
 wheel in `dist/`. If the pinned fork is already present at `Kratos/`, only
 the second command is needed.

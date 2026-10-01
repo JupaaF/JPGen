@@ -53,6 +53,14 @@ def flatten_numbers(value, prefix=""):
     return result
 
 
+def observable_values(observables):
+    values = flatten_numbers(observables)
+    diagonal = [values.get(f"fabric_tensor_{index}_{index}") for index in range(3)]
+    if all(value is not None and math.isfinite(value) for value in diagonal):
+        values["fabric_trace"] = sum(diagonal)
+    return values
+
+
 def records_for(run_dir):
     source = run_dir / "stages" / "dem" / "results" / "observables.jsonl"
     if not source.is_file():
@@ -64,7 +72,7 @@ def records_for(run_dir):
         return cached[1]
     records = []
     for record in RunReader(run_dir).series():
-        obs = flatten_numbers(record.get("observables", {}))
+        obs = observable_values(record.get("observables", {}))
         records.append({"time": obs.get("time"), "stage": record.get("stage"),
                         "step": record.get("step"), "values": obs})
     series_cache[key] = (signature, records)
@@ -118,7 +126,7 @@ def summary(batch):
                         last = None
                         for record in RunReader(manifest_path.parent).series():
                             last = record
-                        item["values"] = flatten_numbers(last.get("observables", {})) if last else {}
+                        item["values"] = observable_values(last.get("observables", {})) if last else {}
                         summary_cache[cache_key] = (signature, item["values"])
                     if item["status"] == "completed":
                         metrics.update(item["values"])
@@ -182,7 +190,7 @@ def group_series(batch, query):
         for record in RunReader(run_dir).series():
             stage = str(record.get("stage") or "unknown").split(":", 1)[-1]
             observables = record.get("observables", {})
-            value = flatten_numbers(observables).get(metric)
+            value = observable_values(observables).get(metric)
             pressure = observables.get("pressure")
             if not isinstance(value, (int, float)) or not math.isfinite(value):
                 continue
