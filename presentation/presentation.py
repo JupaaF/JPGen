@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from manim import *
 from manim_slides import Slide
 
@@ -49,7 +51,7 @@ class JPGenPresentation(Slide):
                     "Trabajos futuros",
                 )
             ]
-        ).arrange(DOWN, aligned_edge=LEFT, buff=0.5)
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.7)
 
         arrows = VGroup(
             *[
@@ -68,7 +70,7 @@ class JPGenPresentation(Slide):
             "Outline", font_size=52, color="#C7B568"
         ).to_corner(UL, buff=0.65)
         outline = VGroup(outline_labels, arrows)
-        outline.next_to(outline_title, DOWN, buff=0.65, aligned_edge=LEFT)
+        outline.next_to(outline_title, DOWN, buff=0.9, aligned_edge=LEFT)
         self.play(FadeIn(outline_title), run_time=0.4)
         self.play(
             LaggedStart(
@@ -80,5 +82,38 @@ class JPGenPresentation(Slide):
             ),
             run_time=1.4,
         )
+        self.wait(0.5)
+        self.next_slide()
+
+        introduction_title = outline_labels[0]
+        self.play(
+            FadeOut(outline_title),
+            FadeOut(arrows),
+            *[FadeOut(label) for label in outline_labels[1:]],
+            introduction_title.animate.set(font_size=80)
+            .set_color("#C7B568")
+            .move_to(ORIGIN),
+            run_time=0.8,
+        )
+        self.wait(0.5)
+        self.next_slide()
+
+        self.play(FadeOut(introduction_title), run_time=0.6)
+        demgen_cover = ImageMobject(
+            str(Path(__file__).parent / "assets" / "demgen-cover-transparent.png")
+        )
+        demgen_cover.scale_to_fit_width(config.frame_width - 1.3)
+        demgen_cover.move_to(ORIGIN)
+        self.play(FadeIn(demgen_cover), run_time=0.6)
+        self.wait(0.5)
+        self.next_slide()
+
+        jpgen_cover = ImageMobject(
+            str(Path(__file__).parent / "assets" / "jpgen-cover-transparent.png")
+        )
+        jpgen_cover.scale_to_fit_width(config.frame_width - 1.3)
+        jpgen_cover.move_to(ORIGIN)
+        self.play(FadeOut(demgen_cover), run_time=0.6)
+        self.play(FadeIn(jpgen_cover), run_time=0.6)
         self.wait(0.5)
         self.next_slide()

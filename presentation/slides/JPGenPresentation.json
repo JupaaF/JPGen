@@ -11,8 +11,8 @@
       "src": null,
       "type": "video",
       "direction": "horizontal",
-      "file": "slides/files/JPGenPresentation/c6817a3f7f619bb4.mp4",
-      "rev_file": "slides/files/JPGenPresentation/c6817a3f7f619bb4_reversed.mp4"
+      "file": "slides/files/JPGenPresentation/5cdd201253f893dc.mp4",
+      "rev_file": "slides/files/JPGenPresentation/5cdd201253f893dc_reversed.mp4"
     },
     {
       "loop": false,
@@ -25,13 +25,55 @@
       "src": null,
       "type": "video",
       "direction": "horizontal",
-      "file": "slides/files/JPGenPresentation/634857ab5153a7ef.mp4",
-      "rev_file": "slides/files/JPGenPresentation/634857ab5153a7ef_reversed.mp4"
+      "file": "slides/files/JPGenPresentation/b71d2dfb95a585fe.mp4",
+      "rev_file": "slides/files/JPGenPresentation/b71d2dfb95a585fe_reversed.mp4"
+    },
+    {
+      "loop": false,
+      "auto_next": false,
+      "playback_rate": 1.0,
+      "reversed_playback_rate": 1.0,
+      "notes": "",
+      "dedent_notes": true,
+      "skip_animations": false,
+      "src": null,
+      "type": "video",
+      "direction": "horizontal",
+      "file": "slides/files/JPGenPresentation/89d16c0ba0b91198.mp4",
+      "rev_file": "slides/files/JPGenPresentation/89d16c0ba0b91198_reversed.mp4"
+    },
+    {
+      "loop": false,
+      "auto_next": false,
+      "playback_rate": 1.0,
+      "reversed_playback_rate": 1.0,
+      "notes": "",
+      "dedent_notes": true,
+      "skip_animations": false,
+      "src": null,
+      "type": "video",
+      "direction": "horizontal",
+      "file": "slides/files/JPGenPresentation/42af5f34fd219b55.mp4",
+      "rev_file": "slides/files/JPGenPresentation/42af5f34fd219b55_reversed.mp4"
+    },
+    {
+      "loop": false,
+      "auto_next": false,
+      "playback_rate": 1.0,
+      "reversed_playback_rate": 1.0,
+      "notes": "",
+      "dedent_notes": true,
+      "skip_animations": false,
+      "src": null,
+      "type": "video",
+      "direction": "horizontal",
+      "file": "slides/files/JPGenPresentation/030d21eeee3ae92f.mp4",
+      "rev_file": "slides/files/JPGenPresentation/030d21eeee3ae92f_reversed.mp4"
     }
   ],
   "resolution": [
-    1280,
-    720
+    854,
+    480
   ],
   "background_color": "black"
 }
