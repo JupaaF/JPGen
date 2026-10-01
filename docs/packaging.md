@@ -26,8 +26,11 @@ python tools/prepare_kratos_source.py Kratos
 python tools/build_release_wheel.py --source Kratos
 ```
 
-The first command checks out the pinned Kratos base, applies the versioned
-patches and verifies the exact fork commit. The second builds only Kratos Core
+The first command fetches the declared Kratos base commit directly, applies the
+versioned patches and verifies the latest JPGen fork revision recorded in
+`vendor/kratos-revision.txt`. It does not follow a moving upstream branch or
+require the JPGen fork to be public. Updating the JPGen fork means updating
+the base revision, patch series and resulting revision together. The second builds only Kratos Core
 and DEM, installs them under `Kratos/bin/Release`, and creates the JPGen
 wheel in `dist/`. If the pinned fork is already present at `Kratos/`, only
 the second command is needed.

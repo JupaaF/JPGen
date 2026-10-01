@@ -72,7 +72,12 @@ replacement protects against process interruption, not a guarantee of durability
 across power loss on every filesystem.
 
 `jpgen runs verify <run>` checks recorded file hashes and returns a nonzero exit
-status for missing or changed files. Before recovery, stop the original process:
+status for missing or changed files. Add `--deep` to validate HDF5 particle and
+domain units, array invariants, NPZ/JSON state pairs, index identity and time,
+checkpoint references and accepted density target metadata. Saved-state readers
+perform these state checks too, and omit incomplete pairs from listings.
+Recovery requires deep verification before reconciling outputs.
+Before recovery, stop the original process:
 
 ```bash
 jpgen runs recover runs/<run>

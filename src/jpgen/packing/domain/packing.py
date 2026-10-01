@@ -8,6 +8,7 @@ from typing import Mapping
 import numpy as np
 
 from ._arrays import readonly_array
+from ...particle_data import ARRAYS, validate_particle_arrays
 from .box import Box
 from .placement import (
     PLACEMENT_STATISTICS_TYPES,
@@ -138,22 +139,7 @@ class ParticlePacking:
     def validate(self):
         """Check aggregate invariants, including mutations forced outside the API."""
         n = len(self.ids)
-        if not n or len(np.unique(self.ids)) != n or np.any(self.ids <= 0):
-            raise ValueError("Particle IDs must be unique positive integers and the dataset must not be empty.")
-        for field, shape in (
-            ("ids", (n,)),
-            ("radii", (n,)),
-            ("positions", (n, 3)),
-            ("velocities", (n, 3)),
-            ("angular_velocities", (n, 3)),
-        ):
-            values = getattr(self, field)
-            if values.shape != shape or not np.all(np.isfinite(values)):
-                raise ValueError(f"Invalid particle array: {field}.")
-        if not np.issubdtype(self.ids.dtype, np.integer):
-            raise ValueError("Particle IDs must be integers.")
-        if np.any(self.radii <= 0):
-            raise ValueError("Radii must be positive.")
+        validate_particle_arrays({name: getattr(self, name) for name in ARRAYS})
         if self.metadata.count != n:
             raise ValueError("Packing metadata count does not match the particle arrays.")
         solid_fraction = self._calculate_solid_fraction()

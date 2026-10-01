@@ -73,6 +73,7 @@ def main():
         print(f"Error: {error}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
+        _rollback(generated)
         if generated is None:
             raise
         return 130

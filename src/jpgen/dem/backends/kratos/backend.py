@@ -194,6 +194,8 @@ def _validate_accepted_states(directory, expected_count, stages):
     if type(expected_count) is not int or expected_count < 0:
         raise ValueError("Invalid accepted target count.")
     from ....run_reader import read_jsonl
+    from ...state_validation import validate_indexed_state
+    validated = {}
     records = [item for item in read_jsonl(directory / "results/states.jsonl")
                if item.get("accepted") is True and "target" in item]
     if len(records) != expected_count:
@@ -217,15 +219,4 @@ def _validate_accepted_states(directory, expected_count, stages):
                 or item.get("target") != target_spec):
             raise ValueError("Invalid accepted state index entry.")
         previous_step = step
-        root = directory.parent.parent
-        for suffix in (".json", ".npz"):
-            if not (root / (item["state"] + suffix)).is_file():
-                raise ValueError("Accepted particle state is missing.")
-        if item.get("restart") and not (root / item["restart"]).is_file():
-            raise ValueError("Accepted native restart is missing.")
-        if kind == 'density_target':
-            metadata = json.loads((root / item['metadata']).read_text(encoding='utf-8'))
-            if (metadata['target'] != target_spec['value'] or
-                    abs(metadata['observables']['solid_fraction'] - metadata['target']) >
-                    metadata['density_atol']):
-                raise ValueError('Invalid accepted density target metadata.')
+        validate_indexed_state(directory.parent.parent, item, validated)

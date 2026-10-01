@@ -18,7 +18,6 @@ OBSERVABLES = {'time', 'stage_time', 'kinetic_energy', 'normalized_kinetic_energ
                'pressure', 'stress_xx', 'stress_yy', 'stress_zz', 'stress_xy', 'stress_xz', 'stress_yz',
                'density_targets_completed'}
 STRESS_OBSERVABLES = {name for name in OBSERVABLES if name.startswith('stress_')} | {'pressure'}
-CONTACT_OBSERVABLES = STRESS_OBSERVABLES | {'unbalanced_force'}
 
 DEFAULT_SERVO_MAX_VELOCITY = 0.05
 DEFAULT_SERVO_LOADING_FACTOR = 0.8
@@ -345,16 +344,14 @@ def validate_protocol(raw, dt, boundary):
         if depth > 20 or not isinstance(stages, list) or not stages:
             raise ValueError('stages must be nonempty; maximum nesting depth is 20.')
         budget = 0
-        for stage in stages:
-            if not isinstance(stage, dict):
-                raise ValueError('Each stage must be a mapping.')
+        for kind, _, stage in _pieces(stages):
             if 'name' in stage and (not isinstance(stage['name'], str) or not stage['name'].strip()):
                 raise ValueError('Stage name must be nonempty text.')
-            if 'stages' in stage:
+            if kind == 'block':
                 _mapping(stage, {'name', 'repeat', 'stages'}, {'stages'})
                 budget += _count(stage.get('repeat', 1)) * visit(stage['stages'], depth + 1)
                 continue
-            if 'path' in stage:
+            if kind == 'path':
                 _mapping(stage, {'name', 'path'}, {'path'})
                 budget += validate_path(stage['path'], dt, boundary)
                 continue
@@ -401,45 +398,59 @@ def duration_steps(duration, dt):
     return max(1, nearest if math.isclose(ratio, nearest, rel_tol=0, abs_tol=1e-8) else math.ceil(ratio))
 
 
+def _pieces(stages, prefix=''):
+    """Classify protocol pieces once, preserving their structural paths."""
+    if not isinstance(stages, list) or not stages:
+        raise ValueError('stages must be a nonempty list.')
+    for index, stage in enumerate(stages):
+        if not isinstance(stage, dict):
+            raise ValueError('Each stage must be a mapping.')
+        path = f'{prefix}{index + 1}:{stage.get("name", "stage")}'
+        kind = 'block' if 'stages' in stage else 'path' if 'path' in stage else 'stage'
+        yield kind, path, stage
+
+
+def walk_protocol(stages, prefix='', repetitions=1):
+    """Visit unrepeated leaves with multiplicities, avoiding schedule expansion."""
+    for kind, path, stage in _pieces(stages, prefix):
+        if kind == 'block':
+            yield from walk_protocol(stage['stages'], path + '/',
+                                     repetitions * stage.get('repeat', 1))
+        else:
+            yield kind, path, stage, repetitions
+
+
 def stage_count(stages):
-    """Count leaf executions without expanding repeated blocks."""
-    return sum((stage.get('repeat', 1) * stage_count(stage['stages'])
-                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 2
-                if 'path' in stage else 1) for stage in stages)
+    """Count leaf executions without expanding repeated blocks or paths."""
+    return sum(repetitions * (stage['path']['targets']['intermediate_states'] + 2
+                              if kind == 'path' else 1)
+               for kind, _, stage, repetitions in walk_protocol(stages))
 
 
 def path_target_count(stages):
-    """Count accepted targets expected from all paths in a successful protocol."""
-    return sum((stage.get('repeat', 1) * path_target_count(stage['stages'])
-                if 'stages' in stage else stage['path']['targets']['intermediate_states'] + 2
-                if 'path' in stage else len(stage['control']['targets'])
-                if stage['control']['type'] == 'density_continuation' else 0) for stage in stages)
+    """Count accepted targets expected from a successful protocol."""
+    return sum(repetitions * (stage['path']['targets']['intermediate_states'] + 2
+                              if kind == 'path' else len(stage['control']['targets'])
+                              if stage['control']['type'] == 'density_continuation' else 0)
+               for kind, _, stage, repetitions in walk_protocol(stages))
 
 
 def iter_stages(stages, prefix=''):
-    for index, stage in enumerate(stages):
-        path = f'{prefix}{index + 1}:{stage.get("name", "stage")}'
-        if 'stages' in stage:
-            for cycle in range(stage.get('repeat', 1)):
-                yield from iter_stages(stage['stages'], f'{path}[{cycle + 1}]/')
-        elif 'path' in stage:
-            for index, target in enumerate(path_targets(stage['path']['targets']), 1):
-                yield f'{path}/target_{index:04d}', pressure_path_stage(stage['path'], target, index)
-        else:
+    for kind, path, stage in iter_stage_boundaries(stages, prefix):
+        if kind == 'stage':
             yield path, stage
 
 
 def iter_stage_boundaries(stages, prefix=''):
-    """Yield block boundaries and leaf stages in execution order."""
-    for index, stage in enumerate(stages):
-        path = f'{prefix}{index + 1}:{stage.get("name", "stage")}'
-        if 'stages' in stage:
+    """Yield block boundaries and leaf stages lazily in execution order."""
+    for kind, path, stage in _pieces(stages, prefix):
+        if kind == 'block':
             for cycle in range(stage.get('repeat', 1)):
                 cycle_path = f'{path}[{cycle + 1}]'
                 yield 'block_start', cycle_path, None
                 yield from iter_stage_boundaries(stage['stages'], cycle_path + '/')
                 yield 'block_end', cycle_path, None
-        elif 'path' in stage:
+        elif kind == 'path':
             for index, target in enumerate(path_targets(stage['path']['targets']), 1):
                 yield 'stage', f'{path}/target_{index:04d}', pressure_path_stage(stage['path'], target, index)
         else:
@@ -448,38 +459,27 @@ def iter_stage_boundaries(stages, prefix=''):
 
 def required_observables(stages):
     result = set()
-    for stage in stages:
-        if 'stages' in stage:
-            result |= required_observables(stage['stages'])
-        elif 'path' in stage:
-            result |= {'pressure', 'unbalanced_force'}
-            result.add('normalized_kinetic_energy' if 'normalized_kinetic_energy_below' in stage['path']['acceptance']
-                       else 'kinetic_energy')
-            if stage['path']['control'].get('mode') == 'anisotropic':
-                result |= {'stress_xx', 'stress_yy', 'stress_zz'}
-        else:
-            result |= condition_observables(stage['until']) - {'density_targets_completed'}
-            if stage['control']['type'] == 'density_continuation':
-                result |= {'solid_fraction', 'pressure', 'kinetic_energy', 'unbalanced_force'} | STRESS_OBSERVABLES
-                result |= condition_observables(stage['control']['relaxation']['condition'])
-            if stage['control']['type'] == 'stress_servo':
-                result |= ({'pressure'} if stage['control']['mode'] == 'isotropic'
-                           else {'stress_xx', 'stress_yy', 'stress_zz'})
+    for kind, _, stage, _ in walk_protocol(stages):
+        if kind == 'path':
+            # Every target uses the same condition structure and controller mode.
+            path = stage['path']
+            stage = pressure_path_stage(path, path['targets']['end'], 1)
+        result |= condition_observables(stage['until']) - {'density_targets_completed'}
+        control = stage['control']
+        if control['type'] == 'density_continuation':
+            result |= {'solid_fraction', 'kinetic_energy', 'unbalanced_force'} | STRESS_OBSERVABLES
+            result |= condition_observables(control['relaxation']['condition'])
+        elif control['type'] == 'stress_servo':
+            result |= ({'pressure'} if control['mode'] == 'isotropic'
+                       else {'stress_xx', 'stress_yy', 'stress_zz'})
     if 'normalized_kinetic_energy' in result:
         result |= {'kinetic_energy', 'pressure'}
     return result
 
 
 def control_types(stages):
-    result = set()
-    for stage in stages:
-        if 'stages' in stage:
-            result |= control_types(stage['stages'])
-        elif 'path' in stage:
-            result.add(stage['path']['control']['type'])
-        else:
-            result.add(stage['control']['type'])
-    return result
+    return {(stage['path'] if kind == 'path' else stage)['control']['type']
+            for kind, _, stage, _ in walk_protocol(stages)}
 
 
 def required_actuator_commands(stages):
@@ -492,15 +492,11 @@ def required_actuator_commands(stages):
 def maximum_servo_velocity(stages):
     """Largest configured symmetric face velocity in a nested protocol."""
     result = 0.0
-    for stage in stages:
-        if 'stages' in stage:
-            result = max(result, maximum_servo_velocity(stage['stages']))
-        elif 'path' in stage:
-            result = max(result, stage['path']['control']['max_velocity'])
-        elif stage['control']['type'] == 'stress_servo':
-            result = max(result, stage['control']['max_velocity'])
-        elif stage['control']['type'] == 'density_continuation':
-            result = max(result, stage['control']['confinement']['max_velocity'])
+    for kind, _, stage, _ in walk_protocol(stages):
+        control = (stage['path'] if kind == 'path' else stage)['control']
+        if control['type'] == 'density_continuation':
+            control = control['confinement']
+        result = max(result, control.get('max_velocity', 0.0))
     return result
 
 
@@ -509,6 +505,9 @@ class Condition:
         self.spec = specification
         self.since = None
         self.children = [Condition(c) for c in specification.get('all', specification.get('any', []))]
+
+    def state(self):
+        return {'since': self.since, 'children': [child.state() for child in self.children]}
 
     def evaluate(self, values, elapsed, dt):
         spec = self.spec
@@ -602,10 +601,6 @@ class ProtocolRunner:
 
     def state(self):
         """Save the stage cursor and condition history with the solver checkpoint."""
-        def condition_state(condition):
-            return {'since': condition.since,
-                    'children': [condition_state(child) for child in condition.children]}
-
         accepted = (self.density.start_accepted_targets + self.density.target_index
                     if self.density is not None else self.accepted_targets)
         published = (self.density.start_published_targets + self.density.target_index
@@ -617,7 +612,7 @@ class ProtocolRunner:
                 'accepted_targets': accepted,
                 'density_published_targets': published,
                 'start_step': self.start_step, 'start_time': self.start_time,
-                'condition': condition_state(self.condition),
+                'condition': self.condition.state(),
                 'density': self.density.state() if self.density is not None else None}
 
     def attach(self, port):

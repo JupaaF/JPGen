@@ -5,13 +5,14 @@ commit marker; an index record is appended only after the state is published.
 """
 
 import json
-import shutil
 from pathlib import Path
 
-try:
-    from .state_exchange import write_state
-except ImportError:  # Standalone case.
-    from state_exchange import write_state
+if __package__:
+    from .state_exchange import write_state, read_state
+    from ..atomic_io import atomic_copy
+else:
+    from state_exchange import write_state, read_state
+    from atomic_io import atomic_copy
 
 
 class StageOutput:
@@ -67,11 +68,13 @@ class StageOutput:
         if source is None:
             write_state(stem.parent, arrays, time=time, box=box, stem=stem.name)
         else:
+            completed = read_state(Path(source).parent, Path(source).name)
+            if completed["time"] != time or completed["box"] != box:
+                raise ValueError("State source metadata does not match the published state.")
+            del completed
             # Source is a completed internal checkpoint. Publish arrays first.
             for suffix in (".npz", ".json"):
-                temporary = Path(str(stem) + suffix + ".tmp")
-                shutil.copyfile(Path(str(source) + suffix), temporary)
-                temporary.replace(Path(str(stem) + suffix))
+                atomic_copy(Path(str(source) + suffix), Path(str(stem) + suffix))
         self.last_state_key = key
         self.last_state = {"state_id": state_id, "state": self.relative(stem), "time": time,
                            "validation": "exchange_complete"}

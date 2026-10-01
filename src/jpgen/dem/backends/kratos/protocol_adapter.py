@@ -1,5 +1,4 @@
 """Kratos cell actuation and observations for the standalone protocol worker."""
-import json
 import math
 import shutil
 from pathlib import Path
@@ -12,6 +11,7 @@ from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWall
 
 from protocol import STRESS_OBSERVABLES
 from state_exchange import write_state
+from atomic_io import atomic_json
 
 
 class KratosProtocolAdapter:
@@ -26,7 +26,6 @@ class KratosProtocolAdapter:
         self.max_radius = execution['max_radius']
         self.variables = KM.VariableUtils()
         self.periodic = execution['boundary'] == 'periodic'
-        self.output = Path.cwd()
         self.store = analysis.output_store
 
     def box(self):
@@ -196,7 +195,7 @@ class KratosProtocolAdapter:
                         'friction': self.friction(), 'observables': dict(observables),
                         'protocol_state': runner.state(), 'output_context': self.store.context(),
                         'model_parts': [part.Name for part in parts]}
-            (temporary / 'checkpoint.json').write_text(json.dumps(metadata, allow_nan=False) + '\n', encoding='utf-8')
+            atomic_json(temporary / 'checkpoint.json', metadata)
             temporary.replace(directory)
         except BaseException:
             shutil.rmtree(temporary, ignore_errors=True)
@@ -226,9 +225,7 @@ class KratosProtocolAdapter:
                         provenance={'backend': 'kratos', 'seed': str(self.execution.get('seed')),
                                     'contact_model': self.execution.get('contact_model')})
         metadata_path = self.store.results / 'states' / (saved['state_id'] + '.target.json')
-        temporary = metadata_path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(metadata, allow_nan=False) + '\n', encoding='utf-8')
-        temporary.replace(metadata_path)
+        atomic_json(metadata_path, metadata)
         restart = (self.store.relative(Path(checkpoint['directory']) / 'SpheresPart.rest')
                    if self.store.retention == 'full' else None)
         self.store.boundary({**saved, 'kind': 'density_target', 'phase': 'end', 'accepted': True,

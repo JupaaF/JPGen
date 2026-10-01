@@ -1,12 +1,12 @@
 """Translate the supported physical case into explicit Kratos inputs."""
 
-import json
 import shutil
 from pathlib import Path
 
 import numpy as np
 
 from ....packing.exporters.kratos import KratosExporter
+from ....atomic_io import atomic_json
 from ...protocol import STRESS_OBSERVABLES, required_observables, control_types
 
 TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
@@ -80,7 +80,7 @@ def write_case(case, directory, *, retention="full"):
                                              "end_time": case.end_time,
                                              "seed": case.packing.metadata.seed,
                                              "contact_model": contact.model})):
-        (inputs / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+        atomic_json(inputs / name, value)
     shutil.copyfile(Path(__file__).with_name("runner.py"), inputs / "run.py")
 
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
@@ -90,3 +90,5 @@ def write_case(case, directory, *, retention="full"):
     shutil.copyfile(Path(__file__).parents[2] / "state_exchange.py", inputs / "state_exchange.py")
 
     shutil.copyfile(Path(__file__).parents[2] / "output_writer.py", inputs / "output_writer.py")
+    for name in ("atomic_io.py", "particle_data.py"):
+        shutil.copyfile(Path(__file__).parents[3] / name, inputs / name)

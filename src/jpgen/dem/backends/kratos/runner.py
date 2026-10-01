@@ -39,6 +39,7 @@ def main():
 
     from protocol import ProtocolRunner, STRESS_OBSERVABLES, required_observables
     from protocol_adapter import KratosProtocolAdapter
+    from atomic_io import atomic_json, atomic_text
     from state_exchange import write_state
     from output_writer import StageOutput
     store = StageOutput(stage, execution.get("retention", "full"), engine="kratos")
@@ -126,8 +127,7 @@ def main():
                         if self.protocol.done:
                             self._save_boundaries(output)
             finally:
-                (output / "resolved_parameters.json").write_text(
-                    self.DEM_parameters.PrettyPrintJsonString(), encoding="utf-8")
+                atomic_text(output / "resolved_parameters.json", self.DEM_parameters.PrettyPrintJsonString())
 
         def InitializeSolutionStep(self):
             super().InitializeSolutionStep()
@@ -200,9 +200,7 @@ def main():
                 "time": self.protocol.time, "box": box,
                 "kratos_version": KM.Kernel.Version(),
             }
-            temporary = directory / "restart.json.tmp"
-            temporary.write_text(json.dumps(metadata, allow_nan=False) + "\n", encoding="utf-8")
-            temporary.replace(directory / "restart.json")
+            atomic_json(directory / "restart.json", metadata)
             return store.relative(directory / "SpheresPart.rest")
 
         def _save_boundaries(self, output):
@@ -262,7 +260,7 @@ def main():
             break
         runner = analysis.protocol
         checkpoint = analysis.rollback_checkpoint
-    (output / "execution_report.json").write_text(json.dumps({
+    atomic_json(output / "execution_report.json", {
         "steps": analysis.completed_steps,
         "stop_reason": (analysis.protocol.stop_reason if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",
         "time": analysis.final_state["time"],
@@ -281,7 +279,7 @@ def main():
             "kratos_source_revision": os.environ.get("JPGEN_KRATOS_REVISION"),
             "python": platform.python_version(),
         },
-    }, indent=2), encoding="utf-8")
+    })
 
 
 if __name__ == "__main__":

@@ -58,10 +58,6 @@ class DensityContinuation:
 
     def state(self):
         """Portable continuation state recorded beside each native checkpoint."""
-        def condition_state(condition):
-            return {'since': condition.since,
-                    'children': [condition_state(child) for child in condition.children]}
-
         return {
             'stage': self.path, 'mode': self.mode, 'target_index': self.target_index,
             'factor': self.factor, 'entry_friction': [self.static_entry, self.dynamic_entry],
@@ -78,7 +74,7 @@ class DensityContinuation:
             'work_steps': self.work_steps, 'equilibrium_since': self.equilibrium_since,
             'target_since': self.target_since,
             'density_history': list(self.density_history),
-            'condition': condition_state(self.condition),
+            'condition': self.condition.state(),
             'transient_crossings': self.transient_crossings,
             'last_interval': self.last_interval,
         }

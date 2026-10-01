@@ -1,4 +1,4 @@
-"""Recreate the pinned JPGen Kratos fork from its public base and local patch."""
+"""Recreate the latest JPGen Kratos revision declared by the vendored patches."""
 
 import argparse
 import subprocess
@@ -6,7 +6,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM = "https://github.com/KratosMultiphysics/Kratos.git"
-BRANCH = "fix-stress-calculation"
 
 
 def git(*args, cwd=None):
@@ -24,10 +23,11 @@ def main():
                ROOT / "vendor/kratos-neighbour-optimizations.patch"]
     if destination.exists():
         raise SystemExit(f"Destination already exists: {destination}")
-    subprocess.run(
-        ["git", "clone", "--depth", "1", "--branch", BRANCH, "--single-branch", UPSTREAM, str(destination)],
-        check=True,
-    )
+    # Fetch the declared public base itself, even after its branch has advanced.
+    # JPGen's latest fork is reconstructed locally; it need not be published.
+    git("init", destination)
+    git("remote", "add", "origin", UPSTREAM, cwd=destination)
+    git("fetch", "--depth", "1", "origin", base, cwd=destination)
     git("checkout", "--detach", base, cwd=destination)
     subprocess.run(
         [

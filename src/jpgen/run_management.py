@@ -16,7 +16,7 @@ def recover_run(directory):
     reader = RunReader(directory)
     workspace = RunWorkspace(reader.directory)
     manifest = reader.manifest
-    integrity = reader.verify()
+    integrity = reader.verify(deep=True)
     if integrity['errors']:
         raise ValueError(f"Recorded artifacts changed; recovery will not replace their hashes: {integrity['errors']}")
     if manifest['status'] == 'running':
@@ -161,6 +161,8 @@ def main(argv):
     for name in ('show', 'export', 'recover', 'verify'):
         command = commands.add_parser(name)
         command.add_argument('directory')
+        if name == 'verify':
+            command.add_argument('--deep', action='store_true', help='Validate scientific arrays, metadata and state references')
     command = commands.add_parser('compare')
     command.add_argument('left')
     command.add_argument('right')
@@ -178,7 +180,7 @@ def main(argv):
     elif args.command == 'show':
         result = RunReader(args.directory).manifest
     elif args.command == 'verify':
-        result = RunReader(args.directory).verify()
+        result = RunReader(args.directory).verify(deep=args.deep)
     elif args.command == 'compare':
         result = RunReader(args.left).compare(args.right)
     elif args.command == 'export':

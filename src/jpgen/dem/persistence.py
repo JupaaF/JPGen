@@ -9,9 +9,8 @@ import numpy as np
 
 from .domain import DemState
 from ..packing.domain.box import Box
-
-
-UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angular_velocities": "rad/s"}
+from ..particle_data import UNITS
+from ..hdf5_io import read_particles, read_geometry
 
 
 class DemResultStore(Protocol):
@@ -47,7 +46,17 @@ class Hdf5DemResultStore:
         with h5py.File(path, "r") as file:
             if file.attrs.get("schema") != "JPGen.dem" or file.attrs.get("schema_version") not in ("1.0", "1.1") or file.attrs.get("units") != "SI":
                 raise ValueError("Unsupported JPGen DEM result schema or units.")
+            if file.attrs.get("time_units") != "s":
+                raise ValueError("Invalid DEM time units.")
             domain = file["final_domain"] if file.attrs["schema_version"] == "1.1" else file["initial_domain"]
-            box = Box(domain["origin"][:], domain["lengths"][:], domain.attrs["boundary"] == "periodic")
-            state = DemState(**{name: file[f"particles/{name}"][:] for name in UNITS}, time=float(file.attrs["time"]), box=box)
-            return state, json.loads(file["configuration_json"].asstr()[()])
+            boundary = domain.attrs["boundary"]
+            if boundary not in {"open", "periodic"} or file["initial_domain"].attrs["boundary"] != boundary:
+                raise ValueError("Invalid or inconsistent DEM boundaries.")
+            Box(*read_geometry(file["initial_domain"]), boundary == "periodic")
+            box = Box(*read_geometry(domain), boundary == "periodic")
+            state = DemState(**read_particles(file), time=file.attrs["time"], box=box)
+            configuration = json.loads(file["configuration_json"].asstr()[()])
+            execution = json.loads(file["execution_json"].asstr()[()])
+            if not isinstance(configuration, dict) or not isinstance(execution, dict):
+                raise ValueError("DEM configuration and execution report must be mappings.")
+            return state, configuration

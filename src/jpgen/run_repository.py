@@ -16,6 +16,8 @@ from typing import Protocol
 
 import yaml
 
+from .atomic_io import atomic_json, atomic_text
+
 
 FORMAT_VERSION = "1.0"
 TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
@@ -31,26 +33,6 @@ def file_hash(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def atomic_json(path, value):
-    atomic_text(path, json.dumps(value, indent=2, allow_nan=False) + "\n")
-
-
-def atomic_text(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
-                                         prefix=".", suffix=".tmp", delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(value)
-            stream.flush()
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
 
 
 def relative_path(root, relative):
@@ -223,7 +205,6 @@ def artifact_schema(path, relative, role):
         with h5py.File(path, "r") as file:
             return {key: str(file.attrs[key]) for key in ("schema", "schema_version")}
     schemas = {
-        "packing": ("JPGen.packing", "4.0"), "dem_final": ("JPGen.dem", "1.1"),
         "particle_state": ("JPGen.dem.state", "1.0"),
     }
     if relative.endswith(".target.json"):

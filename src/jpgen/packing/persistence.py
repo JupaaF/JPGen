@@ -6,11 +6,11 @@ from typing import Protocol
 import h5py
 
 from .domain import Box, PackingMetadata, ParticlePacking
+from ..particle_data import ARRAYS, UNITS
+from ..hdf5_io import read_particles, read_geometry
 
 
 SCHEMA_VERSION = "4.0"
-ARRAYS = ("ids", "positions", "radii", "velocities", "angular_velocities")
-UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angular_velocities": "rad/s"}
 
 
 class PackingStore(Protocol):
@@ -52,11 +52,13 @@ class Hdf5PackingStore:
         with h5py.File(path, "r") as file:
             if file.attrs.get("schema") != "JPGen.packing" or file.attrs.get("schema_version") != SCHEMA_VERSION or file.attrs.get("units") != "SI":
                 raise ValueError("Unsupported JPGen HDF5 schema or units.")
-            arrays = {name: file[f"particles/{name}"][:] for name in ARRAYS}
+            arrays = read_particles(file)
             domain = file["domain"]
-            box = Box(domain["origin"][:], domain["lengths"][:], bool(domain.attrs["periodic"]))
+            box = Box(*read_geometry(domain), domain.attrs["periodic"])
             metadata = PackingMetadata.from_dict(json.loads(file["packing"].attrs["metadata_json"]))
             configuration = json.loads(file["packing/configuration_json"].asstr()[()])
+            if not isinstance(configuration, dict):
+                raise ValueError("Packing configuration must be a mapping.")
         packing = ParticlePacking(**arrays, box=box, metadata=metadata)
         packing.validate()
         return packing, configuration

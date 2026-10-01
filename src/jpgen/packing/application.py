@@ -1,6 +1,5 @@
 """Packing stage orchestration."""
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -29,14 +28,6 @@ class PackingStageResult:
     summary: dict
 
 
-def _sha256(path):
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 @dataclass(frozen=True)
 class PackingApplication:
     generator: PackingGenerationService
@@ -59,11 +50,11 @@ class PackingApplication:
         if not isinstance(raw["file"], str) or not raw["file"].strip():
             raise ConfigurationError("packing_source.file must be a path to packing.h5.")
         path = Path(raw["file"]).expanduser().resolve()
-        digest = _sha256(path)
+        digest = file_hash(path)
         if "sha256" in raw and raw["sha256"] != digest:
             raise ConfigurationError("packing_source SHA-256 does not match its recorded content.")
         packing, configuration = self.store.load(path)
-        if _sha256(path) != digest:
+        if file_hash(path) != digest:
             raise ConfigurationError("packing_source changed while it was being loaded.")
         exports = normalized_exports(raw.get("exports", []), self.exporters)
         return PackingSourcePlan(packing, configuration, path, digest, exports)

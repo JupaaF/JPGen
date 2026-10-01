@@ -2,10 +2,12 @@
 
 import json
 from pathlib import Path
+from zipfile import BadZipFile
 
 import yaml
 
 from .run_repository import FORMAT_VERSION, atomic_json, file_hash, json_safe, relative_path, utc_now
+from .dem.state_validation import validate_indexed_state
 
 
 METRICS = {
@@ -85,15 +87,49 @@ class RunReader:
                 return relative_path(self.directory, item["path"])
         raise KeyError(artifact_id)
 
-    def verify(self):
+    def verify(self, *, deep=False):
+        """Check inventory hashes, optionally validating scientific file contents."""
         inventory = json.loads((self.directory / "artifacts.json").read_text(encoding="utf-8"))
+        if (not isinstance(inventory, dict) or inventory.get("schema") != "JPGen.artifacts"
+                or inventory.get("schema_version") != FORMAT_VERSION
+                or not isinstance(inventory.get("artifacts"), list)):
+            raise ValueError("Unsupported JPGen artifact inventory.")
         errors = []
+        checked_state_files = set()
         for item in inventory["artifacts"]:
-            path = relative_path(self.directory, item["path"])
-            if not path.is_file():
-                errors.append({"path": item["path"], "error": "missing"})
-            elif item.get("sha256") and file_hash(path) != item["sha256"]:
-                errors.append({"path": item["path"], "error": "checksum_mismatch"})
+            try:
+                path = relative_path(self.directory, item["path"])
+                if not path.is_file():
+                    errors.append({"path": item["path"], "error": "missing"})
+                    continue
+                if item.get("sha256") and file_hash(path) != item["sha256"]:
+                    errors.append({"path": item["path"], "error": "checksum_mismatch"})
+                if deep:
+                    if item["role"] == "packing":
+                        from .packing.persistence import Hdf5PackingStore
+                        Hdf5PackingStore().load(path)
+                    elif item["role"] == "dem_final":
+                        from .dem.persistence import Hdf5DemResultStore
+                        Hdf5DemResultStore().load(path)
+                    elif item["role"] == "particle_state" and path.suffix in {".json", ".npz"}:
+                        from .dem.state_exchange import read_state
+                        stem = path.with_suffix("")
+                        if stem not in checked_state_files:
+                            checked_state_files.add(stem)
+                            read_state(path.parent, path.stem)
+            except (OSError, ValueError, TypeError, KeyError, EOFError, BadZipFile) as error:
+                errors.append({"path": item.get("path"), "error": "invalid_artifact", "detail": str(error)})
+        if deep:
+            validated = {}
+            try:
+                for record in self._records("stages/dem/results/states.jsonl"):
+                    try:
+                        validate_indexed_state(self.directory, record, validated)
+                    except (OSError, ValueError, TypeError, KeyError, EOFError, BadZipFile) as error:
+                        errors.append({"path": record.get("state"), "error": "invalid_state", "detail": str(error)})
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                errors.append({"path": "stages/dem/results/states.jsonl",
+                               "error": "invalid_index", "detail": str(error)})
         return {"run_id": self.manifest["run_id"], "artifacts_checked": len(inventory["artifacts"]), "errors": errors}
 
     def configuration(self):
@@ -111,21 +147,21 @@ class RunReader:
 
     def states(self, *, accepted_only=False):
         result = []
+        validated = {}
         for record in self._records("stages/dem/results/states.jsonl"):
             if accepted_only and record.get("accepted") is not True:
                 continue
             # Missing pairs are never presented as usable scientific states.
             stem = relative_path(self.directory, record["state"])
             if Path(str(stem) + ".json").is_file() and Path(str(stem) + ".npz").is_file():
+                validate_indexed_state(self.directory, record, validated)
                 result.append(record)
         return result
 
     def load_state(self, state_id):
-        from .dem.state_exchange import read_state
-        for record in self.states():
+        for record in self._records("stages/dem/results/states.jsonl"):
             if record["state_id"] == state_id:
-                path = relative_path(self.directory, record["state"])
-                return read_state(path.parent, path.name)
+                return validate_indexed_state(self.directory, record)
         raise KeyError(state_id)
 
     def series(self, *, include_discarded=False):

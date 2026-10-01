@@ -7,6 +7,8 @@ import numpy as np
 
 from ..packing.domain import ParticlePacking
 from ..packing.domain.box import Box
+from ..particle_data import ARRAYS, validate_particle_arrays, validate_particle_array, validate_time
+from ..packing.domain._arrays import readonly_array
 
 
 @dataclass(frozen=True)
@@ -62,18 +64,10 @@ class DemState:
     def __post_init__(self):
         if self.box is not None and not isinstance(self.box, Box):
             raise ValueError("DEM state box must be a Box.")
-        ids = np.asarray(self.ids)
-        if ids.ndim != 1 or not len(ids) or not np.issubdtype(ids.dtype, np.integer):
-            raise ValueError("DEM particle IDs must be a nonempty integer vector.")
-        if np.any(ids <= 0) or len(np.unique(ids)) != len(ids):
-            raise ValueError("DEM particle IDs must be unique and positive.")
-        n = len(ids)
-        for name, shape in (("ids", (n,)), ("positions", (n, 3)), ("radii", (n,)),
-                            ("velocities", (n, 3)), ("angular_velocities", (n, 3))):
-            array = np.array(getattr(self, name), dtype=np.int64 if name == "ids" else np.float64, copy=True)
-            if array.shape != shape or not np.all(np.isfinite(array)):
-                raise ValueError(f"Invalid DEM state array: {name}.")
-            array.setflags(write=False)
+        validate_particle_arrays({name: getattr(self, name) for name in ARRAYS})
+        validate_time(self.time)
+        for name in ARRAYS:
+            array = readonly_array(getattr(self, name), name,
+                                   np.int64 if name == "ids" else np.float64)
+            validate_particle_array(name, array, len(self.ids), strict_dtype=True)
             object.__setattr__(self, name, array)
-        if np.any(self.radii <= 0) or not np.isfinite(self.time) or self.time < 0:
-            raise ValueError("Invalid DEM radii or simulation time.")
