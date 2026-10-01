@@ -102,6 +102,7 @@ class KratosBackend:
             if 'unbalanced_force' in required_observables(plan.protocol["stages"]):
                 probe_code += "\nfrom KratosMultiphysics.DEMApplication import ContactElementGlobalPhysicsCalculator as ContactPhysics"
                 probe_code += "\nassert hasattr(ContactPhysics, 'CalculateUnbalancedForceWithinSphere'), 'Kratos lacks unbalanced force measurement'"
+        probe_code += "\nassert hasattr(DEMAnalysisStage, 'MeasureGlobalMeanCoordinationNumber'), 'Kratos lacks mean coordination measurement'"
         if plan.boundary == "periodic":
             probe_code += "\nassert hasattr(DEMAnalysisStage, 'MeasureGlobalConductivityTensor'), 'Kratos lacks contact conductivity measurement'"
         if plan.protocol:

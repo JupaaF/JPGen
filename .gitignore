@@ -16,3 +16,4 @@ __pycache__/
 /jpgen_*.yaml
 /jpgen-source.tar.gz
 prototypes/
+examples/

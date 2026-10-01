@@ -116,7 +116,7 @@ def protocol_questions(answers, periodic, capabilities=None):
                                    explanation='Read a protocol mapping, protocol: section, or a full JPGen YAML. The protocol is embedded into the generated file.'))
     else:
         questions.append(_question('dem.protocol.sample_every', 'Record observables every N steps', 100, _positive_integer,
-                                   explanation='Save measured observables and cell geometry every N integration steps, including the dimensionless contact geometry tensor for periodic cells. Larger values produce fewer output records. Stopping conditions are still checked every step, and stage exits are always recorded.'))
+                                   explanation='Save measured observables and cell geometry every N integration steps, including MCN and Fabric, and the dimensionless contact geometry tensor for periodic cells. Larger values produce fewer output records. Stopping conditions are still checked every step, and stage exits are always recorded.'))
         questions.extend(_stage_questions(answers, 'dem.protocol', periodic, capabilities=capabilities))
     return questions
 

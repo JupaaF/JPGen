@@ -96,7 +96,7 @@ class KratosProtocolAdapter:
         if self.periodic and observables & {'solid_fraction', 'bulk_density'}:
             fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
-        if 'unbalanced_force' in observables or 'thermal_conductivity' in observables or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
+        if observables & {'unbalanced_force', 'thermal_conductivity', 'mean_coordination_number', 'fabric_tensor'} or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
         if 'unbalanced_force' in observables:
             if self.contact_physics is None:
@@ -111,6 +111,31 @@ class KratosProtocolAdapter:
         if 'normalized_kinetic_energy' in observables and result['pressure'] > 0:
             result['normalized_kinetic_energy'] = (result['kinetic_energy'] /
                                                    (result['pressure'] * math.prod(self.box()['lengths'])))
+        if 'mean_coordination_number' in observables:
+            result['mean_coordination_number'] = float(self.analysis.MeasureGlobalMeanCoordinationNumber())
+        if 'fabric_tensor' in observables:
+            fabric = np.zeros((3, 3), dtype=float)
+            contacts = 0
+            lengths = np.asarray(self.box()['lengths']) if self.periodic else None
+            for element in self.analysis.contact_model_part.Elements:
+                first, second = element.GetNode(0), element.GetNode(1)
+                branch = np.array([first.X - second.X, first.Y - second.Y, first.Z - second.Z])
+                if lengths is not None:
+                    branch -= lengths * np.round(branch / lengths)
+                distance = np.linalg.norm(branch)
+                if distance == 0:
+                    continue
+                direction = branch / distance
+                fabric += np.outer(direction, direction)
+                contacts += 1
+            if contacts:
+                fabric /= contacts
+            deviator = 7.5 * (fabric - np.eye(3) / 3)
+            invariant = math.sqrt(0.5 * np.sum(deviator * deviator))
+            if not np.all(np.isfinite(fabric)) or not math.isfinite(invariant):
+                raise ValueError('Invalid DEM fabric tensor.')
+            result['fabric_tensor'] = fabric.tolist()
+            result['fabric_second_invariant'] = invariant
         if 'thermal_conductivity' in observables and self.periodic:
             tensor, trace = self.analysis.MeasureGlobalConductivityTensor()
             tensor = np.asarray(tensor, dtype=float)
@@ -118,7 +143,7 @@ class KratosProtocolAdapter:
                 raise ValueError('Invalid Kratos conductivity tensor.')
             result['thermal_conductivity'] = tensor.tolist()
             result['thermal_conductivity_trace'] = float(trace)
-        if not all(math.isfinite(value) for key, value in result.items() if key != 'thermal_conductivity'):
+        if not all(math.isfinite(value) for key, value in result.items() if key not in {'thermal_conductivity', 'fabric_tensor'}):
             raise ValueError('Nonfinite DEM observable.')
         # Keep components obtained by the same reduction to avoid repeating it
         # when a sample or stage exit requests the rest of the stress tensor.

@@ -109,6 +109,11 @@ state uniquely. Parent-branch and rollback events preserve execution history.
 
 `RunReader.series()` excludes discarded and pending attempts by default. Use
 `include_discarded=True` to inspect all work, with a `disposition` on each sample.
+DEM samples include `mean_coordination_number` (MCN), `fabric_tensor` as a
+full 3×3 nested array, and `fabric_second_invariant`; all are dimensionless.
+They are recorded for periodic and open boundaries and included in the final
+report in `final.h5`.
+
 Periodic DEM samples include `thermal_conductivity` as a full 3×3 nested array
 and `thermal_conductivity_trace` as its trace divided by three. Both are
 adimensional DEMGen contact geometry measures, not thermal transport coefficients

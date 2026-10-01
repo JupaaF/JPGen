@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from ....packing.exporters.kratos import KratosExporter
-from ...protocol import CONTACT_OBSERVABLES, STRESS_OBSERVABLES, required_observables, control_types
+from ...protocol import STRESS_OBSERVABLES, required_observables, control_types
 
 TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
 ROTATION_SCHEMES = {"direct": "Direct_Integration"}
@@ -40,7 +40,7 @@ def write_case(case, directory, *, retention="full"):
         "material_assignation_table": [["SpheresPart", "particles"]],
     }
     requested = required_observables(case.protocol["stages"]) if case.protocol else set()
-    needs_contacts = bool(requested & CONTACT_OBSERVABLES) or case.boundary == "periodic"
+    needs_contacts = True  # MCN and fabric are recorded for every DEM case.
     needs_stress = bool(requested & STRESS_OBSERVABLES)
     particle_diameter_d50 = float(2 * np.median(case.packing.radii))
     parameters = {

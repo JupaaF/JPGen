@@ -493,8 +493,14 @@ Walls and shear deformation are not provided by these controllers.
 | `bulk_density` | Particle mass / current cell volume, kg/m³ |
 | `pressure` | Trace of the contact stress tensor / 3, Pa, compression positive |
 | `stress_xx`, `stress_yy`, `stress_zz`, `stress_xy`, `stress_xz`, `stress_yz` | Components of the contact stress tensor, Pa |
+| `mean_coordination_number` | MCN = 2 × contact count / particle count, dimensionless |
+| `fabric_tensor` | Mean outer product of contact directions, 3×3, dimensionless |
+| `fabric_second_invariant` | Square root of the second invariant of 7.5 × (Fabric − I/3), dimensionless |
 | `thermal_conductivity` | DEMGen contact geometry tensor, 3×3, dimensionless; periodic cells only |
 | `thermal_conductivity_trace` | Tensor trace / 3, dimensionless |
+
+MCN and Fabric are recorded from Kratos's contact mesh at protocol samples,
+stage exits and the final DEM result, including runs with open boundaries.
 
 `thermal_conductivity` follows DEMGen's geometric definition: each overlapping
 contact contributes its intersection-circle area times its center distance times
