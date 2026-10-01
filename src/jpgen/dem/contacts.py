@@ -52,10 +52,10 @@ CONTACT_MODELS = {
     "hertz_viscous_coulomb": ContactModel(
         "Hertz viscous Coulomb", HertzViscousCoulomb.from_config,
         (
-            ContactParameter("static_friction", "Static friction coefficient", 0.5, "Friction at zero slip speed; must be at least dynamic friction."),
+            ContactParameter("static_friction", "Static friction coefficient", 0.4, "Friction at zero slip speed; must be at least dynamic friction."),
             ContactParameter("dynamic_friction", "Dynamic friction coefficient", 0.4, "Nonnegative friction approached at high slip speed."),
             ContactParameter("friction_decay", "Friction decay (s/m)", 500.0, "Exponential transition from static to dynamic friction with slip speed; zero keeps static friction."),
-            ContactParameter("restitution", "Coefficient of restitution", 0.8, "Restitution in [0, 1], used to derive viscous contact damping."),
+            ContactParameter("restitution", "Coefficient of restitution", 0.5, "Restitution in [0, 1], used to derive viscous contact damping."),
         ),
         "Hertz normal elasticity, restitution-derived viscous damping and tangential elasticity "
         "limited by Coulomb friction; friction transitions exponentially with slip speed. "

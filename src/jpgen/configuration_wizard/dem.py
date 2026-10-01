@@ -37,9 +37,9 @@ class DemStageWizard:
         definition = self.backends[answers["dem.engine"]]
         capabilities = definition.capabilities
         for key, label, default, explanation in (
-            ("density", "Particle density (kg/m³)", 2500.0, "Positive material density; sets particle mass and rotational inertia."),
-            ("young_modulus", "Young's modulus (Pa)", 1e7, "Positive elastic stiffness; stiffer particles generally require smaller steps."),
-            ("poisson_ratio", "Poisson ratio", 0.25, "Elastic material property strictly between -1 and 0.5."),
+            ("density", "Particle density (kg/m³)", 2650.0, "Positive material density; sets particle mass and rotational inertia."),
+            ("young_modulus", "Young's modulus (Pa)", 6e8, "Positive elastic stiffness; stiffer particles generally require smaller steps."),
+            ("poisson_ratio", "Poisson ratio", 0.3, "Elastic material property strictly between -1 and 0.5."),
         ):
             questions.append(Question(key="dem." + key, message=label, default=default,
                                       explanation=explanation, example=str(default), parser=lambda value, _: float(value)))
