@@ -149,7 +149,7 @@ class PackingStageWizard:
                 explanation="Makes sampling and placement reproducible. A blank answer creates a 128-bit seed using the same secure generator as JPGen.",
                 example="20260916",
                 parser=_optional_nonnegative_integer,
-                after_answer=lambda value, _a: self._resolve_seed(value, terminal),
+                after_answer=lambda value, _a: self._resolve_seed(value),
             ),
             _select(
                 "box.origin_mode",
@@ -180,6 +180,10 @@ class PackingStageWizard:
                     "0.1, 0.1, 0.1",
                     "units.length",
                     LENGTH_FACTORS,
+                    default=lambda a: ", ".join(
+                        str(from_si(0.1, a["units.length"], LENGTH_FACTORS))
+                        for _ in range(3)
+                    ),
                     positive=True,
                     visible=lambda a: a.get("box.lengths.mode") == "vector",
                 ),
@@ -192,6 +196,7 @@ class PackingStageWizard:
                 "Positive side length",
                 "units.length",
                 LENGTH_FACTORS,
+                default_si=0.1,
                 positive=True,
                 visible=lambda a: a.get("box.lengths.mode") == "components",
             )
@@ -357,138 +362,6 @@ class PackingStageWizard:
                 default=3000,
                 visible=relaxation,
             ),
-            _number_question(
-                "placement.step_size",
-                "Relaxation step size",
-                "Multiplier applied to each geometric overlap correction.",
-                "1.0",
-                default=1.0,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=relaxation,
-            ),
-            _number_question(
-                "placement.max_displacement",
-                "Maximum displacement",
-                "Caps one relaxation displacement as a fraction of particle radius.",
-                "0.2",
-                default=0.2,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=relaxation,
-            ),
-            _select(
-                "placement.relax_all_overlaps",
-                "Should relaxation act on every overlap?",
-                "Yes pushes every overlapping pair towards zero overlap while any pair exceeds the permitted limit. No corrects only the excess above max_overlap.",
-                "true usually distributes particles more evenly before convergence.",
-                (MenuChoice("Yes", True), MenuChoice("No", False)),
-                default=True,
-                visible=relaxation,
-            ),
-            _integer_question(
-                "placement.stagnation_iterations",
-                "Stagnation iteration limit",
-                "Iterations without sufficient improvement before a perturbation is attempted.",
-                "200",
-                default=200,
-                visible=relaxation,
-            ),
-            _number_question(
-                "placement.improvement_tolerance",
-                "Improvement tolerance",
-                "Minimum relative energy improvement considered meaningful during relaxation.",
-                "0.000001",
-                default=1e-6,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=relaxation,
-            ),
-            _integer_question(
-                "placement.max_perturbations",
-                "Maximum perturbations",
-                "Number of seeded random perturbations allowed when relaxation stagnates.",
-                "3",
-                default=3,
-                minimum=0,
-                visible=relaxation,
-            ),
-            _number_question(
-                "placement.perturbation",
-                "Perturbation magnitude",
-                "Random perturbation magnitude as a fraction of each particle radius.",
-                "0.01",
-                default=0.01,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=relaxation,
-            ),
-            _number_question(
-                "placement.overlap_tolerance",
-                "Overlap convergence tolerance",
-                "Maximum numerical overlap excess accepted as convergence.",
-                "0.00000001",
-                default=1e-8,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=relaxation,
-            ),
-            _number_question(
-                "placement.initial_scale",
-                "Initial particle scale",
-                "Starting radius scale for progressive growth; it must be smaller than 1.",
-                "0.25",
-                default=0.25,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                strict_maximum=True,
-                visible=growth,
-            ),
-            _number_question(
-                "placement.min_increment",
-                "Minimum growth increment",
-                "Smallest allowed increase in particle radius scale.",
-                "0.0001",
-                default=0.0001,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=growth,
-            ),
-            _number_question(
-                "placement.initial_increment",
-                "Initial growth increment",
-                "First increase in radius scale; it cannot be smaller than the minimum increment.",
-                "0.05",
-                default=0.05,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=growth,
-                validator=lambda value, a: _require_at_least(
-                    value, a["placement.min_increment"], "initial_increment", "min_increment"
-                ),
-            ),
-            _number_question(
-                "placement.max_increment",
-                "Maximum growth increment",
-                "Largest adaptive increase in radius scale; it cannot be smaller than the initial increment.",
-                "0.1",
-                default=0.1,
-                minimum=0,
-                maximum=1,
-                strict_minimum=True,
-                visible=growth,
-                validator=lambda value, a: _require_at_least(
-                    value, a["placement.initial_increment"], "max_increment", "initial_increment"
-                ),
-            ),
             _integer_question(
                 "placement.max_stages",
                 "Maximum growth stages",
@@ -499,12 +372,10 @@ class PackingStageWizard:
             ),
         ]
 
-    def _resolve_seed(self, value, terminal):
+    def _resolve_seed(self, value):
         if value is not None:
             return value
-        value = secrets.randbits(128)
-        terminal.print(f"Generated seed: {value}", style="bold")
-        return value
+        return secrets.randbits(128)
 
     def _build_configuration(self, answers):
         exports = answers["packing.exports"]
@@ -541,15 +412,9 @@ class PackingStageWizard:
         if method == "random_sequential":
             placement["position_attempts"] = answers["placement.position_attempts"]
         else:
-            for field in (
-                "max_iterations", "step_size", "max_displacement", "stagnation_iterations",
-                "improvement_tolerance", "max_perturbations", "perturbation", "overlap_tolerance",
-                "relax_all_overlaps",
-            ):
-                placement[field] = answers[f"placement.{field}"]
+            placement["max_iterations"] = answers["placement.max_iterations"]
             if method == "progressive_growth":
-                for field in ("initial_scale", "initial_increment", "min_increment", "max_increment", "max_stages"):
-                    placement[field] = answers[f"placement.{field}"]
+                placement["max_stages"] = answers["placement.max_stages"]
         packing["placement"] = placement
         return packing
 
@@ -658,7 +523,7 @@ def _component_questions(
     for axis in "xyz":
         default = None
         if default_si is not None:
-            default = lambda a, value=default_si: display_number(from_si(value, a[unit_key], factors))
+            default = lambda a, value=default_si: str(from_si(value, a[unit_key], factors))
         result.append(
             _number_question(
                 f"{prefix}.{axis}",
@@ -795,8 +660,3 @@ def _parse_explicit_radii(text, answers, unit_key, factors):
 def _require_greater(value, boundary, value_name, boundary_name):
     if value <= boundary:
         raise ValueError(f"{value_name} must be greater than {boundary_name} ({boundary:g}).")
-
-
-def _require_at_least(value, boundary, value_name, boundary_name):
-    if value < boundary:
-        raise ValueError(f"{value_name} must be at least {boundary_name} ({boundary:g}).")

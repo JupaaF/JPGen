@@ -271,6 +271,11 @@ The relaxation-based methods accept `max_iterations`, `step_size`, `max_displace
 
 These methods are geometric heuristics. They do not guarantee convergence, calculate forces, establish mechanical equilibrium or run DEM.
 
+The wizard asks only for maximum overlap and maximum relaxation iterations for
+`overlap_relaxation` and `progressive_growth`, plus maximum growth stages for
+`progressive_growth`. Other algorithm settings use their defaults and are included
+in the generated YAML. Edit that YAML to customize the advanced settings.
+
 ## DEM simulation
 
 Archived measurements are available in
