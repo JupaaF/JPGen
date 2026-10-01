@@ -20,10 +20,13 @@ from .terminal import InteractiveTerminal
 class ConfigurationWizard:
     """Collect, validate, preview and publish one pipeline configuration."""
 
-    def __init__(self, stages, terminal=None, current_directory=None, clock=None):
+    def __init__(self, stages, terminal=None, current_directory=None, clock=None, *, run_directory=None):
         self.stages = tuple(stages)
         self.terminal = terminal or InteractiveTerminal()
         self.current_directory = Path(current_directory or Path.cwd())
+        self.run_directory = (
+            self.current_directory / "runs" if run_directory is None else Path(run_directory).expanduser()
+        ).resolve()
         self.clock = clock or datetime.now
 
     def run(self):
@@ -86,7 +89,11 @@ class ConfigurationWizard:
             Question(
                 key="output.path",
                 message="YAML output path",
-                explanation="File to create. Relative paths use the directory where JPGen was launched; directories receive the timestamped filename.",
+                explanation=(
+                    "File to create. Relative paths use the directory where JPGen was launched; "
+                    "directories receive the timestamped filename.\n"
+                    f"Runs will be saved in: {self.run_directory}"
+                ),
                 example=default_name,
                 default=str(self.current_directory / default_name),
                 parser=lambda value, _answers: self._output_path(value, default_name),
@@ -134,6 +141,6 @@ class ConfigurationWizard:
         return path.absolute()
 
 
-def build_configuration_wizard():
+def build_configuration_wizard(run_directory=None):
     """Compose the default wizard and its stage contributions."""
-    return ConfigurationWizard((PackingStageWizard(), DemStageWizard()))
+    return ConfigurationWizard((PackingStageWizard(), DemStageWizard()), run_directory=run_directory)

@@ -14,8 +14,6 @@ VOLUME_FACTOR = 4.0 * np.pi / 3.0
 
 def _validate_count(config):
     config["count"] = integer(config.get("count"), "count")
-    if config["count"] > config["max_particles"]:
-        raise ConfigurationError("count exceeds max_particles.")
     if isinstance(config["radii"], ExplicitDistribution) and len(config["radii"].values) != config["count"]:
         raise ConfigurationError("Explicit radii must match count.")
 
@@ -115,8 +113,8 @@ def _radii_for_fraction(cfg, rng, volume):
     chunks = []
     total = 0.0
     size = 0
-    while size < cfg["max_particles"]:
-        draws = spec.sample(min(4096, cfg["max_particles"] - size), rng)
+    while True:
+        draws = spec.sample(4096, rng)
         volumes = VOLUME_FACTOR * draws**3
         if not np.all(np.isfinite(volumes)) or np.any(volumes <= 0):
             raise PackingGenerationError("Particle volumes must be finite and positive in float64.")
@@ -137,4 +135,3 @@ def _radii_for_fraction(cfg, rng, volume):
         size += len(draws)
         if abs(total - target) <= tolerance:
             return np.concatenate(chunks)
-    raise PackingGenerationError("Target requires more than max_particles; increase the limit or revise the target.")

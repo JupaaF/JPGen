@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..configuration_values import integer, mapping, number, vector
 from ..errors import ConfigurationError
-from .distributions import ExplicitDistribution, build_distribution
+from .distributions import build_distribution
 from .domain import Box, ParticlePacking
 from .exporters import PACKING_EXPORTER_TYPES
 from .placement import PLACEMENT_STRATEGIES, PlacementConstraints, PlacementStrategy
@@ -122,7 +122,7 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     sizing_strategy = PACKING_SIZING_STRATEGIES[sizing_method]()
     common_options = {
         "sizing_method", "placement", "solid_fraction_tolerance", "box", "radii", "velocity",
-        "angular_velocity", "seed", "restarts", "max_particles", "exports",
+        "angular_velocity", "seed", "restarts", "exports",
     }
     mapping(
         cfg,
@@ -133,7 +133,6 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     exports = normalized_exports(cfg.pop("exports", []), available_exports)
     cfg["solid_fraction_tolerance"] = number(cfg.get("solid_fraction_tolerance", 0.001), "solid_fraction_tolerance", 0)
     cfg["restarts"] = integer(cfg.get("restarts", 10), "restarts", 0)
-    cfg["max_particles"] = integer(cfg.get("max_particles", 1_000_000), "max_particles")
     if "seed" not in cfg:
         cfg["seed"] = secrets.randbits(128)
     cfg["seed"] = integer(cfg["seed"], "seed", 0)
@@ -157,10 +156,6 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     box["periodic"] = box.get("periodic", False)
     cfg["box"] = Box(box["origin"], box["lengths"], box["periodic"])
     cfg["radii"] = build_distribution(cfg["radii"], "radii", positive=True, allow_explicit=True)
-    if isinstance(cfg["radii"], ExplicitDistribution):
-        size = len(cfg["radii"].values)
-        if size > cfg["max_particles"]:
-            raise ConfigurationError("Explicit radii must not exceed max_particles.")
     for field in ("velocity", "angular_velocity"):
         cfg[field] = build_distribution(cfg.get(field, {"type": "constant", "value": 0}), field)
     sizing_strategy.validate_config(cfg)

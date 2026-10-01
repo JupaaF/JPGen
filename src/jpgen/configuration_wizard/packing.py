@@ -115,19 +115,11 @@ class PackingStageWizard:
                 SIZING_CHOICES,
             ),
             _integer_question(
-                "max_particles",
-                "Maximum particle count",
-                "Safety limit that prevents sizing from producing an unexpectedly large population.",
-                "1000000",
-                default=1_000_000,
-            ),
-            _integer_question(
                 "count",
                 "Particle count",
                 "Exact number of particles. Variable-box sizing keeps this count while scaling the reference box.",
                 "8000",
                 visible=lambda a: a.get("sizing_method") in {"fixed_count", "variable_box_fraction"},
-                validator=lambda value, a: _require_at_most(value, a["max_particles"], "count", "max_particles"),
             ),
             _number_question(
                 "solid_fraction_tolerance",
@@ -539,7 +531,6 @@ class PackingStageWizard:
             },
             "radii": _distribution_from_answers(answers, "radii"),
             "restarts": answers["restarts"],
-            "max_particles": answers["max_particles"],
             "solid_fraction_tolerance": answers["solid_fraction_tolerance"],
             "velocity": _distribution_from_answers(answers, "velocity"),
             "angular_velocity": _distribution_from_answers(answers, "angular_velocity"),
@@ -805,8 +796,6 @@ def _parse_explicit_radii(text, answers, unit_key, factors):
     count = answers.get("count")
     if count is not None and len(values) != count:
         raise ValueError(f"Enter exactly {count} radii to match count.")
-    if len(values) > answers["max_particles"]:
-        raise ValueError("The radius list exceeds max_particles.")
     return [to_si(value, answers[unit_key], factors) for value in values]
 
 
@@ -818,8 +807,3 @@ def _require_greater(value, boundary, value_name, boundary_name):
 def _require_at_least(value, boundary, value_name, boundary_name):
     if value < boundary:
         raise ValueError(f"{value_name} must be at least {boundary_name} ({boundary:g}).")
-
-
-def _require_at_most(value, boundary, value_name, boundary_name):
-    if value > boundary:
-        raise ValueError(f"{value_name} must not exceed {boundary_name} ({boundary}).")

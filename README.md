@@ -233,7 +233,7 @@ list of available formats. Unknown options inside `packing` or
 
 The selected sizing and placement implementations are retained in `PackingPlan` and reused by `PackingGenerator`; execution does not consult either registry again. Add sizing methods through `PACKING_SIZING_STRATEGIES` and placement methods through `PLACEMENT_STRATEGIES`. A new placement statistics class declares its `method` and provides `to_dict`/`from_dict`; the domain registers it automatically for HDF5 restoration.
 
-Solid fraction is `sum(4*pi*r**3/3) / box_volume`. Overlapping particle volumes are counted separately, so it is a nominal material fraction rather than a geometric union fraction. `solid_fraction_tolerance` defaults to `0.001` and is absolute. `restarts` defaults to 10 retries after the initial attempt, and `max_particles` defaults to 1,000,000.
+Solid fraction is `sum(4*pi*r**3/3) / box_volume`. Overlapping particle volumes are counted separately, so it is a nominal material fraction rather than a geometric union fraction. `solid_fraction_tolerance` defaults to `0.001` and is absolute. `restarts` defaults to 10 retries after the initial attempt.
 
 ### Radius and speed distributions
 

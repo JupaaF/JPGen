@@ -59,7 +59,7 @@ def main():
             if not sys.stdin.isatty() or not sys.stdout.isatty():
                 print(MISSING_FILE_MESSAGE, file=sys.stderr)
                 return 2
-            generated = build_configuration_wizard().run()
+            generated = build_configuration_wizard(args.output_dir).run()
             if generated is None:
                 return 0
             args.file_path = generated.path
