@@ -233,7 +233,7 @@ list of available formats. Unknown options inside `packing` or
 
 The selected sizing and placement implementations are retained in `PackingPlan` and reused by `PackingGenerator`; execution does not consult either registry again. Add sizing methods through `PACKING_SIZING_STRATEGIES` and placement methods through `PLACEMENT_STRATEGIES`. A new placement statistics class declares its `method` and provides `to_dict`/`from_dict`; the domain registers it automatically for HDF5 restoration.
 
-Solid fraction is `sum(4*pi*r**3/3) / box_volume`. Overlapping particle volumes are counted separately, so it is a nominal material fraction rather than a geometric union fraction. `solid_fraction_tolerance` defaults to `0.001` and is absolute. `restarts` defaults to 10 retries after the initial attempt.
+Solid fraction is `sum(4*pi*r**3/3) / box_volume`. Overlapping particle volumes are counted separately, so it is a nominal material fraction rather than a geometric union fraction. `solid_fraction_tolerance` defaults to `0.001` and is absolute. Generation makes a single attempt; placement failures stop the run.
 
 ### Radius and speed distributions
 
@@ -383,7 +383,7 @@ diameters and vertex indices, keeping temporary serialization memory bounded.
 
 ## Persistence and reproducibility
 
-HDF5 schema `JPGen.packing`, version `3.0`, stores float64 positions, radii and velocities; int64 particle IDs; SI unit attributes; domain data; effective configuration; and `PackingMetadata`. Older schemas are rejected without conversion. Arrays are gzip-compressed and every export is produced from an HDF5 readback.
+HDF5 schema `JPGen.packing`, version `4.0`, stores float64 positions, radii and velocities; int64 particle IDs; SI unit attributes; domain data; effective configuration; and `PackingMetadata`. Older schemas are rejected without conversion. Arrays are gzip-compressed and every export is produced from an HDF5 readback.
 
 DEM results use schema `JPGen.dem`, version `1.1` (the reader also accepts `1.0`), with IDs, positions, radii,
 linear and angular velocities, material IDs, final time, initial and final domains,
@@ -393,7 +393,7 @@ not restart checkpoints. The run summary includes final kinetic energy (J),
 elapsed wall time, actual step count, stop reason (`end_time` or
 `protocol_complete`), completed stage count and final measured observables.
 
-Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed from the system random source. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(restart, role))`: radii=0, placement=1, speed=2, linear direction=3, angular speed=4 and angular direction=5. Run names do not influence generation.
+Supply a nonnegative integer `seed`, or omit it to generate a 128-bit seed from the system random source. NumPy PCG64 streams derive from `SeedSequence(seed, spawn_key=(role,))`: radii=0, placement=1, speed=2, linear direction=3, angular speed=4 and angular direction=5. Run names do not influence generation.
 
 Replay requires the same effective configuration, JPGen version and dependency versions recorded in the run. Identical numerical files across library versions or platforms are not guaranteed. Packing HDF5 files are not DEM restart checkpoints.
 

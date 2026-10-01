@@ -21,20 +21,8 @@ class PackingStarted(ProgressEvent):
 
 
 @dataclass(frozen=True)
-class PackingAttemptStarted(ProgressEvent):
-    attempt: int
-    total: int
-
-
-@dataclass(frozen=True)
 class ExpectedParticleCount(ProgressEvent):
     count: int
-
-
-@dataclass(frozen=True)
-class PackingAttemptFailed(ProgressEvent):
-    attempt: int
-    error: str
 
 
 @dataclass(frozen=True)
@@ -131,12 +119,8 @@ class LoggingProgressObserver:
             self.logger.info("Run directory: %s", event.directory)
         elif isinstance(event, PackingStarted):
             self.logger.info("Random seed: %s", event.seed)
-        elif isinstance(event, PackingAttemptStarted):
-            self.logger.info("Packing attempt %s/%s", event.attempt, event.total)
         elif isinstance(event, ExpectedParticleCount):
             self.logger.info("Expected particle count: %s", event.count)
-        elif isinstance(event, PackingAttemptFailed):
-            self.logger.warning("Attempt failed: %s", event.error)
         elif isinstance(event, RelaxationProgress):
             self.logger.debug(
                 "Relaxation iteration %s: maximum overlap excess %.6g",
@@ -205,12 +189,8 @@ class ConsoleProgressObserver:
             print(f"Run directory: {event.directory}")
         elif isinstance(event, PackingStarted):
             print(f"Random seed: {event.seed}")
-        elif isinstance(event, PackingAttemptStarted):
-            print(f"Packing attempt {event.attempt}/{event.total}")
         elif isinstance(event, ExpectedParticleCount):
             print(f"Expected particle count: {event.count}")
-        elif isinstance(event, PackingAttemptFailed):
-            print(f"Attempt failed: {event.error}")
         elif isinstance(event, RelaxationProgress):
             print(
                 f"Relaxation iteration {event.iteration}: "

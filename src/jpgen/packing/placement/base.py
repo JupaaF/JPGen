@@ -42,8 +42,8 @@ class PlacementRequest:
 class PlacementStrategy(ABC):
     """Place final radii in a final box without changing either input.
 
-    The coordinator owns full restarts. Algorithms use only the supplied RNG and
-    Raise PackingGenerationError on failure; internal displacements are not velocities.
+    Algorithms use only the supplied RNG and raise PackingGenerationError on
+    failure; internal displacements are not velocities.
     """
 
     method: ClassVar[str]

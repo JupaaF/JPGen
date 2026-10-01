@@ -8,7 +8,7 @@ import h5py
 from .domain import Box, PackingMetadata, ParticlePacking
 
 
-SCHEMA_VERSION = "3.0"
+SCHEMA_VERSION = "4.0"
 ARRAYS = ("ids", "positions", "radii", "velocities", "angular_velocities")
 UNITS = {"ids": "1", "positions": "m", "radii": "m", "velocities": "m/s", "angular_velocities": "rad/s"}
 

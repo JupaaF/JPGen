@@ -223,7 +223,7 @@ def artifact_schema(path, relative, role):
         with h5py.File(path, "r") as file:
             return {key: str(file.attrs[key]) for key in ("schema", "schema_version")}
     schemas = {
-        "packing": ("JPGen.packing", "3.0"), "dem_final": ("JPGen.dem", "1.1"),
+        "packing": ("JPGen.packing", "4.0"), "dem_final": ("JPGen.dem", "1.1"),
         "particle_state": ("JPGen.dem.state", "1.0"),
     }
     if relative.endswith(".target.json"):

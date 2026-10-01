@@ -3,8 +3,8 @@
 import numpy as np
 
 
-def stream(seed, restart, role):
-    return np.random.Generator(np.random.PCG64(np.random.SeedSequence(seed, spawn_key=(restart, role))))
+def stream(seed, role):
+    return np.random.Generator(np.random.PCG64(np.random.SeedSequence(seed, spawn_key=(role,))))
 
 
 def vectors(distribution, count, magnitude_rng, direction_rng):

@@ -122,7 +122,7 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     sizing_strategy = PACKING_SIZING_STRATEGIES[sizing_method]()
     common_options = {
         "sizing_method", "placement", "solid_fraction_tolerance", "box", "radii", "velocity",
-        "angular_velocity", "seed", "restarts", "exports",
+        "angular_velocity", "seed", "exports",
     }
     mapping(
         cfg,
@@ -132,7 +132,6 @@ def build_packing_plan(raw, available_exports=PACKING_EXPORTER_TYPES):
     )
     exports = normalized_exports(cfg.pop("exports", []), available_exports)
     cfg["solid_fraction_tolerance"] = number(cfg.get("solid_fraction_tolerance", 0.001), "solid_fraction_tolerance", 0)
-    cfg["restarts"] = integer(cfg.get("restarts", 10), "restarts", 0)
     if "seed" not in cfg:
         cfg["seed"] = secrets.randbits(128)
     cfg["seed"] = integer(cfg["seed"], "seed", 0)

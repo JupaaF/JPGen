@@ -20,7 +20,6 @@ from .placement import (
 @dataclass(frozen=True)
 class PackingMetadata:
     seed: int
-    successful_restart: int
     placement_method: str
     placement: PlacementStatistics
     audit: PlacementAudit
@@ -33,8 +32,6 @@ class PackingMetadata:
     def __post_init__(self):
         if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
             raise ValueError("Metadata seed must be a nonnegative integer.")
-        if isinstance(self.successful_restart, bool) or not isinstance(self.successful_restart, int) or self.successful_restart < 0:
-            raise ValueError("Successful restart must be a nonnegative integer.")
         if type(self.placement) is not PLACEMENT_STATISTICS_TYPES.get(self.placement_method):
             raise ValueError("Placement method and statistics type are inconsistent.")
         if not isinstance(self.audit, PlacementAudit):
@@ -54,7 +51,6 @@ class PackingMetadata:
     def with_versions(self, versions):
         return PackingMetadata(
             seed=self.seed,
-            successful_restart=self.successful_restart,
             placement_method=self.placement_method,
             placement=self.placement,
             audit=self.audit,
@@ -68,7 +64,6 @@ class PackingMetadata:
     def to_dict(self):
         return {
             "seed": self.seed,
-            "successful_restart": self.successful_restart,
             "placement_method": self.placement_method,
             "placement": self.placement.to_dict(),
             **self.audit.to_dict(),
@@ -84,7 +79,6 @@ class PackingMetadata:
         method = values["placement_method"]
         return cls(
             seed=values["seed"],
-            successful_restart=values["successful_restart"],
             placement_method=method,
             placement=placement_statistics_from_dict(method, values["placement"]),
             audit=PlacementAudit(
