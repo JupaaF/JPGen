@@ -5,5 +5,7 @@ include vendor/kratos-dem-restart.patch
 include vendor/kratos-neighbour-optimizations.patch
 include LICENSE THIRD_PARTY_NOTICES.md
 include tools/prepare_kratos_source.py tools/build_release_wheel.py
+include tools/build_liggghts.py scripts/compare_dem_backends.py
+recursive-include vendor/liggghts *.h *.cpp LICENSE
 recursive-include examples *.yaml
 recursive-include docs *.md *.json

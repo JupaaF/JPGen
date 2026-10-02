@@ -1,5 +1,9 @@
 # Adding a DEM engine
 
+Implemented engines are Kratos and the optional
+[JPGen LIGGGHTS backend](liggghts.md). The latter uses native extensions for the
+portable contact law, integration and periodic cell actuation.
+
 The application owns the physical case, protocol and common results. Engines
 translate that case, execute it and collect `DemState`; they must reject physics
 they cannot represent. Adding an engine does not require editing the DEM wizard.

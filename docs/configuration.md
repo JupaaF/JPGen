@@ -143,6 +143,16 @@ specified decay coefficient. Global damping and rolling resistance are disabled.
 This mapping does not promise identical behavior in future engines; another
 adapter must implement and document the requested physics or reject the case.
 
+`dem.engine: liggghts` selects the optional JPGen LIGGGHTS adapter. Its options
+are `library`, `python`, `threads` (positive integer, default 1) and `timeout_seconds`. It supports
+the same default integration pair, free evolution, periodic strain rate and
+stress servos. Static/dynamic friction and their exponential transition use the
+same parameters as Kratos; restitution covers [0, 1] and Poisson ratio (-1, 0.5).
+OpenMP parallelizes particle integration and cell deformation; contact evaluation
+and neighbour searches remain sequential in the current single-process runtime.
+See [LIGGGHTS](liggghts.md) for native setup, contact semantics, limitations and
+numerical comparison instructions. Stock upstream shared libraries are rejected.
+
 `boundary: periodic` uses the packing's final box and requires
 `packing.box.periodic: true`. `boundary: open` requires a nonperiodic packing;
 the placement box creates no physical walls and particles may leave it. Walls,
@@ -324,7 +334,7 @@ Walls and shear deformation are not provided by these controllers.
 | `thermal_conductivity` | DEMGen contact geometry tensor, 3×3, dimensionless; periodic cells only |
 | `thermal_conductivity_trace` | Tensor trace / 3, dimensionless |
 
-MCN and Fabric are recorded from Kratos's contact mesh at protocol samples,
+MCN and Fabric are recorded from each backend's contacts at protocol samples,
 stage exits and the final DEM result, including runs with open boundaries.
 
 `thermal_conductivity` follows DEMGen's geometric definition: each overlapping
@@ -333,8 +343,8 @@ the outer product of its unit branch direction; the sum is divided by the curren
 periodic cell volume. It uses neither contact forces nor temperatures and is not
 a thermal conductivity in W/(m·K). The full tensor and its trace mean are
 recorded at protocol samples and stage exits, and in the final DEM result.
-Kratos's native DEM measurement is required. Runs with open boundaries omit
-this cell-based measurement.
+Kratos and LIGGGHTS both provide this measurement using their current contact
+geometry. Runs with open boundaries omit this cell-based measurement.
 
 Stress is the contact-force/branch-vector contribution measured by Kratos,
 without a kinetic stress contribution. Density, stress and normalized kinetic energy conditions require a

@@ -1,5 +1,9 @@
 # Building JPGen release wheels
 
+The optional LIGGGHTS adapter is included as Python code. Its GPL native runtime
+is built separately with `tools/build_liggghts.py` and is not copied into release
+wheels. See [LIGGGHTS setup](liggghts.md).
+
 JPGen release wheels contain both native components: the pybind11 C++ placement
 extension and the pinned JPGen Kratos Core/DEM fork. The fork is based on Kratos
 commit `66dbb226f80dc78d5ff3985351effb03798ad2b8`, plus

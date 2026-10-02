@@ -2,12 +2,21 @@
 
 JPGen generates reproducible packings of 3D spheres in rectangular boxes and
 optionally simulates them with a discrete element method (DEM) engine. Kratos
-is the implemented backend; the physical case and protocol are owned by JPGen.
+and LIGGGHTS are implemented backends; the physical case and protocol are owned by JPGen.
 All physical quantities use SI units.
 
 Release wheels include the C++17 placement kernels and the modified JPGen
 Kratos Core/DEM runtime. No separate Kratos installation is needed. The current
 release targets CPython 3.12 on Linux x86_64 and Windows x86_64.
+
+LIGGGHTS is optional and installed separately. From a source checkout, build its
+pinned Linux library with `python tools/build_liggghts.py --jobs 4`, then select
+`dem.engine: liggghts`. The JPGen native extensions implement the portable
+Hertz contact law and symplectic Euler integration; an ordinary upstream
+LIGGGHTS library is rejected. See [LIGGGHTS setup and numerical comparison](docs/liggghts.md)
+for configuration, capabilities and reproducible comparison commands.
+The [14,089-particle comparison report](docs/liggghts-comparison-14089.md)
+records measured differences against Kratos for the full 30 kPa protocol.
 
 ## Install and run
 
@@ -101,7 +110,7 @@ Each invocation creates a separate run under `runs/` or `--output-dir`:
     summary.json
     results/{final.h5,observables.jsonl,states.jsonl,states/}
     execution/
-    backend/kratos/{input,native,checkpoints/}
+    backend/<engine>/{input,native,checkpoints/}
     logs/
   logs/{events.jsonl,jpgen.log}
   view/                             # Regenerable JSON projections
@@ -134,7 +143,7 @@ describes schemas, partial results, retention and comparison semantics.
 
 The pipeline is composed in `src/jpgen/application.py`. Packing generation lives
 in `src/jpgen/packing/`; solver-independent DEM physics and protocols live in
-`src/jpgen/dem/`, with the Kratos adapter under `dem/backends/kratos/`.
+`src/jpgen/dem/`, with adapters under `dem/backends/{kratos,liggghts}/`.
 `run_repository.py` publishes outputs, and `run_reader.py` provides queries and
 browser projections. Shared particle and file-publication contracts are copied
 into standalone Kratos cases, which run without importing JPGen.
