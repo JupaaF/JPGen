@@ -11,7 +11,26 @@ from pathlib import Path
 import numpy as np
 
 
+def _configure_stack_limit():
+    """Allow deep native checkpoint serialization in this worker process."""
+    if os.name != "posix":
+        return
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
+    # Kratos recursively serializes ordinary particle-neighbour pointers even
+    # with SHALLOW_GLOBAL_POINTERS_SERIALIZATION. Large contact networks can
+    # exhaust the usual 8 MiB stack. Raising its limit preserves the complete
+    # checkpoint and leaves all solver inputs and numerical operations intact.
+    desired = 256 * 1024 * 1024
+    if hard != resource.RLIM_INFINITY:
+        desired = min(desired, hard)
+    if soft != resource.RLIM_INFINITY and soft < desired:
+        resource.setrlimit(resource.RLIMIT_STACK, (desired, hard))
+
+
 def main():
+    _configure_stack_limit()
     import KratosMultiphysics as KM
     from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage
 

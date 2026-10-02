@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run each logarithmic particle-count configuration ten times, using 75% of available CPU threads."""
+"""Run each fixed-box volume-fraction configuration ten times, using 75% of available CPU threads."""
 
 import argparse
 import os
@@ -13,7 +13,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_DIR = ROOT / "examples" / "characterization" / "particle_count_log"
+CONFIG_DIR = ROOT / "examples" / "characterization" / "volume_fraction"
 
 
 def run_one(config: Path, repetition: int, batch: Path, environment: dict[str, str]) -> tuple[str, int]:
@@ -24,7 +24,7 @@ def run_one(config: Path, repetition: int, batch: Path, environment: dict[str, s
         sys.executable, "-m", "jpgen", str(config),
         "--output-dir", str(destination),
         "--label", name,
-        "--experiment", "particle_count_characterization",
+        "--experiment", "volume_fraction_characterization",
         "--progress", "none",
     ]
     with (destination / "launch.log").open("w", encoding="utf-8") as log:
@@ -35,23 +35,28 @@ def run_one(config: Path, repetition: int, batch: Path, environment: dict[str, s
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Show the workload without starting simulations")
-    parser.add_argument("--count", type=int, help="Run only the configuration with this particle count")
     args = parser.parse_args()
 
-    configs = sorted(CONFIG_DIR.glob("particles_*.yaml"))
-    expected = [1000, 1459, 2129, 3107, 4534, 6616, 9655, 14089, 20559, 30000]
-    counts = []
+    configs = sorted(CONFIG_DIR.glob("fraction_*.yaml"))
+    expected = [value / 100 for value in range(50, 60)]
+    fractions = []
+    reference_box = None
+    reference_radii = None
     for config in configs:
         data = yaml.safe_load(config.read_text(encoding="utf-8"))
-        counts.append(data["packing"]["count"])
+        packing = data["packing"]
+        fractions.append(packing["target_solid_fraction"])
+        if packing["sizing_method"] != "fixed_box_fraction":
+            parser.error(f"{config} must use fixed_box_fraction")
+        if reference_box is None:
+            reference_box = packing["box"]
+            reference_radii = packing["radii"]
+        if packing["box"] != reference_box or packing["radii"] != reference_radii:
+            parser.error(f"{config} must use the same initial box and radii distribution as the other configurations")
         if data["dem"].get("backend_options", {}).get("threads", 1) != 1:
             parser.error(f"{config} must use exactly one Kratos thread per run")
-    if counts != expected:
-        parser.error(f"Expected ten logarithmically spaced YAML configurations with counts {expected}")
-    if args.count is not None:
-        if args.count not in counts:
-            parser.error(f"Particle count must be one of {counts}")
-        configs = [config for config, count in zip(configs, counts) if count == args.count]
+    if fractions != expected:
+        parser.error(f"Expected ten YAML configurations with solid fractions {expected}")
 
     available = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
     workers = max(1, available * 3 // 4)
@@ -60,7 +65,7 @@ def main() -> int:
         return 0
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%SZ")
-    batch = ROOT / "runs" / "particle_count_characterization" / stamp
+    batch = ROOT / "runs" / "volume_fraction_characterization" / stamp
     batch.mkdir(parents=True, exist_ok=False)
     print(f"Results: {batch}", flush=True)
 
