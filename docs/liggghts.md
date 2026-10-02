@@ -14,10 +14,19 @@ On Linux, install a C++ compiler, GNU Make and Git, then run from the repository
 python tools/build_liggghts.py --jobs 4
 ```
 
-The builder downloads the official source if needed, verifies its pinned
-revision, installs the extensions and builds a single-process shared library
-with OpenMP, without MPI or VTK dependencies. `libliggghts_serial.json` records the revision,
-extension hashes and library hash. Native sources are licensed GPL-2.0-or-later;
+The builder downloads the official source if needed and verifies its pinned
+revision and absence of tracked changes. It exports that revision into a fresh
+temporary directory, adds the current JPGen extensions and builds a single-process
+shared library with OpenMP, without MPI or VTK dependencies. Untracked sources,
+old extension copies and cached objects in the checkout cannot enter the build.
+Inherited Make overrides are discarded. Only the completed library and manifest
+are published back to the checkout; its source files are left untouched.
+`libliggghts_serial.json` records the revision, extension hashes, compiler, build
+flags, contact-history version and library hash. Its `source_files` inventory
+hashes all exported and generated inputs before compilation, including headers,
+Makefiles and MPI stub sources; `compiled_sources` lists the translation units.
+System compiler headers and libraries are outside this source inventory.
+Native sources are licensed GPL-2.0-or-later;
 their license is included separately. The library is not bundled into JPGen
 wheels. Windows builds are not currently provided.
 
@@ -36,8 +45,9 @@ dem:
 
 `library` defaults to `JPGEN_LIGGGHTS_LIBRARY` when set, otherwise the path
 shown above. Normalized configurations store an absolute library path. The
-runtime probe requires JPGen extension ABI 3; rebuild with the command above
-when upgrading from ABI 2. A stock LIGGGHTS or LAMMPS
+runtime probe requires JPGen extension ABI 4; rebuild with the command above
+when upgrading from ABI 2 or 3. The probe opens the runtime and checks the
+actual OpenMP team using the same environment as the worker. A stock LIGGGHTS or LAMMPS
 library cannot silently substitute different contact physics.
 
 ## Supported physics and protocols
@@ -85,7 +95,8 @@ search remain sequential; this is not a fully parallel contact solver and no
 speedup proportional to the thread count is promised. The historical
 `libliggghts_serial.so` filename is retained for configuration compatibility.
 
-The ABI 3 changes were checked with ten pairs of manual Kratos/LIGGGHTS
+The following results are historical validation of ABI 3, before the ABI 4
+force-balance and contact-history changes. The ABI 3 changes were checked with ten pairs of manual Kratos/LIGGGHTS
 simulations covering distinct friction coefficients, zero friction, zero friction
 decay, restitution 0/0.01/0.05/0.5/1, and Poisson ratios from -0.9 to 0.499.
 The largest relative kinetic-energy difference was 0.00369%; the largest
@@ -104,7 +115,11 @@ JPGen's `jpgen_hertz` normal model uses effective Young/shear moduli, Hertz
 normal force, Thornton restitution-derived damping and nonnegative total normal
 force, matching the definitions used by Kratos. `jpgen_history` stores elastic
 tangential force, reduces it on unloading and applies Coulomb clipping to the
-combined elastic/viscous tangential force. `jpgen/sphere` evaluates forces before
+combined elastic/viscous tangential force. History version 2 stores the previous
+contact normal and transports elastic force by the minimal rotation between
+contact normals. Observations evaluate this transport without mutating history.
+Native restart files from history version 1 (ABI 2/3) are incompatible with
+ABI 4 and must not be reused. `jpgen/sphere` evaluates forces before
 a full velocity kick and position drift, with direct angular velocity integration
 and solid-sphere inertia. Rolling resistance and global damping are absent.
 The stock LIGGGHTS Hertz/history model and velocity Verlet integration have
@@ -115,10 +130,20 @@ live solver and contact history. Stress is the contact force/branch tensor
 divided by cell volume, compression positive, without kinetic stress. Pressure
 is its trace divided by three. Kinetic energy includes translation and rotation.
 Unbalanced force is particle total-force RMS divided by contact-force RMS,
-and zero without contacts. Contact force observations use LIGGGHTS's local
+and zero without contacts. Both reductions use the same completed-step contact
+forces; particle totals include gravity. Contact force observations use LIGGGHTS's local
 contact compute, which reevaluates forces at the completed-step geometry and
 velocities without advancing tangential history. Kratos stores forces evaluated
-during that step; the small time-level difference is included in comparisons.
+during that step; the time-level difference is included in comparisons.
+Neighbour lists are rebuilt before each step. A particle drift of half the
+neighbour skin or more stops execution with a request to reduce `time_step`;
+this bound prevents completed-step observations from missing newly formed
+contacts. The skin is 0.1 times the smallest initial radius.
+
+ABI 4 advances the initialized native integrator directly, preserving Verlet
+callbacks and neighbour/history handling while suppressing per-step run headers
+and timing summaries. A progress record is published about once per second
+and forwarded to the JPGen observer.
 
 Portable int64 particle IDs are mapped to consecutive native IDs and restored
 on export. Particles, radii, velocities and initial geometry are transferred with
@@ -131,8 +156,20 @@ Inputs are under `stages/dem/backend/liggghts/input/`, native outputs under
 `backend/liggghts/native/` and native restart archives under
 `backend/liggghts/checkpoints/`. Common HDF5 results, state archives and JSONL
 indices use the same contracts as Kratos. `runtime.json` records the actual
-library SHA-256; the execution report records the engine version and extension ABI.
+library SHA-256, checked build metadata and current invocation, including
+standalone execution. The prepared case pins the library hash and rejects a
+changed library. The execution report records the engine version, extension
+ABI, history version and library hash. Native restart archives have adjacent
+metadata with the box, physical time, ID-map path and runtime identity.
 Readers do not need the LIGGGHTS runtime.
+
+Before collecting the final state, both backends use the same accepted-target
+validator. Reported acceptances must match the state index count, configured
+target order, stage path and increasing integer steps. Each accepted boundary
+must reference a readable, valid particle state with matching identity, time
+and geometry; declared checkpoint and restart references must exist. Failed
+protocols may retain a valid prefix of accepted targets. Successful completion
+still requires every configured target through execution-report validation.
 
 Prepared cases include the portable Python modules and can run independently:
 
@@ -140,7 +177,9 @@ Prepared cases include the portable Python modules and can run independently:
 python <run>/stages/dem/backend/liggghts/input/run.py --output-dir /path/to/fresh/stages/dem
 ```
 
-The original library must remain available. In-place reruns are rejected.
+The original library must remain available with the same contents. In-place
+reruns are rejected. Deep artifact verification checks finite numeric sample
+values, tensor shapes and consistency of explicit physical times.
 
 ## Numerical comparison
 
@@ -170,3 +209,8 @@ and relative to median diameter, using periodic fractional coordinates. Both
 force-balance residuals must be below 0.001 and normalized kinetic energies must
 differ by at most 1e-6 (relative to pressure times volume). A failed
 margin produces a nonzero exit code and retains the numerical report.
+
+## ABI 4 implementation validation
+
+See [the improvement record](liggghts-improvements.md) for the changes, manual
+validation results and remaining numerical limits. No test suite was added.

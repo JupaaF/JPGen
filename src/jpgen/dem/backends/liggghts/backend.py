@@ -1,6 +1,5 @@
 """LIGGGHTS adapter executing in an isolated Python worker."""
 from dataclasses import dataclass
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,9 +11,11 @@ from zipfile import BadZipFile
 
 from ....configuration_values import mapping, number, integer
 from ....errors import ConfigurationError, DemExecutionError
+from ....progress import DemProgress, emit
 from ....packing.domain.box import Box
 from ...domain import DemState
 from ...state_exchange import read_state
+from ...state_validation import validate_accepted_states
 from ..base import ExecutionReport, PreparedDemCase
 from .definition import CAPABILITIES
 from .case_writer import write_case
@@ -41,6 +42,8 @@ class LiggghtsBackend:
         if not isinstance(python, str) or not python.strip() or shutil.which(python) is None:
             raise ConfigurationError("LIGGGHTS python must name an available executable.")
         threads = integer(raw.get("threads", 1), "threads")
+        if threads > 2**31 - 1:
+            raise ConfigurationError("LIGGGHTS threads must fit a positive C int.")
         timeout = raw.get("timeout_seconds")
         if timeout is not None:
             timeout = number(timeout, "timeout_seconds", 0, strict_min=True)
@@ -54,17 +57,27 @@ class LiggghtsBackend:
         if not Path(self.library).is_file():
             raise ConfigurationError(f"LIGGGHTS library not found: {self.library}. Build it with python tools/build_liggghts.py.")
         # Probe in a subprocess: native loader errors must never terminate the CLI.
-        code = ("import ctypes,sys,numpy; lib=ctypes.CDLL(sys.argv[1]); "
-                "assert lib.jpgen_liggghts_api_version()==3, 'Rebuild LIGGGHTS with tools/build_liggghts.py (ABI 3 required)'; "
-                "assert all(hasattr(lib,name) for name in "
-                "('jpgen_liggghts_contact_rows','jpgen_liggghts_set_cell','jpgen_liggghts_refresh_ghosts',"
-                "'jpgen_liggghts_set_threads','jpgen_liggghts_threads'))")
+        code = ("import sys\n"
+                "if sys.version_info[:2] != (3,12): raise ValueError('LIGGGHTS worker requires Python 3.12')\n"
+                "sys.path.insert(0,sys.argv[1])\n"
+                "from library import Library,runtime_provenance\n"
+                "runtime_provenance(sys.argv[2])\n"
+                "runtime=Library(sys.argv[2],int(sys.argv[3]),log='none')\n"
+                "runtime.close()\n")
         try:
-            probe = subprocess.run([self.python, "-c", code, self.library], capture_output=True, text=True, timeout=30)
+            probe = subprocess.run([self.python, "-c", code, str(Path(__file__).parent),
+                                    self.library, str(self.threads)], env=self.environment(),
+                                   capture_output=True, text=True, timeout=30)
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ConfigurationError(f"Cannot start LIGGGHTS runtime: {error}") from error
         if probe.returncode:
             raise ConfigurationError(f"LIGGGHTS JPGen runtime unavailable: {probe.stderr[-2000:]}")
+
+    def environment(self):
+        environment = os.environ.copy()
+        for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+            environment[name] = str(self.threads)
+        return environment
 
     def prepare(self, case, directory, *, retention="full"):
         write_case(case, directory, self.to_config(), retention=retention)
@@ -75,18 +88,33 @@ class LiggghtsBackend:
         inputs = directory / "backend/liggghts/input"
         native = directory / "backend/liggghts/native"
         command = [self.python, str(inputs / "run.py")]
-        (inputs / "runtime.json").write_text(json.dumps({"command": command, "backend_options": self.to_config(),
-            "library_sha256": hashlib.sha256(Path(self.library).read_bytes()).hexdigest()}, indent=2) + "\n")
-        environment = os.environ.copy()
-        environment["OMP_NUM_THREADS"] = str(self.threads)
-        environment["OPENBLAS_NUM_THREADS"] = str(self.threads)
-        environment["MKL_NUM_THREADS"] = str(self.threads)
         start = time.monotonic()
         with (directory / "logs/stdout.log").open("w") as stdout, (directory / "logs/stderr.log").open("w") as stderr:
             try:
-                process = subprocess.Popen(command, cwd=native, stdout=stdout, stderr=stderr, env=environment)
+                process = subprocess.Popen(command, cwd=native, stdout=stdout, stderr=stderr, env=self.environment())
                 try:
-                    code = process.wait(timeout=self.timeout_seconds)
+                    last_progress = None
+                    while process.poll() is None:
+                        elapsed = time.monotonic() - start
+                        if self.timeout_seconds is not None and elapsed >= self.timeout_seconds:
+                            raise subprocess.TimeoutExpired(command, self.timeout_seconds)
+                        progress = directory / "execution/progress.json"
+                        if progress.exists():
+                            record = json.loads(progress.read_text())
+                            if record["step"] != last_progress:
+                                emit(observer, DemProgress("liggghts", record["step"], record["time"], record["stage"]))
+                                last_progress = record["step"]
+                        remaining = self.timeout_seconds - elapsed if self.timeout_seconds is not None else 0.25
+                        try:
+                            process.wait(timeout=min(0.25, remaining))
+                        except subprocess.TimeoutExpired:
+                            pass
+                    code = process.returncode
+                    progress = directory / "execution/progress.json"
+                    if progress.exists():
+                        record = json.loads(progress.read_text())
+                        if record["step"] != last_progress:
+                            emit(observer, DemProgress("liggghts", record["step"], record["time"], record["stage"]))
                 except BaseException:
                     process.terminate()
                     try:
@@ -101,8 +129,11 @@ class LiggghtsBackend:
             raise DemExecutionError(f"LIGGGHTS exited with code {code}; see {directory / 'logs'} and {native / 'liggghts.log'}.")
         try:
             result = json.loads((native / "execution_report.json").read_text())
+            if prepared.case.protocol:
+                validate_accepted_states(directory, result.get("accepted_targets", 0),
+                                         prepared.case.protocol["stages"])
             return ExecutionReport(return_code=code, elapsed_seconds=time.monotonic() - start, **result)
-        except (OSError, ValueError, TypeError) as error:
+        except (OSError, ValueError, TypeError, KeyError, IndexError, EOFError, BadZipFile) as error:
             raise DemExecutionError(f"Invalid LIGGGHTS execution report: {error}") from error
 
     def collect(self, prepared, report):

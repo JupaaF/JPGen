@@ -54,7 +54,7 @@ def main() -> int:
         if packing["box"] != reference_box or packing["radii"] != reference_radii:
             parser.error(f"{config} must use the same initial box and radii distribution as the other configurations")
         if data["dem"].get("backend_options", {}).get("threads", 1) != 1:
-            parser.error(f"{config} must use exactly one Kratos thread per run")
+            parser.error(f"{config} must use exactly one DEM thread per run")
     if fractions != expected:
         parser.error(f"Expected ten YAML configurations with solid fractions {expected}")
 

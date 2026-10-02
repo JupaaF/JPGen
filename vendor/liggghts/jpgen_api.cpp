@@ -5,9 +5,30 @@
 #include "atom.h"
 #include "domain.h"
 #include "comm.h"
+#include "update.h"
+#include "integrate.h"
+#include "output.h"
+#include "error.h"
 #include "version_liggghts.h"
 #include <omp.h>
-extern "C" int jpgen_liggghts_api_version() { return 3; }
+extern "C" int jpgen_liggghts_api_version() { return 4; }
+extern "C" void jpgen_liggghts_advance(void *handle) {
+  LAMMPS_NS::LAMMPS *lmp=static_cast<LAMMPS_NS::LAMMPS*>(handle);
+  LAMMPS_NS::Update *u=lmp->update;
+  // The case's initial run 0 has initialized the live integrator and fixes.
+  // Avoid Run::command's per-step thermo setup and Finish output. Keep every
+  // Verlet callback, neighbor reconstruction and force/history update.
+  if (!u->first_update || !u->integrate)
+    lmp->error->all(FLERR,"JPGen advance requires an initialized run");
+  u->whichflag=1;
+  u->nsteps=1;
+  u->beginstep=u->firststep=u->ntimestep;
+  u->endstep=u->laststep=u->ntimestep+1;
+  lmp->output->next=u->laststep+1;
+  u->integrate->run(1);
+  u->update_time();
+  u->whichflag=0;
+}
 extern "C" void jpgen_liggghts_set_threads(int count) {
   omp_set_dynamic(0); omp_set_num_threads(count);
 }

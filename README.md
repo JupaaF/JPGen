@@ -15,6 +15,9 @@ pinned Linux library with `python tools/build_liggghts.py --jobs 4`, then select
 Hertz contact law and symplectic Euler integration; an ordinary upstream
 LIGGGHTS library is rejected. See [LIGGGHTS setup and numerical comparison](docs/liggghts.md)
 for configuration, capabilities and reproducible comparison commands.
+The current extensions require ABI 4; rebuild existing ABI 2/3 libraries.
+See the [implementation and validation record](docs/liggghts-improvements.md)
+for the force-balance, contact-history and runtime changes.
 The [14,089-particle comparison report](docs/liggghts-comparison-14089.md)
 records measured differences against Kratos for the full 30 kPa protocol.
 

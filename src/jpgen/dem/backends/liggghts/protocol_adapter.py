@@ -84,7 +84,14 @@ class LiggghtsProtocolAdapter:
                 result["pressure"] = float(np.trace(stress) / 3)
             if "unbalanced_force" in requested:
                 denominator = float(np.mean(np.sum(force*force, axis=1))) if len(contacts) else 0
-                particle_force = self.library.atom("f", columns=3)
+                # Both RMS reductions use this completed-step force evaluation.
+                # atom.f still contains forces used before the velocity kick.
+                native_ids = self.library.atom("id", integer=True)
+                particle_force = np.zeros((len(self.ids) + 1, 3))
+                np.add.at(particle_force, contacts[:, 6].astype(np.int64), force)
+                np.add.at(particle_force, contacts[:, 7].astype(np.int64), -force)
+                particle_force = particle_force[native_ids]
+                particle_force += self.library.atom("rmass")[:, None] * np.asarray(self.execution["gravity"])
                 result["unbalanced_force"] = math.sqrt(float(np.mean(np.sum(particle_force**2, axis=1))) / denominator) if denominator else 0.0
             if "mean_coordination_number" in requested:
                 # Kratos includes all particles in the denominator, including rattlers.

@@ -28,7 +28,7 @@ public:
   }
   double stressStrainExponent() { return 1.5; }
   void surfacesIntersect(SurfacesIntersectData &s,ForceData &i,ForceData &j) {
-    if(s.contact_flags) *s.contact_flags |= CONTACT_NORMAL_MODEL;
+    if(s.computeflag && s.contact_flags) *s.contact_flags |= CONTACT_NORMAL_MODEL;
     const double reff=s.radi*s.radj/(s.radi+s.radj);
     const double q=std::sqrt(reff*s.deltan);
     const double Sn=2*young[s.itype][s.jtype]*q;

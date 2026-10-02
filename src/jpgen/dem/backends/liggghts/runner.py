@@ -5,8 +5,10 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import sys
+import time
 import numpy as np
-from library import Library
+from library import Library, API_VERSION, runtime_provenance
 from protocol import ProtocolRunner, STRESS_OBSERVABLES
 from protocol_adapter import LiggghtsProtocolAdapter
 from output_writer import StageOutput
@@ -33,6 +35,12 @@ def main():
         marker.write("Use --output-dir for a fresh standalone execution.\n")
     os.chdir(native)
     execution = json.loads((inputs / "execution.json").read_text())
+    provenance = runtime_provenance(execution["options"]["library"])
+    if provenance["library_sha256"] != execution["runtime"]["library_sha256"]:
+        raise ValueError("LIGGGHTS library changed since this case was prepared")
+    atomic_json(inputs / "runtime.json", {"command": [sys.executable, *sys.argv],
+        "backend_options": execution["options"], **provenance,
+        "observation_time_level": "completed_step", "contact_history_version": 2})
     store = StageOutput(stage, execution["retention"], engine="liggghts")
     library = Library(execution["options"]["library"], execution["options"]["threads"])
     try:
@@ -43,6 +51,7 @@ def main():
         if adapter.periodic:
             output_names |= STRESS_OBSERVABLES | {"solid_fraction", "bulk_density", "unbalanced_force", "normalized_kinetic_energy", "thermal_conductivity"}
         steps = 0
+        last_progress = time.monotonic()
         values = adapter.observe((runner.observables if runner else set()) | output_names)
 
         def boundaries():
@@ -51,13 +60,22 @@ def main():
                 return
             saved = store.state(adapter.arrays(), time=steps * execution["dt"], box=adapter.box(), key=steps)
             restart = None
+            checkpoint = None
             if store.retention == "full":
                 path = store.checkpoints / (saved["state_id"] + ".restart")
                 library.command(f'write_restart "{path}"')
                 restart = store.relative(path)
+                metadata = path.with_suffix(".json")
+                atomic_json(metadata, {"schema": "JPGen.dem.liggghts_restart", "schema_version": "1.0",
+                    "jpgen_liggghts_api": API_VERSION, "contact_history_version": 2,
+                    "library_sha256": provenance["library_sha256"], "step": steps,
+                    "time": steps * execution["dt"], "box": adapter.box(),
+                    "particle_ids": store.relative(inputs / "particle_ids.npy")})
+                checkpoint = store.relative(metadata)
             for record in records:
                 store.boundary({**saved, **record, "step": steps, "physical_step": record["step"],
-                    "restart": restart, "checkpoint_capabilities": {"analysis": True, "rollback": False, "resume": False}})
+                    "restart": restart, "checkpoint": checkpoint,
+                    "checkpoint_capabilities": {"analysis": True, "rollback": False, "resume": False}})
 
         if runner:
             runner.attach(adapter)
@@ -66,21 +84,29 @@ def main():
             path = runner.path if runner else None
             if runner:
                 adapter.apply(runner.act(values, adapter.control_context(execution["dt"])), execution["dt"])
-            library.command("run 1 pre no post no")
+            library.advance()
             steps += 1
             requested = runner.observables if runner else set()
             values = adapter.observe(requested)
             if runner:
                 values = runner.advance(values)
+            else:
+                values.update(time=steps * execution["dt"], stage_time=steps * execution["dt"])
             sampled = (steps % execution["protocol"]["sample_every"] == 0 or runner.stage_exited
                        if runner else steps == execution["steps"])
             if sampled:
                 values.update(adapter.observe(output_names - values.keys()))
-                store.sample({"step": steps, "physical_step": steps, "stage": path, "observables": values,
+                store.sample({"step": steps, "physical_step": steps, "time": steps * execution["dt"],
+                              "stage": path, "observables": values,
                               "box": adapter.box(), "time_step": {"dt": execution["dt"]}})
             boundaries()
             if runner and runner.stage_exited and not runner.done:
                 values.update(adapter.observe(runner.observables - values.keys()))
+            now = time.monotonic()
+            if now - last_progress >= 1 or (runner.done if runner else steps == execution["steps"]):
+                atomic_json(store.execution / "progress.json", {"step": steps,
+                    "time": steps * execution["dt"], "stage": path})
+                last_progress = now
         final_time = steps * execution["dt"]
         values.update(adapter.observe(output_names - values.keys()))
         write_state(native, adapter.arrays(), time=final_time, box=adapter.box())
@@ -97,7 +123,8 @@ def main():
             "observables": values, "time_step": {"mode": "fixed", "value": execution["dt"]},
             "control": {"implementation": "jpgen_portable", "actuators": ["cell_strain_rate", "symmetric_wall_velocity"],
                 "unbalanced_force_definition": "RMS particle total force / RMS contact force; zero without contacts"},
-            "versions": {"liggghts": library.version, "jpgen_liggghts_api": 3,
+            "versions": {"liggghts": library.version, "jpgen_liggghts_api": API_VERSION,
+                "library_sha256": provenance["library_sha256"], "contact_history_version": 2,
                 "openmp_threads": library.threads, "python": platform.python_version()}})
     finally:
         library.close()

@@ -8,6 +8,54 @@ import numpy as np
 from ..particle_data import validate_time
 from ..run_repository import relative_path
 from .state_exchange import read_state
+from .protocol import iter_stages
+
+
+def validate_accepted_states(directory, expected_count, stages):
+    """Check reported pressure/density acceptances against their saved states.
+
+    Failed protocols may publish only a prefix of the configured targets.
+    Successful completion and the total target count are checked separately
+    by validate_execution_report.
+    """
+    from ..run_reader import read_jsonl
+
+    if type(expected_count) is not int or expected_count < 0:
+        raise ValueError("Invalid accepted target count.")
+    records = []
+    for item in read_jsonl(directory / "results/states.jsonl"):
+        if (not isinstance(item, dict) or item.get("schema") != "JPGen.dem.record"
+                or item.get("schema_version") != "1.0"):
+            raise ValueError("Invalid accepted state index schema.")
+        if item.get("accepted") is True and "target" in item:
+            records.append(item)
+    if len(records) != expected_count:
+        raise ValueError("Accepted state index does not match the execution report.")
+
+    def targets():
+        for path, stage in iter_stages(stages):
+            if '_path_target' in stage:
+                yield path, stage['_path_target'], 'stage'
+            elif stage['control']['type'] == 'density_continuation':
+                for index, target in enumerate(stage['control']['targets'], 1):
+                    yield path, {'observable': 'solid_fraction', 'index': index,
+                                 'value': target}, 'density_target'
+
+    expected = targets()
+    previous_step = -1
+    validated = {}
+    for item in records:
+        target = next(expected, None)
+        if target is None:
+            raise ValueError("Accepted target count exceeds configured path targets.")
+        path, target_spec, kind = target
+        step = item["step"]
+        if (item.get("phase") != "end" or item.get("kind") != kind
+                or type(step) is not int or step <= previous_step
+                or item.get("path") != path or item.get("target") != target_spec):
+            raise ValueError("Invalid accepted state index entry.")
+        previous_step = step
+        validate_indexed_state(directory.parent.parent, item, validated)
 
 
 def validate_indexed_state(root, record, validated=None):

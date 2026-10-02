@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import numpy as np
 from ....atomic_io import atomic_json
+from .library import runtime_provenance
 
 
 def write_case(case, directory, options, *, retention="full"):
@@ -52,6 +53,7 @@ def write_case(case, directory, options, *, retention="full"):
     atomic_json(inputs / "execution.json", {"options": options, "retention": retention,
         "steps": case.steps, "dt": case.time_step, "protocol": case.protocol,
         "material": asdict(material), "contact": case.contact.to_config(),
+        "gravity": list(case.gravity), "runtime": runtime_provenance(options["library"]),
         "box": {"origin": box.origin.tolist(), "lengths": box.lengths.tolist(), "periodic": box.periodic},
         "max_radius": float(max(packing.radii)), "particle_diameter_d50": float(2 * np.median(packing.radii))})
     here = Path(__file__).parent
