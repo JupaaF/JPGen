@@ -84,7 +84,6 @@ def write_case(case, directory, *, retention="full"):
     shutil.copyfile(Path(__file__).with_name("runner.py"), inputs / "run.py")
 
     shutil.copyfile(Path(__file__).parents[2] / "protocol.py", inputs / "protocol.py")
-    shutil.copyfile(Path(__file__).parents[2] / "overlap.py", inputs / "overlap.py")
     shutil.copyfile(Path(__file__).parents[2] / "density_continuation.py", inputs / "density_continuation.py")
     shutil.copyfile(Path(__file__).with_name("protocol_adapter.py"), inputs / "protocol_adapter.py")
     shutil.copyfile(Path(__file__).parents[2] / "commands.py", inputs / "commands.py")

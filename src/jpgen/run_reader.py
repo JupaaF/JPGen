@@ -25,12 +25,6 @@ METRICS = {
     "fabric_second_invariant": {"unit": "1", "definition": "sqrt(0.5 * (7.5 * (fabric - I/3)) : (7.5 * (fabric - I/3)))"},
     "thermal_conductivity": {"unit": "1", "definition": "3x3 DEMGen contact geometry tensor: sum(contact area * branch length * direction outer product) / periodic cell volume; not W/(m*K)"},
     "thermal_conductivity_trace": {"unit": "1", "definition": "Trace of the contact geometry tensor / 3"},
-    "overlap_length": {"unit": "m", "definition": "Sum over unique contact pairs of max(ri + rj - center distance, 0)"},
-    "overlap_area": {"unit": "m^2", "definition": "Sum of sphere intersection-circle areas over unique contact pairs; zero for containment"},
-    "overlap_volume": {"unit": "m^3", "definition": "Sum of sphere intersection volumes over unique contact pairs; multiple intersections counted per pair"},
-    "normalized_overlap_length": {"unit": "1", "definition": "Total overlap length / current periodic cell volume^(1/3); omitted for open boundaries"},
-    "normalized_overlap_area": {"unit": "1", "definition": "Total overlap area / current periodic cell volume^(2/3); omitted for open boundaries"},
-    "normalized_overlap_volume": {"unit": "1", "definition": "Total overlap volume / current periodic cell volume; omitted for open boundaries"},
     **{f"stress_{axis}": {"unit": "Pa", "definition": "Contact-force stress; no kinetic contribution"}
        for axis in ("xx", "yy", "zz", "xy", "xz", "yz")},
 }

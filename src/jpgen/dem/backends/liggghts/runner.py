@@ -10,7 +10,6 @@ import time
 import numpy as np
 from library import Library, API_VERSION, runtime_provenance
 from protocol import ProtocolRunner, STRESS_OBSERVABLES
-from overlap import OVERLAP_OBSERVABLES
 from protocol_adapter import LiggghtsProtocolAdapter
 from output_writer import StageOutput
 from state_exchange import write_state
@@ -48,7 +47,7 @@ def main():
         library.file(inputs / "in.liggghts")
         adapter = LiggghtsProtocolAdapter(library, execution, np.load(inputs / "particle_ids.npy", allow_pickle=False))
         runner = ProtocolRunner(execution["protocol"], execution["dt"]) if execution["protocol"] else None
-        output_names = {"kinetic_energy", "mean_coordination_number", "fabric_tensor"} | OVERLAP_OBSERVABLES
+        output_names = {"kinetic_energy", "mean_coordination_number", "fabric_tensor"}
         if adapter.periodic:
             output_names |= STRESS_OBSERVABLES | {"solid_fraction", "bulk_density", "unbalanced_force", "normalized_kinetic_energy", "thermal_conductivity"}
         steps = 0

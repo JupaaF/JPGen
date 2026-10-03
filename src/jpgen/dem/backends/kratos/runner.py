@@ -57,7 +57,6 @@ def main():
     execution = json.loads((inputs / "execution.json").read_text(encoding="utf-8"))
 
     from protocol import ProtocolRunner, STRESS_OBSERVABLES, required_observables
-    from overlap import OVERLAP_OBSERVABLES
     from protocol_adapter import KratosProtocolAdapter
     from atomic_io import atomic_json, atomic_text
     from state_exchange import write_state
@@ -122,7 +121,7 @@ def main():
                     specification = execution['protocol']
                     if self.protocol is None:
                         self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
-                    self.output_observables = {'kinetic_energy', 'mean_coordination_number', 'fabric_tensor'} | OVERLAP_OBSERVABLES
+                    self.output_observables = {'kinetic_energy', 'mean_coordination_number', 'fabric_tensor'}
                     if execution['boundary'] == 'periodic':
                         self.output_observables |= {'solid_fraction', 'bulk_density', 'thermal_conductivity'}
                     requested = required_observables(specification['stages'])
@@ -241,7 +240,7 @@ def main():
                 return
             if self.protocol is None:
                 self.adapter = KratosProtocolAdapter(self, execution)
-                final_observables = {'mean_coordination_number', 'fabric_tensor'} | OVERLAP_OBSERVABLES
+                final_observables = {'mean_coordination_number', 'fabric_tensor'}
                 if execution['boundary'] == 'periodic':
                     final_observables.add('thermal_conductivity')
                 self.observables = self.adapter.observe(final_observables)

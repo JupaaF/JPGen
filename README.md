@@ -89,8 +89,6 @@ sizing, placement settings, DEM physics, stopping conditions and protocols.
 - Free evolution, strain-rate control, isotropic and anisotropic stress servos.
 - Nested repeated protocols, equilibrated pressure paths and density continuation with rollback.
 - HDF5 scientific outputs, optional VTK/MDPA packing exports, saved particle states and observables.
-- DEM pairwise overlap length, intersection-circle area and intersection volume totals;
-  dimensionless totals normalized by the current box size for periodic cells.
 
 Geometric placement does not establish mechanical equilibrium. DEM success
 means the configured stopping criteria were met. Walls, multiple materials,

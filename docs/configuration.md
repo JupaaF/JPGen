@@ -333,41 +333,6 @@ Walls and shear deformation are not provided by these controllers.
 | `fabric_second_invariant` | Square root of the second invariant of 7.5 × (Fabric − I/3), dimensionless |
 | `thermal_conductivity` | DEMGen contact geometry tensor, 3×3, dimensionless; periodic cells only |
 | `thermal_conductivity_trace` | Tensor trace / 3, dimensionless |
-| `overlap_length` | Sum of pair penetration lengths, m |
-| `overlap_area` | Sum of pair intersection-circle areas, m² |
-| `overlap_volume` | Sum of pair sphere-intersection volumes, m³ |
-| `normalized_overlap_length` | `overlap_length / current cell volume^(1/3)`, dimensionless; periodic cells only |
-| `normalized_overlap_area` | `overlap_area / current cell volume^(2/3)`, dimensionless; periodic cells only |
-| `normalized_overlap_volume` | `overlap_volume / current cell volume`, dimensionless; periodic cells only |
-
-Overlap measurements are output-only: they are not available as stopping
-conditions or in the configuration wizard. Both DEM engines record them at
-protocol samples, stage exits and in the final result, including runs without
-a protocol. Packing-only runs do not compute them. Open boundaries record the
-three dimensional totals and omit the normalized values.
-
-Each overlapping particle pair contributes once, using minimum-image center
-distances in periodic cells. Penetration length is `max(ri + rj - d, 0)`; area
-is the circle where the two sphere surfaces intersect; volume is the lens
-formed by their intersecting interiors. Tangent and separated pairs contribute
-zero. For complete containment (including coincident centers), the circle area
-is zero and the intersection volume is the smaller sphere's volume.
-Partial-intersection volumes are the sum of the two spherical-cap volumes;
-see the [sphere-intersection formulas](https://mathworld.wolfram.com/Sphere-SphereIntersection.html).
-These are pair sums, not a geometric union: regions shared by three or more
-particles are counted for every overlapping pair. The normalization uses the
-current periodic cell, including its deformation. Solid fraction and bulk
-density retain their existing definitions and do not subtract overlap volume.
-
-If every pair's penetration divided by its smaller diameter is below
-`1 - sqrt(3)/2` (approximately 13.4%), three spheres cannot share a point,
-even with unequal radii. To see the lower bound, a common point would give
-three center directions; at least one pair subtends at most 120 degrees.
-For that pair, with radii `r <= R`, the center distance is at most
-`sqrt(r² + R² + r*R)`, requiring a normalized penetration of at least
-13.4%. Thus a 4–5% bound on every pair excludes multiple intersections.
-The packing placement limit is not enforced by DEM, so this statement depends
-on the actual current overlaps, not just the initial packing configuration.
 
 MCN and Fabric are recorded from each backend's contacts at protocol samples,
 stage exits and the final DEM result, including runs with open boundaries.

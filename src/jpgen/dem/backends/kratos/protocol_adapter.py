@@ -10,7 +10,6 @@ import KratosMultiphysics.DEMApplication as DEM
 from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 from protocol import STRESS_OBSERVABLES
-from overlap import OVERLAP_OBSERVABLES, measure_overlap
 from state_exchange import write_state
 from atomic_io import atomic_json
 
@@ -96,26 +95,8 @@ class KratosProtocolAdapter:
         if self.periodic and observables & {'solid_fraction', 'bulk_density'}:
             fraction = self.solid_volume / math.prod(self.box()['lengths'])
             result.update(solid_fraction=fraction, bulk_density=self.density * fraction)
-        if observables & {'unbalanced_force', 'thermal_conductivity', 'mean_coordination_number', 'fabric_tensor'} or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'} | OVERLAP_OBSERVABLES):
+        if observables & {'unbalanced_force', 'thermal_conductivity', 'mean_coordination_number', 'fabric_tensor'} or observables & (STRESS_OBSERVABLES | {'normalized_kinetic_energy'}):
             self.analysis._GetSolver().PrepareContactElementsForPrinting()
-        if observables & OVERLAP_OBSERVABLES:
-            first_radii, second_radii, distances = [], [], []
-            seen = set()
-            lengths = np.asarray(self.box()['lengths']) if self.periodic else None
-            for element in self.analysis.contact_model_part.Elements:
-                first, second = element.GetNode(0), element.GetNode(1)
-                pair = tuple(sorted((first.Id, second.Id)))
-                if pair in seen or first.Id == second.Id:
-                    continue
-                seen.add(pair)
-                branch = np.array([first.X - second.X, first.Y - second.Y, first.Z - second.Z])
-                if lengths is not None:
-                    branch -= lengths * np.rint(branch / lengths)
-                first_radii.append(first.GetSolutionStepValue(KM.RADIUS))
-                second_radii.append(second.GetSolutionStepValue(KM.RADIUS))
-                distances.append(float(np.linalg.norm(branch)))
-            result.update(measure_overlap(first_radii, second_radii, distances,
-                                         cell_volume=math.prod(lengths) if self.periodic else None))
         if 'unbalanced_force' in observables:
             if self.contact_physics is None:
                 self.contact_physics = DEM.ContactElementGlobalPhysicsCalculator()
