@@ -3,6 +3,7 @@ import math
 import numpy as np
 from commands import NoActuation, CellStrainRate, SymmetricWallVelocity
 from protocol import STRESS_OBSERVABLES
+from overlap import OVERLAP_OBSERVABLES, measure_overlap
 
 
 class LiggghtsProtocolAdapter:
@@ -71,12 +72,23 @@ class LiggghtsProtocolAdapter:
         if requested & {"solid_fraction", "bulk_density"}:
             result["solid_fraction"] = self.solid_volume / volume
             result["bulk_density"] = result["solid_fraction"] * self.execution["material"]["density"]
-        if requested & (STRESS_OBSERVABLES | {"normalized_kinetic_energy", "unbalanced_force", "mean_coordination_number", "fabric_tensor", "thermal_conductivity"}):
+        if requested & (STRESS_OBSERVABLES | OVERLAP_OBSERVABLES | {"normalized_kinetic_energy", "unbalanced_force", "mean_coordination_number", "fabric_tensor", "thermal_conductivity"}):
             contacts = self.library.contacts()
             branch = contacts[:, :3] - contacts[:, 3:6]
             if self.periodic:
                 branch = branch - self.lengths * np.rint(branch / self.lengths)
             force = contacts[:, 9:12]
+            if requested & OVERLAP_OBSERVABLES:
+                # Native rows may use either orientation; count each particle pair once.
+                pairs = np.sort(contacts[:, 6:8].astype(np.int64), axis=1)
+                _, unique = np.unique(pairs, axis=0, return_index=True)
+                unique = unique[pairs[unique, 0] != pairs[unique, 1]]
+                radii = np.empty(len(self.ids) + 1)
+                radii[self.library.atom("id", integer=True)] = self.library.atom("radius")
+                result.update(measure_overlap(
+                    radii[pairs[unique, 0]], radii[pairs[unique, 1]],
+                    np.linalg.norm(branch[unique], axis=1),
+                    cell_volume=volume if self.periodic else None))
             if requested & (STRESS_OBSERVABLES | {"normalized_kinetic_energy"}):
                 stress = force.T @ branch / volume
                 for i, j, suffix in ((0,0,"xx"),(1,1,"yy"),(2,2,"zz"),(0,1,"xy"),(0,2,"xz"),(1,2,"yz")):
