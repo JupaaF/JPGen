@@ -135,10 +135,12 @@ forces; particle totals include gravity. Contact force observations use LIGGGHTS
 contact compute, which reevaluates forces at the completed-step geometry and
 velocities without advancing tangential history. Kratos stores forces evaluated
 during that step; the time-level difference is included in comparisons.
-Neighbour lists are rebuilt before each step. A particle drift of half the
+Neighbour displacement checks run before every step with
+`neigh_modify delay 0 every 1 check yes`; lists are rebuilt when the check
+requires it. A particle drift of half the
 neighbour skin or more stops execution with a request to reduce `time_step`;
-this bound prevents completed-step observations from missing newly formed
-contacts. The skin is 0.1 times the smallest initial radius.
+this guard bounds displacement within one step, rather than accumulated
+displacement since the last rebuild. The skin is 0.1 times the smallest initial radius.
 
 ABI 4 advances the initialized native integrator directly, preserving Verlet
 callbacks and neighbour/history handling while suppressing per-step run headers

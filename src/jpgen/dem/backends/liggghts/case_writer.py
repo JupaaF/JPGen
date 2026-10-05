@@ -34,7 +34,7 @@ def write_case(case, directory, options, *, retention="full"):
         "atom_modify map array sort 0 0",
         "boundary " + ("p p p" if box.periodic else "m m m"),
         "newton off", "read_data ../input/particles.data", "communicate single vel yes",
-        f"neighbor {0.1 * min(packing.radii):.17g} bin", "neigh_modify delay 0 every 1 check no",
+        f"neighbor {0.1 * min(packing.radii):.17g} bin", "neigh_modify delay 0 every 1 check yes",
         f"fix young all property/global youngsModulus peratomtype {material.young_modulus:.17g}",
         f"fix poisson all property/global poissonsRatio peratomtype {material.poisson_ratio:.17g}",
         f"fix restitution all property/global coefficientRestitution peratomtypepair 1 {case.contact.restitution:.17g}",
