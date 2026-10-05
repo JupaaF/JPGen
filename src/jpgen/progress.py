@@ -63,6 +63,14 @@ class DemStarted(ProgressEvent):
 
 
 @dataclass(frozen=True)
+class DemProgress(ProgressEvent):
+    engine: str
+    step: int
+    time: float
+    stage: str | None
+
+
+@dataclass(frozen=True)
 class DemCompleted(ProgressEvent):
     directory: Path
     time: float
@@ -159,6 +167,8 @@ class LoggingProgressObserver:
             self.logger.info(
                 "DEM reached %.9g s; saved %s", event.time, ", ".join(event.filenames)
             )
+        elif isinstance(event, DemProgress):
+            self.logger.info("DEM %s: step %s, %.9g s, stage %s", event.engine, event.step, event.time, event.stage)
         elif isinstance(event, DemFailed):
             self.logger.error("DEM failed: %s", event.error)
         elif isinstance(event, RunFailed):
@@ -217,6 +227,8 @@ class ConsoleProgressObserver:
             print(f"DEM started with {event.engine}; solver output is saved under stages/dem/logs.")
         elif isinstance(event, DemCompleted):
             print(f"DEM reached {event.time:.9g} s; saved {', '.join(event.filenames)}")
+        elif isinstance(event, DemProgress):
+            print(f"DEM {event.engine}: step {event.step}, {event.time:.9g} s, stage {event.stage}")
         elif isinstance(event, DemFailed):
             print(f"DEM failed: {event.error}")
         elif isinstance(event, RunFailed):

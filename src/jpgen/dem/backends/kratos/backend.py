@@ -13,9 +13,10 @@ from pathlib import Path
 from ....configuration_values import integer, mapping, number
 from ....errors import ConfigurationError, DemExecutionError
 from ....kratos_runtime import bundled_installation, bundled_revision
-from ...protocol import STRESS_OBSERVABLES, required_observables, control_types, iter_stages
+from ...protocol import STRESS_OBSERVABLES, required_observables, control_types
 from ...domain import DemState
 from ...state_exchange import read_state
+from ...state_validation import validate_accepted_states
 from ....packing.domain.box import Box
 from ..base import ExecutionReport, PreparedDemCase
 from .definition import CAPABILITIES
@@ -158,7 +159,7 @@ class KratosBackend:
         try:
             result = json.loads((directory / "backend/kratos/native" / "execution_report.json").read_text())
             if prepared.case.protocol:
-                _validate_accepted_states(directory, result.get("accepted_targets", 0),
+                validate_accepted_states(directory, result.get("accepted_targets", 0),
                                           prepared.case.protocol["stages"])
             return ExecutionReport(
                 return_code=return_code, elapsed_seconds=elapsed, versions=result["versions"],
@@ -171,7 +172,7 @@ class KratosBackend:
                 time=result.get("time"), time_step=result.get("time_step", {}),
                 control=result.get("control", {}),
             )
-        except (OSError, ValueError, TypeError, KeyError, IndexError) as error:
+        except (OSError, ValueError, TypeError, KeyError, IndexError, EOFError, BadZipFile) as error:
             raise DemExecutionError(f"Invalid Kratos execution report: {error}") from error
 
     def collect(self, prepared, report):
@@ -187,36 +188,3 @@ class KratosBackend:
             return state
         except (OSError, ValueError, TypeError, KeyError, EOFError, BadZipFile) as error:
             raise DemExecutionError(f"Invalid Kratos final state: {error}") from error
-
-
-def _validate_accepted_states(directory, expected_count, stages):
-    """Check accepted pressure and density targets and their published files."""
-    if type(expected_count) is not int or expected_count < 0:
-        raise ValueError("Invalid accepted target count.")
-    from ....run_reader import read_jsonl
-    from ...state_validation import validate_indexed_state
-    validated = {}
-    records = [item for item in read_jsonl(directory / "results/states.jsonl")
-               if item.get("accepted") is True and "target" in item]
-    if len(records) != expected_count:
-        raise ValueError("Accepted state index does not match the execution report.")
-    expected = []
-    for path, stage in iter_stages(stages):
-        if '_path_target' in stage:
-            expected.append((path, stage['_path_target'], 'stage'))
-        elif stage['control']['type'] == 'density_continuation':
-            for index, target in enumerate(stage['control']['targets'], 1):
-                expected.append((path, {'observable': 'solid_fraction', 'index': index,
-                                        'value': target}, 'density_target'))
-    if expected_count > len(expected):
-        raise ValueError("Accepted target count exceeds configured path targets.")
-    previous_step = -1
-    for item, (path, target_spec, kind) in zip(records, expected):
-        step = item["step"]
-        if (item.get("accepted") is not True or item.get("phase") != "end"
-                or item.get("kind") != kind or type(step) is not int
-                or step <= previous_step or item.get("path") != path
-                or item.get("target") != target_spec):
-            raise ValueError("Invalid accepted state index entry.")
-        previous_step = step
-        validate_indexed_state(directory.parent.parent, item, validated)

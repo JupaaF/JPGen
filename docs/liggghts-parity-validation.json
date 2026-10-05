@@ -1,0 +1,416 @@
+{
+  "method": "Manual paired simulations, not an automated test suite. Small cases: 12 polydisperse particles, sliding velocities, periodic seam and oblique contacts, repeated anisotropic strain/rest protocol, dt=1e-7 s. Large cases: original 14089-particle packing, 20 free steps, dt=1e-5 s. No full equilibrium protocol rerun.",
+  "runtime": {
+    "revision": "3d5c00f20519e6bb6eb6756f51f1ad36564e649d",
+    "extensions": {
+      "fix_jpgen_sphere.cpp": "a5f673125c334b415f9613490b4cbeb644a088a84654bab2ac3c50a508c3cd30",
+      "fix_jpgen_sphere.h": "9aa8d04e480f18782aa2dc1e0415e6bced548953067c10841a5e51bf291f59b1",
+      "jpgen_api.cpp": "6df1d36802137d19f36e5383a2e9edd84c06c6df5b6d9c6830badf7a403002a0",
+      "normal_model_jpgen.h": "41b3e840588559c9999fe086bb02ae2e9953ecb83eb0459709efba8894d44873",
+      "tangential_model_jpgen.h": "45c3749e467506e89f9c05399de2eed59d9718ed34d0468bdc591cffca2fb9e6"
+    },
+    "library_sha256": "d3b41e0dcbaf905b722b86b965e3460e5c3caa2ee4cbbb47fd95baf7dde7f78c",
+    "mpi": false,
+    "openmp": true,
+    "jpgen_liggghts_api": 3
+  },
+  "cases": [
+    {
+      "case": "auxetic",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": -0.9,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "faafab14-a8ed-423e-923a-b2c5021dfb30",
+      "liggghts_run_id": "f273594f-cdf8-4d75-84b8-abbf01a0461e",
+      "kinetic_energy_relative_difference": 3.689471803711658e-05,
+      "conductivity_tensor_relative_difference": 7.638173503146396e-09,
+      "position_component_rms_m": 3.47909387999055e-12,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "faafab14-a8ed-423e-923a-b2c5021dfb30",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "f273594f-cdf8-4d75-84b8-abbf01a0461e",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "baseline",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.3,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.4,
+        "friction_decay": 500,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0.4
+      },
+      "steps": 40,
+      "kratos_run_id": "609478af-03ec-4c46-952c-06df16d11443",
+      "liggghts_run_id": "0d9dc179-63f4-41b8-9254-797d57375456",
+      "kinetic_energy_relative_difference": 5.3067221459383055e-06,
+      "conductivity_tensor_relative_difference": 1.0058775409529586e-09,
+      "position_component_rms_m": 4.675264578779478e-13,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "609478af-03ec-4c46-952c-06df16d11443",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "0d9dc179-63f4-41b8-9254-797d57375456",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "decay_zero",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": -0.2,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 0,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "2fd2bc73-62ac-407a-9a30-d6df46072beb",
+      "liggghts_run_id": "ef82ca90-6770-4ae6-8490-c71eaa77a053",
+      "kinetic_energy_relative_difference": 6.648775949573067e-06,
+      "conductivity_tensor_relative_difference": 1.2621867524480124e-09,
+      "position_component_rms_m": 5.866468327455864e-13,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "2fd2bc73-62ac-407a-9a30-d6df46072beb",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "ef82ca90-6770-4ae6-8490-c71eaa77a053",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "elastic",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": -0.2,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 1,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "3738ea71-a91d-4901-a154-642c32afeb67",
+      "liggghts_run_id": "cdbed800-1d3e-4206-865d-8301c3e045ca",
+      "kinetic_energy_relative_difference": 6.7857716352850884e-06,
+      "conductivity_tensor_relative_difference": 1.2703303087216385e-09,
+      "position_component_rms_m": 5.904136177936542e-13,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "3738ea71-a91d-4901-a154-642c32afeb67",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "cdbed800-1d3e-4206-865d-8301c3e045ca",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "friction_zero",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": -0.2,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0
+      },
+      "steps": 40,
+      "kratos_run_id": "3c21a3b8-abc6-4390-9100-23ec1e9d38e4",
+      "liggghts_run_id": "66b33839-aea0-4f04-82f5-c2e08109f209",
+      "kinetic_energy_relative_difference": 3.7043584384723354e-16,
+      "conductivity_tensor_relative_difference": 7.677655193550912e-14,
+      "position_component_rms_m": 1.1521373464747582e-17,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "3c21a3b8-abc6-4390-9100-23ec1e9d38e4",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "66b33839-aea0-4f04-82f5-c2e08109f209",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "near_incompressible",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.499,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "25e0d113-1c4e-4c65-998d-2921b8575f1e",
+      "liggghts_run_id": "c5da6504-e6bf-4557-9333-4cc4b35683c6",
+      "kinetic_energy_relative_difference": 6.036548496452231e-14,
+      "conductivity_tensor_relative_difference": 6.753768912977835e-14,
+      "position_component_rms_m": 1.9079504933729096e-16,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "25e0d113-1c4e-4c65-998d-2921b8575f1e",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "c5da6504-e6bf-4557-9333-4cc4b35683c6",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "rest_005",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.3,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.05,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "f3576aeb-28a1-4e97-a725-18f49d259f10",
+      "liggghts_run_id": "eeed65a6-d779-4bee-883d-5f56be05ef88",
+      "kinetic_energy_relative_difference": 4.005499586244797e-14,
+      "conductivity_tensor_relative_difference": 1.0642516968358766e-13,
+      "position_component_rms_m": 1.5471922514655568e-16,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "f3576aeb-28a1-4e97-a725-18f49d259f10",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "eeed65a6-d779-4bee-883d-5f56be05ef88",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "rest_low",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.3,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.01,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "f8658e93-1c1c-448c-895c-9930cc2c4f9a",
+      "liggghts_run_id": "1102c9e1-e769-4845-ae6b-57085f0f701d",
+      "kinetic_energy_relative_difference": 3.9538028710797915e-14,
+      "conductivity_tensor_relative_difference": 9.421645847278885e-14,
+      "position_component_rms_m": 1.5743139882079055e-16,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "f8658e93-1c1c-448c-895c-9930cc2c4f9a",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "1102c9e1-e769-4845-ae6b-57085f0f701d",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "rest_zero",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.3,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "b4f453d8-ea62-423d-a6b6-34e6bb72cf0c",
+      "liggghts_run_id": "49231473-7ef3-45c9-8d7a-037a8e0b4172",
+      "kinetic_energy_relative_difference": 3.9285524319852755e-14,
+      "conductivity_tensor_relative_difference": 9.707878765536341e-14,
+      "position_component_rms_m": 1.5677588407254923e-16,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "b4f453d8-ea62-423d-a6b6-34e6bb72cf0c",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "49231473-7ef3-45c9-8d7a-037a8e0b4172",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    },
+    {
+      "case": "sliding",
+      "material": {
+        "density": 2650.0,
+        "poisson_ratio": 0.3,
+        "young_modulus": 1000000.0
+      },
+      "contact": {
+        "dynamic_friction": 0.1,
+        "friction_decay": 80,
+        "model": "hertz_viscous_coulomb",
+        "restitution": 0.5,
+        "static_friction": 0.8
+      },
+      "steps": 40,
+      "kratos_run_id": "e9fa4870-0cb7-4c77-a216-0eb6c928c2e2",
+      "liggghts_run_id": "4da5427e-eb0e-44bd-9311-3f2d0c77f308",
+      "kinetic_energy_relative_difference": 4.0772130248657263e-14,
+      "conductivity_tensor_relative_difference": 7.956104142649929e-14,
+      "position_component_rms_m": 1.5888905465033146e-16,
+      "artifact_verification": {
+        "kratos": {
+          "run_id": "e9fa4870-0cb7-4c77-a216-0eb6c928c2e2",
+          "artifacts_checked": 49,
+          "errors": []
+        },
+        "liggghts": {
+          "run_id": "4da5427e-eb0e-44bd-9311-3f2d0c77f308",
+          "artifacts_checked": 51,
+          "errors": []
+        }
+      }
+    }
+  ],
+  "thread_comparison": {
+    "particle_count": 14089,
+    "steps": 20,
+    "openmp_threads": [
+      1,
+      4
+    ],
+    "all_particle_arrays_identical": true,
+    "observables_identical": true,
+    "kratos_kinetic_energy_relative_difference": 2.517981203047504e-05,
+    "kratos_position_component_rms_m": 3.528440983519396e-10,
+    "artifact_verification": [
+      {
+        "run_id": "b97354c6-7a57-4338-9235-4cc16eaaaec5",
+        "artifacts_checked": 45,
+        "errors": []
+      },
+      {
+        "run_id": "5a114b32-eeb9-4c28-978a-2be2f5ff7eae",
+        "artifacts_checked": 45,
+        "errors": []
+      },
+      {
+        "run_id": "0f2d2d19-9e90-47dd-a63a-a2f6f281cb2f",
+        "artifacts_checked": 43,
+        "errors": []
+      }
+    ]
+  },
+  "additional_cases": [
+    {
+      "case": "open",
+      "openmp_threads": 4,
+      "thermal_conductivity": null,
+      "artifact_verification": {
+        "run_id": "056b87b9-3820-479e-80a5-f313c1323412",
+        "artifacts_checked": 43,
+        "errors": []
+      }
+    },
+    {
+      "case": "zero",
+      "openmp_threads": 4,
+      "thermal_conductivity": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "artifact_verification": {
+        "run_id": "2d9281b7-a4a7-44ac-bf52-06dd8d588356",
+        "artifacts_checked": 51,
+        "errors": []
+      }
+    }
+  ]
+}

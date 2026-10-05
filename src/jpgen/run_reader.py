@@ -1,6 +1,7 @@
 """Backend-independent queries and rebuildable browser projections for runs."""
 
 import json
+import math
 from pathlib import Path
 from zipfile import BadZipFile
 
@@ -63,6 +64,46 @@ def _category(path):
     if path.startswith("dem.protocol"):
         return "protocol"
     return "physics" if path.startswith("dem.") else "packing"
+
+
+def validate_sample(record):
+    """Validate scientific measurements without claiming physical equilibrium.
+
+    Older workers omitted a sample time; accept those records, but validate
+    any explicit time and its agreement with the physical step and fixed dt.
+    """
+    values = record.get("observables")
+    if not isinstance(values, dict):
+        raise ValueError("Sample observables must be a mapping.")
+    def finite(value):
+        if isinstance(value, list):
+            return all(finite(item) for item in value)
+        return type(value) in (int, float) and math.isfinite(value)
+    if not all(finite(value) for value in values.values()):
+        raise ValueError("Nonfinite or nonnumeric sample observable.")
+    for name in ("fabric_tensor", "thermal_conductivity"):
+        if name in values:
+            tensor = values[name]
+            if (not isinstance(tensor, list) or len(tensor) != 3
+                    or any(not isinstance(row, list) or len(row) != 3 for row in tensor)):
+                raise ValueError(f"Invalid sample tensor: {name}.")
+    step = record.get("physical_step", record.get("step"))
+    time_step = record.get("time_step", {})
+    if not isinstance(time_step, dict):
+        raise ValueError("Sample time step must be a mapping.")
+    dt = time_step.get("dt")
+    legacy = record.get("branch_id") is None
+    valid_dt = type(dt) in (int, float) and math.isfinite(dt) and dt > 0
+    if (type(step) is not int or step < 0
+            or not (legacy and dt is None) and not valid_dt):
+        raise ValueError("Invalid sample step or time step.")
+    time = record.get("time", values.get("time"))
+    if time is not None:
+        if (type(time) not in (int, float) or not math.isfinite(time) or time < 0
+                or dt is not None and not math.isclose(time, step * dt, rel_tol=1e-12, abs_tol=dt * 1e-7)):
+            raise ValueError("Sample time does not match its physical step.")
+        if "time" in values and values["time"] != time:
+            raise ValueError("Sample time disagrees with its observables.")
 
 
 class RunReader:
@@ -130,6 +171,12 @@ class RunReader:
             except (OSError, ValueError, TypeError, KeyError) as error:
                 errors.append({"path": "stages/dem/results/states.jsonl",
                                "error": "invalid_index", "detail": str(error)})
+            try:
+                for record in self._records("stages/dem/results/observables.jsonl"):
+                    validate_sample(record)
+            except (OSError, ValueError, TypeError, KeyError, OverflowError) as error:
+                errors.append({"path": "stages/dem/results/observables.jsonl",
+                               "error": "invalid_sample", "detail": str(error)})
         return {"run_id": self.manifest["run_id"], "artifacts_checked": len(inventory["artifacts"]), "errors": errors}
 
     def configuration(self):

@@ -11,10 +11,17 @@ Kratos Core and DEM have their own redistribution and attribution conditions.
 Kratos can also build its bundled zlib 1.2.8 on Windows. Its notice is
 shipped as `jpgen/_kratos_runtime/KRATOS-ZLIB-NOTICE.txt`.
 
-The JPGen 0BSD license applies only to original JPGen code.
+Unless stated otherwise below, the JPGen 0BSD license applies only to original JPGen code.
 
 Linux wheels repaired for portability may also contain GCC's `libgomp`.
 When it is bundled, the wheel carries `GCC-LIBGOMP-NOTICE.txt` and
 `GPL-3.0.txt` under `jpgen/_kratos_runtime/`. The notice identifies
 `libgomp` as GPL-3.0-or-later with the GCC Runtime Library Exception.
 The exact corresponding source package must be retained with each release.
+
+## Optional LIGGGHTS runtime
+
+The optional LIGGGHTS-PUBLIC runtime is installed separately from the official
+CFDEMproject/LIGGGHTS-PUBLIC source. It is licensed GPL-2.0-or-later. JPGen's
+native extensions under `vendor/liggghts/` are also GPL-2.0-or-later; the full
+license is included there. JPGen wheels do not bundle this runtime.
