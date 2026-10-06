@@ -94,6 +94,10 @@ Geometric placement does not establish mechanical equilibrium. DEM success
 means the configured stopping criteria were met. Walls, multiple materials,
 adaptive time stepping and CLI resume are not implemented.
 
+The [friction characterization suite](examples/characterization/friction/README.md)
+compares six friction coefficients on ten shared initial packings, with an
+equilibrated 5–200–5 kPa cycle and paired analysis against the 0.4 baseline.
+
 Wheels select the native placement kernels by default. Set
 `JPGEN_PLACEMENT_BACKEND=python` for the Python implementation, or `native` to
 require the compiled kernels. Both use the configured packing random streams.

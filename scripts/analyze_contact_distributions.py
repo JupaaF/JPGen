@@ -16,7 +16,7 @@ LOG_BINS=288
 EDGES=np.r_[0.,np.geomspace(1e-9,1.,LOG_BINS+1),np.inf]
 
 
-def extract(run,point):
+def extract(run,point,*,audit_overlaps=True):
     stem=run/'stages/dem/results/states'/point['state_id']
     metadata=json.loads(stem.with_suffix('.json').read_text())
     box=np.asarray(metadata['box']['lengths'],dtype=float)
@@ -73,9 +73,10 @@ def extract(run,point):
         counts=np.histogram(relative,bins=EDGES,weights=weights)[0]
         hist[name]=counts.tolist()
     result['histograms']=hist
-    result['audit_area_relative_error']=float(abs(area.sum()/float(point['overlap_area'])-1))
-    result['audit_volume_relative_error']=float(abs(volume.sum()/float(point['overlap_volume'])-1))
-    result['audit_depth_relative_error']=float(abs(depth.sum()/float(point['overlap_length'])-1))
+    if audit_overlaps:
+        result['audit_area_relative_error']=float(abs(area.sum()/float(point['overlap_area'])-1))
+        result['audit_volume_relative_error']=float(abs(volume.sum()/float(point['overlap_volume'])-1))
+        result['audit_depth_relative_error']=float(abs(depth.sum()/float(point['overlap_length'])-1))
     result['audit_thermal_relative_error']=float(abs(result['thermal_tensor_trace']/point['thermal_tensor_trace']-1))
     return result
 
