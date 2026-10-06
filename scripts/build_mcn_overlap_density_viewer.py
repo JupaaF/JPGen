@@ -6,10 +6,13 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 import json
+import re
 from pathlib import Path
 
 import numpy as np
 from scipy.spatial import cKDTree
+from rattler_observables import selected_observables
+from rattler_html_controls import viewer_controls
 
 ROOT = Path(__file__).resolve().parents[1]
 BATCHES = ROOT / "runs" / "mcn_overlap_density_characterization"
@@ -101,6 +104,7 @@ def extract_run(run, manifest):
             **{field: observed[field] for field in
                ("mean_coordination_number", "solid_fraction", "bulk_density", "pressure")},
             **overlaps,
+            "without_rattlers": selected_observables(run, state, {**observed, **overlaps}),
         })
     return result
 
@@ -144,7 +148,7 @@ def main():
         for run, manifest in completed:
             key, source_signature = manifest["run_id"], signature(run)
             cached = cache.get(key)
-            if cached and cached["signature"] == source_signature:
+            if cached and cached["signature"] == source_signature and all("without_rattlers" in p for p in cached["points"]):
                 updated[key] = cached
                 points.extend(cached["points"])
             else:
@@ -168,7 +172,13 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(updated, allow_nan=False), encoding="utf-8")
     data = json.dumps(payload, ensure_ascii=False, allow_nan=False).replace("<", "\\u003c")
-    output.write_text(TEMPLATE.read_text(encoding="utf-8").replace("__DATA__", data), encoding="utf-8")
+    template = viewer_controls(TEMPLATE.read_text(encoding="utf-8"))
+    if "__DATA__" in template:
+        rendered = template.replace("__DATA__", data)
+    else:
+        rendered = re.sub(r'(<script id="dataset" type="application/json">).*?(</script>)',
+                          lambda match: match[1] + data + match[2], template, count=1, flags=re.S)
+    output.write_text(rendered, encoding="utf-8")
     print(f"HTML: {output}\nRuns: {len(updated)}; points: {len(points)}; skipped: {len(failures)}", flush=True)
     return 1 if failures else 0
 

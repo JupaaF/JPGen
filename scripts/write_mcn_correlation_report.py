@@ -5,6 +5,8 @@ import base64
 import csv
 import html
 import json
+from rattler_report import add_population_switch
+from rattler_report_text import correlation_text
 from pathlib import Path
 import re
 import statistics
@@ -19,6 +21,7 @@ lines=[]
 
 
 def text(value):
+    value = correlation_text(value, D)
     lines.extend(value.strip().splitlines());lines.append('')
 
 
@@ -51,12 +54,12 @@ text('La presión y la rama ya predicen la mayor parte de la variación de MCN. 
 text('## 2. Datos, definiciones y auditoría')
 text('Cada registro proviene del mismo checkpoint físico: MCN y las densidades se leen del paso guardado y los overlaps se reconstruyen de sus posiciones, radios y caja periódica. No se mezcla un overlap de un paso con un MCN de otro. Se utiliza cada par de esferas una sola vez, con distancia periódica mínima. Los archivos de simulación permanecen intactos. Las 48 semillas son diferentes y cada población tiene 15000 partículas.')
 table(['Variable','Definición y cautela'],[
- ['MCN','2 × contactos / 15000. Incluye partículas sin contactos (rattlers) en el denominador.'],
- ['Fracción sólida φ','Volumen nominal de las esferas / volumen de caja; no descuenta la suma de overlaps.'],
+ ['MCN', '2 × contactos / Nactivo. Excluye partículas sin contactos de overlap positivo.' if D.get('population')=='without_rattlers' else '2 × contactos / 15000. Incluye partículas sin contactos (rattlers) en el denominador.'],
+ ['Fracción sólida φ','Volumen nominal de las partículas con contactos / volumen de caja; no descuenta overlaps.' if D.get('population')=='without_rattlers' else 'Volumen nominal de las esferas / volumen de caja; no descuenta la suma de overlaps.'],
  ['Density aparente','ρ = 2650 × φ, en kg/m³. Es información redundante, no un predictor independiente.'],
  ['Σδ, ΣA, ΣVoverlap','Penetración total, área de círculos de intersección y volumen total de lentes. No son la unión geométrica de todas las esferas.'],
  ['Overlaps normalizados','Σδ/L, ΣA/L² y ΣVoverlap/V, con L = V^(1/3). Su normalización también depende del tamaño de caja.'],
- ['δmedio/D50','Σδ / (15000 × MCN/2) / D50; D50 se calcula de los radios originales de cada run. MCN aparece en su denominador.'],
+ ['δmedio/D50','Σδ / (Nactivo × MCN/2) / D50; D50 conserva la población original.' if D.get('population')=='without_rattlers' else 'Σδ / (15000 × MCN/2) / D50; D50 se calcula de los radios originales de cada run. MCN aparece en su denominador.'],
  ['Presión','Presión real guardada; distinta del objetivo nominal.'],
  ['Checkpoint','Número secuencial de estado, no una causa física ni un predictor causal. Se usan los objetivos nominales para emparejar carga y descarga.']])
 text(f"El error máximo de la identidad density = 2650 φ es {D['audit']['material_density_identity_max_error']}. La mayor desviación de presión respecto al objetivo es {100*D['audit']['max_target_pressure_relative_error']:.3f} %. Dos ramas al mismo objetivo nominal pueden diferir hasta {100*D['audit']['pair_actual_pressure_relative_difference_max']:.3f} % en presión real. Los objetivos logarítmicos invertidos se emparejan con tolerancia relativa 1e-12, evitando diferencias de redondeo de punto flotante.")
@@ -202,3 +205,5 @@ if in_table:body.append('</tbody></table></div>')
 style='body{font:16px system-ui;color:#34454d;background:#fdf6e3;line-height:1.6;margin:0}main{max-width:1160px;margin:auto;padding:32px}h1,h2{color:#073642;line-height:1.3}h2{margin-top:42px}a{color:#268bd2}table{border-collapse:collapse;width:100%;font-size:14px;background:#fff}th,td{padding:10px;border:1px solid #ddd;text-align:left}th{background:#eee8d5}.table{overflow:auto}figure{margin:24px 0}img{width:100%;height:auto}@media print{body{background:white}main{padding:0}h2{break-after:avoid}figure{break-inside:avoid}}'
 (FOLDER/'report.html').write_text('<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Correlación MCN, density y overlaps</title><style>'+style+'</style><main>'+''.join(body)+'</main></html>',encoding='utf-8')
 print(FOLDER/'report.html')
+
+add_population_switch(FOLDER / "report.html", FOLDER, contact_only=False)

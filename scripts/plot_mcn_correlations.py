@@ -22,7 +22,7 @@ plt.rcParams.update({'font.size':10, 'axes.spines.top':False, 'axes.spines.right
 COLORS={'loading':'#268bd2','unloading':'#cb4b16'}
 NAMES={'loading':'Carga','unloading':'Descarga'}
 FIELDS=DATA['primary']
-LABELS=['MCN (incluye rattlers)','Fracción sólida φ','Σδ / L','ΣA / L²','ΣVoverlap / V','δmedio / D50']
+LABELS=['MCN (sin rattlers)' if DATA.get('population')=='without_rattlers' else 'MCN (incluye rattlers)','Fracción sólida φ','Σδ / L','ΣA / L²','ΣVoverlap / V','δmedio / D50']
 P=np.array(DATA['target_pressure'])/1000
 ARRAYS={key:np.array(value) for key,value in DATA['stage_arrays'].items()}
 

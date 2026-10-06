@@ -4,6 +4,8 @@ import base64
 import csv
 import html
 import json
+from rattler_report import add_population_switch
+from rattler_report_text import fixed_target_text
 from pathlib import Path
 import sys
 
@@ -15,6 +17,7 @@ BODY=[];MD=[]
 
 
 def paragraph(value):
+    value = fixed_target_text(value, D)
     BODY.append('<p>'+html.escape(value)+'</p>');MD.append(value+'\n')
 
 
@@ -91,14 +94,15 @@ heading('Alcance y archivos reproducibles')
 paragraph(f"Se utilizan {D['bootstrap']} remuestreos con semilla {D['bootstrap_seed']}. Para cada objetivo se remuestrean runs. En el resumen de una rama se conservan juntos los 20 checkpoints de cada run, y se recalculan las medias por objetivo en cada remuestreo. Los mismos índices se usan en las diferencias apareadas. Las {D['runs']} runs completadas no representan necesariamente las 100 previstas: las conclusiones corresponden solo a esta instantánea.")
 paragraph('No se aplican efectos fijos de run, modelos predictivos ni correlaciones brutas de toda la trayectoria. No se interpreta el checkpoint como causa física. Los intervalos cubren variación entre semillas, no incertidumbre del modelo DEM, reconstrucción geométrica ni sesgo por haber terminado primero estas runs. No se han alterado ni relanzado simulaciones.')
 BODY.append('<p>Descargas: <a href="checkpoint_data.csv">Datos con ambas definiciones de traza</a> · <a href="correlations_by_target.csv">Todos los pares por objetivo</a> · <a href="statistics.json">Estadísticas y auditoría</a> · <a href="report.md">Informe Markdown</a>.</p>')
-if (FOLDER/'contact_distributions/report.html').exists():
+if (FOLDER/'contact_distributions/report.html').exists() or (D.get('population')=='without_rattlers' and (FOLDER.parent.parent/'fixed_target/contact_distributions/report.html').exists()):
     BODY.append('<p><a href="contact_distributions/report.html">Distribución de penetraciones por contacto</a>: histogramas por objetivo y run, y contribución de los contactos más penetrados al área, volumen de overlap y traza térmica.</p>')
     MD.append('[Distribución de penetraciones por contacto](contact_distributions/report.html).\n')
 MD.append('Datos: [checkpoints](checkpoint_data.csv), [correlaciones por objetivo](correlations_by_target.csv), [estadísticas](statistics.json).\n')
 paragraph('Reproducción: .venv/bin/python scripts/analyze_fixed_target_thermal.py; generar figuras con scripts/plot_fixed_target_thermal.py en un Python con Matplotlib compatible; generar este informe con .venv/bin/python scripts/write_fixed_target_thermal_report.py. Las figuras se exportan como PNG y SVG; este HTML incrusta imágenes y datos y funciona sin conexión.')
 
 JS=r'''
-const D=JSON.parse(document.getElementById('dataset').textContent), $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
+let D=JSON.parse(document.getElementById('dataset').textContent);
+const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
 const labels=[...D.labels,'Density (kg/m³)'],fields=[...D.fields,'bulk_density'];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>Math.abs(n)<.001&&n!==0?n.toExponential(3):Number(n).toPrecision(5);
@@ -111,7 +115,7 @@ function update(){
  const stage=$('stage').value,t=+$('target').value,g=D.groups[stage][t],i=fields.indexOf($('x').value),j=fields.indexOf($('y').value),ci=fields.indexOf($('color').value);
  $('slider').value=t;
  const pts=D.points_data.filter(p=>p.stage===stage&&Math.abs(p.target_pressure-g.target_pressure)<1e-6);
- $('selection').textContent=`${stage==='loading'?'Carga':'Descarga'} · objetivo ${(g.target_pressure/1000).toFixed(3)} kPa · checkpoint ${g.checkpoint} · ${pts.length} runs · P real ${(g.pressure_min/1000).toFixed(3)}–${(g.pressure_max/1000).toFixed(3)} kPa.`;
+ $('selection').textContent=`${D.population==='without_rattlers'?'Sin rattlers · ':''}${stage==='loading'?'Carga':'Descarga'} · objetivo ${(g.target_pressure/1000).toFixed(3)} kPa · checkpoint ${g.checkpoint} · ${pts.length} runs · P real ${(g.pressure_min/1000).toFixed(3)}–${(g.pressure_max/1000).toFixed(3)} kPa.`;
  const extent=k=>{let min=Math.min(...pts.map(p=>p[k])),max=Math.max(...pts.map(p=>p[k]));const pad=(max-min||Math.abs(max)*.01||1)*.08;return [min-pad,max+pad];};
  const [xmin,xmax]=extent(fields[i]),[ymin,ymax]=extent(fields[j]);const colors=pts.map(p=>p[fields[ci]]),cmin=Math.min(...colors),cmax=Math.max(...colors);
  const X=v=>95+(v-xmin)/(xmax-xmin)*690,Y=v=>365-(v-ymin)/(ymax-ymin)*310;
@@ -144,3 +148,5 @@ title='Correlaciones a objetivo fijo y traza térmica'
 (FOLDER/'report.html').write_text('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'+style+'</style></head><body><main><h1>'+title+'</h1>'+''.join(BODY)+'</main><script id="dataset" type="application/json">'+data+'</script><script>'+JS+'</script></body></html>',encoding='utf-8')
 (FOLDER/'report.md').write_text('# '+title+'\n\n'+'\n'.join(MD),encoding='utf-8')
 print(FOLDER/'report.html')
+
+add_population_switch(FOLDER / "report.html", FOLDER, contact_only=False)

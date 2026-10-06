@@ -12,6 +12,8 @@ from urllib.parse import parse_qs, urlsplit
 import yaml
 
 from jpgen.run_reader import RunReader
+from rattler_observables import final_selection
+from rattler_html_controls import dashboard_controls
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +25,7 @@ VOLUME_FRACTIONS = tuple(sorted(float(yaml.safe_load(path.read_text(encoding="ut
 REPETITIONS = 10
 JOB_PATTERN = re.compile(r"fraction_0_(\d{2})_rep_(\d{2})$")
 summary_cache = {}
+selection_cache = {}
 series_cache = {}
 protocol_cache = {}
 group_cache = {}
@@ -128,6 +131,14 @@ def summary(batch):
                             last = record
                         item["values"] = observable_values(last.get("observables", {})) if last else {}
                         summary_cache[cache_key] = (signature, item["values"])
+                    selection_key = (str(manifest_path), signature)
+                    if selection_key not in selection_cache:
+                        try:
+                            selected = final_selection(manifest_path.parent, item["values"])
+                            selection_cache[selection_key] = observable_values(selected) if selected else None
+                        except (OSError, ValueError, KeyError):
+                            selection_cache[selection_key] = None
+                    item["without_rattlers"] = selection_cache[selection_key]
                     if item["status"] == "completed":
                         metrics.update(item["values"])
             except (OSError, ValueError, KeyError, json.JSONDecodeError):
@@ -237,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(route.query)
         try:
             if route.path in ("/", "/dashboard.html"):
-                body = PAGE.read_bytes()
+                body = dashboard_controls(PAGE.read_text(encoding="utf-8")).encode("utf-8")
                 content_type = "text/html; charset=utf-8"
             elif route.path == "/api/batches":
                 body = json.dumps({"batches": batch_names()}).encode()

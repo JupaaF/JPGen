@@ -3,6 +3,7 @@
 import base64
 import html
 import json
+from rattler_report import add_population_switch
 from pathlib import Path
 import sys
 
@@ -123,3 +124,5 @@ data=json.dumps(D,ensure_ascii=False,allow_nan=False).replace('<','\\u003c')
 (FOLDER/'report.html').write_text('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+'</title><style>'+style+'</style></head><body><main><h1>'+title+'</h1>'+''.join(body)+'</main><script id="dataset" type="application/json">'+data+'</script><script>'+js+'</script></body></html>',encoding='utf-8')
 (FOLDER/'report.md').write_text('# '+title+'\n\n'+'\n'.join(md),encoding='utf-8')
 print(FOLDER/'report.html')
+
+add_population_switch(FOLDER / "report.html", FOLDER, contact_only=True)

@@ -60,10 +60,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=Path, default=ROOT / "runs/mcn_overlap_density_characterization/2026-10-03_06-54-07Z/viewer_3d.html")
     parser.add_argument("--bootstrap", type=int, default=2000)
+    parser.add_argument("--without-rattlers", action="store_true", help="Use the saved contact-bearing particle population")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     source = args.viewer.resolve()
-    output = source.parent / "correlation_study"
-    output.mkdir(exist_ok=True)
+    output = args.output or source.parent / "correlation_study"
+    if args.without_rattlers and args.output is None:
+        output = output / "without_rattlers"
+    output.mkdir(parents=True, exist_ok=True)
     html = source.read_text()
     snapshot = json.loads(html.split('<script id="dataset" type="application/json">', 1)[1].split('</script>', 1)[0])
     points = [dict(point) for point in snapshot["points"] if point["stage"] in {"loading", "unloading"}]
@@ -89,6 +93,12 @@ def main():
         point['mean_overlap_per_contact'] = point['overlap_length'] / contacts
         point['relative_mean_overlap_per_contact'] = point['mean_overlap_per_contact'] / run['D50']
         point['log_pressure'] = float(np.log(point['pressure']))
+        selected = point.pop('without_rattlers', None)
+        if args.without_rattlers:
+            if selected is None:
+                raise ValueError(f"Missing rattler selection: {point['run_id']} {point['state_id']}")
+            for field in ('mean_coordination_number', 'solid_fraction', 'bulk_density', 'particle_count', 'rattler_count'):
+                point[field] = selected[field]
     cube = {}
     for stage in ('loading', 'unloading'):
         group = []
@@ -110,6 +120,7 @@ def main():
     rng = np.random.default_rng(20261005)
     indices = rng.integers(0, len(run_ids), size=(args.bootstrap, len(run_ids)))
     result = {'created_at':datetime.now(timezone.utc).isoformat(), 'source':str(source),
+        'population':'without_rattlers' if args.without_rattlers else 'all',
         'source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(), 'snapshot_time':snapshot['created_at'],
         'runs':len(run_ids), 'points':len(points), 'excluded_free_points':len(snapshot['points'])-len(points),
         'bootstrap':args.bootstrap, 'bootstrap_seed':20261005, 'primary':PRIMARY, 'all_fields':ALL,

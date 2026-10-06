@@ -51,7 +51,8 @@ def main():
     run_ids = sorted({row['run_id'] for row in points})
     observations = {}
     source_hashes = {}
-    for path in study.parent.glob('*/*/run.json'):
+    batch = Path(provenance['source']).parent
+    for path in batch.glob('*/*/run.json'):
         manifest = json.loads(path.read_text())
         if manifest['run_id'] not in run_ids:
             continue
@@ -84,6 +85,7 @@ def main():
     rng = np.random.default_rng(20261005)
     bootstrap = rng.integers(0,len(run_ids),(args.bootstrap,len(run_ids)))
     result = {'created_at':datetime.now(timezone.utc).isoformat(), 'snapshot_time':provenance['snapshot_time'],
+              'population':provenance.get('population', 'all'),
               'runs':len(run_ids), 'points':len(points), 'run_order':run_ids, 'fields':FIELDS, 'labels':LABELS,
               'targets':targets, 'bootstrap':args.bootstrap, 'bootstrap_seed':20261005,
               'trace_divided_by_three_max_error':max_trace_error, 'source_states_sha256':source_hashes,
