@@ -37,9 +37,8 @@ def validate_accepted_states(directory, expected_count, stages):
             if '_path_target' in stage:
                 yield path, stage['_path_target'], 'stage'
             elif stage['control']['type'] == 'density_continuation':
-                for index, target in enumerate(stage['control']['targets'], 1):
-                    yield path, {'observable': 'solid_fraction', 'index': index,
-                                 'value': target}, 'density_target'
+                yield path, {'observable': 'solid_fraction', 'index': 1,
+                             'value': stage['control']['target']}, 'density_target'
 
     expected = targets()
     previous_step = -1
@@ -84,13 +83,13 @@ def validate_indexed_state(root, record, validated=None):
         raise ValueError("State index identity or time does not match the saved state.")
     if "box" in record and record["box"] != state["box"]:
         raise ValueError("State index box does not match the saved state.")
-    for field in ("restart", "checkpoint", "metadata"):
+    for field in ("metadata",):
         if record.get(field) is not None and not relative_path(root, record[field]).is_file():
             raise ValueError(f"State reference is missing: {field}.")
     if record.get("kind") == "density_target" and record.get("accepted") is True:
         metadata = json.loads(relative_path(root, record["metadata"]).read_text(encoding="utf-8"))
         if (not isinstance(metadata, dict)
-                or metadata.get("schema") != "JPGen.dem.target" or metadata.get("schema_version") != "1.0"
+                or metadata.get("schema") != "JPGen.dem.target" or metadata.get("schema_version") != "1.1"
                 or metadata["target"] != record["target"]["value"]
                 or metadata["index"] != record["target"]["index"]
                 or metadata["stage"] != record.get("path", record.get("stage"))):
@@ -101,7 +100,7 @@ def validate_indexed_state(root, record, validated=None):
         validate_time(metadata["target"])
         if not math.isclose(fraction, state["solid_fraction"], rel_tol=1e-12, abs_tol=1e-15):
             raise ValueError("Density target fraction does not match its particle geometry.")
-        if abs(fraction - metadata["target"]) > metadata["density_atol"]:
+        if fraction + metadata["density_atol"] < metadata["target"]:
             raise ValueError("Accepted density target is outside its tolerance.")
         validate_time(metadata["time"])
         if not math.isclose(metadata["time"], state["time"], rel_tol=1e-12, abs_tol=1e-15):

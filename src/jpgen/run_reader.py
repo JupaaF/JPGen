@@ -12,7 +12,7 @@ from .dem.state_validation import validate_indexed_state
 
 
 METRICS = {
-    "time": {"unit": "s", "definition": "Physical simulation time on this branch"},
+    "time": {"unit": "s", "definition": "Physical simulation time"},
     "stage_time": {"unit": "s", "definition": "Physical time since leaf-stage entry"},
     "kinetic_energy": {"unit": "J", "definition": "Translational plus rotational kinetic energy"},
     "normalized_kinetic_energy": {"unit": "1", "definition": "Kinetic energy / (positive contact pressure * cell volume)"},
@@ -211,19 +211,8 @@ class RunReader:
                 return validate_indexed_state(self.directory, record)
         raise KeyError(state_id)
 
-    def series(self, *, include_discarded=False):
-        outcomes = {}
-        for record in self._records("stages/dem/execution/attempts.jsonl"):
-            key = (record.get("stage"), record.get("attempt_id"))
-            if record.get("event") in {"accepted", "discarded", "accepted_target"}:
-                outcomes[key] = "accepted" if record["event"] == "accepted_target" else record["event"]
-        for record in self._records("stages/dem/results/observables.jsonl"):
-            attempt = record.get("attempt_id")
-            disposition = outcomes.get((record.get("stage"), attempt), "pending") if attempt is not None else "accepted"
-            if record.get("legacy_branch_unknown"):
-                disposition = "unknown"
-            if include_discarded or disposition == "accepted":
-                yield dict(record, disposition=disposition)
+    def series(self):
+        yield from self._records("stages/dem/results/observables.jsonl")
 
     def export_view(self, max_points=2000):
         """Bounded previews; full precision scientific arrays remain in their stores."""

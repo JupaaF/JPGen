@@ -41,11 +41,11 @@ def main():
     atomic_json(inputs / "runtime.json", {"command": [sys.executable, *sys.argv],
         "backend_options": execution["options"], **provenance,
         "observation_time_level": "completed_step", "contact_history_version": 2})
-    store = StageOutput(stage, execution["retention"], engine="liggghts")
+    store = StageOutput(stage)
     library = Library(execution["options"]["library"], execution["options"]["threads"])
     try:
         library.file(inputs / "in.liggghts")
-        adapter = LiggghtsProtocolAdapter(library, execution, np.load(inputs / "particle_ids.npy", allow_pickle=False))
+        adapter = LiggghtsProtocolAdapter(library, execution, np.load(inputs / "particle_ids.npy", allow_pickle=False), store)
         runner = ProtocolRunner(execution["protocol"], execution["dt"]) if execution["protocol"] else None
         output_names = {"kinetic_energy", "mean_coordination_number", "fabric_tensor"}
         if adapter.periodic:
@@ -59,29 +59,17 @@ def main():
             if not records:
                 return
             saved = store.state(adapter.arrays(), time=steps * execution["dt"], box=adapter.box(), key=steps)
-            restart = None
-            checkpoint = None
-            if store.retention == "full":
-                path = store.checkpoints / (saved["state_id"] + ".restart")
-                library.command(f'write_restart "{path}"')
-                restart = store.relative(path)
-                metadata = path.with_suffix(".json")
-                atomic_json(metadata, {"schema": "JPGen.dem.liggghts_restart", "schema_version": "1.0",
-                    "jpgen_liggghts_api": API_VERSION, "contact_history_version": 2,
-                    "library_sha256": provenance["library_sha256"], "step": steps,
-                    "time": steps * execution["dt"], "box": adapter.box(),
-                    "particle_ids": store.relative(inputs / "particle_ids.npy")})
-                checkpoint = store.relative(metadata)
             for record in records:
-                store.boundary({**saved, **record, "step": steps, "physical_step": record["step"],
-                    "restart": restart, "checkpoint": checkpoint,
-                    "checkpoint_capabilities": {"analysis": True, "rollback": False, "resume": False}})
+                store.boundary({**saved, **record, "step": steps})
 
         if runner:
             runner.attach(adapter)
             boundaries()
         while (not runner.done if runner else steps < execution["steps"]):
             path = runner.path if runner else None
+            density = runner.density if runner else None
+            sample_context = ({'density_phase': density.phase, 'cycles': density.cycles}
+                              if density is not None else {})
             if runner:
                 adapter.apply(runner.act(values, adapter.control_context(execution["dt"])), execution["dt"])
             library.advance()
@@ -96,9 +84,9 @@ def main():
                        if runner else steps == execution["steps"])
             if sampled:
                 values.update(adapter.observe(output_names - values.keys()))
-                store.sample({"step": steps, "physical_step": steps, "time": steps * execution["dt"],
+                store.sample({"step": steps, "time": steps * execution["dt"],
                               "stage": path, "observables": values,
-                              "box": adapter.box(), "time_step": {"dt": execution["dt"]}})
+                              "box": adapter.box(), "time_step": {"dt": execution["dt"]}, **sample_context})
             boundaries()
             if runner and runner.stage_exited and not runner.done:
                 values.update(adapter.observe(runner.observables - values.keys()))
@@ -118,7 +106,6 @@ def main():
             "stop_reason": (runner.stop_reason if runner.failed else "protocol_complete") if runner else "end_time",
             "completed_stages": runner.completed_stages if runner else 0,
             "accepted_targets": runner.accepted_targets if runner else 0,
-            "attempted_duration": steps * execution["dt"] if runner else 0.0,
             "diagnostics": runner.diagnostics if runner else {}, "failed_stage": runner.failed_stage if runner else None,
             "observables": values, "time_step": {"mode": "fixed", "value": execution["dt"]},
             "control": {"implementation": "jpgen_portable", "actuators": ["cell_strain_rate", "symmetric_wall_velocity"],

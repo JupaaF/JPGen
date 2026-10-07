@@ -18,7 +18,7 @@ unchanged; their locations have changed.
 - `configuration`, `artifacts`, `provenance`: root-relative references.
 - `results`: availability of packing, validated final DEM, observables, number
   of distinct saved states and accepted targets, refreshed at finalization.
-- Structured `error` when applicable; `retention` storage policy.
+- Structured `error` when applicable.
 
 A completed run has met its configured stop criteria, which do not necessarily
 establish equilibrium. A failed or cancelled run can have useful validated
@@ -28,7 +28,7 @@ DEM completion. A hard kill leaves `running` until explicitly recovered.
 Use `jpgen runs label <run> "New name" --tag reference` to update presentation
 metadata without renaming the directory or altering physics. `--tag` replaces
 existing tags in this command; generation accepts repeatable `--tag` options.
-`JPGenApplication.run` exposes `label`, `tags`, `experiment_id`, and `retention`
+`JPGenApplication.run` exposes `label`, `tags`, `experiment_id`
 keyword arguments for programmatic callers.
 
 ## Configuration and provenance
@@ -87,59 +87,36 @@ Recovery is explicit: it does not infer liveness from timestamps or another
 machine's PID, and does not resume simulation. It updates abandoned stages,
 reconciles HDF5 outputs, inventories partial diagnostics and rebuilds projections.
 
-## States, events and branches
+## States and events
 
-`stages/dem/results/states.jsonl` is the common state/event index. Records use
-`schema: JPGen.dem.record`, `schema_version: "1.0"`, and contain:
+`stages/dem/results/states.jsonl` uses the common `JPGen.dem.record` schema,
+version `1.0`. Each event has a sequence, state identity and NPZ/JSON stem,
+kind, phase, stage path, time and step. All paths are relative to the run root.
+Simultaneous events reuse a scientific state rather than duplicating arrays.
 
-- Monotonic worker `sequence`, `state_id`, `state` (NPZ/JSON stem).
-- `kind`, `phase`, protocol `path` or `stage`, simulation `time`.
-- `step` (total attempted steps); `physical_step` where available.
-- `branch_id`, stage-local `attempt_id`, optional `target` and `accepted`.
-- Optional `restart`, target `metadata`, and checkpoint capabilities.
+Density stages save `density_checkpoint` events with `phase: before_reset`,
+cycle, normal friction coefficients and stable observables. Accepted goals are
+`density_target` events with `accepted: true`, a scalar target and `.target.json`
+metadata (`JPGen.dem.target`, version `1.1`). Acceptance is one-sided:
+`solid_fraction + density_atol >= target`, after normal-friction stabilization.
+No native restart files or internal solver checkpoints are written. The former
+`--retention` option is removed; scientific checkpoints are always preserved.
 
-Simultaneous boundaries, density acceptance and finalization reuse the same state
-at the same attempted step. `exchange_complete` means the array/metadata pair has
-been published, not that a physical acceptance condition passed. A target is
-accepted only when its event says so. Diagnostic final states never substitute
-for the application's validated `final.h5`.
+`results/observables.jsonl` contains sampled numeric measurements. Density samples
+also include `density_phase` and `cycles` outside the numeric observables mapping.
+Time and step increase monotonically; there are no rejected or restored branches.
+Historical imported runs may still have unknown or discarded branch metadata,
+which the reader preserves for analysis.
 
-`results/observables.jsonl` contains sample records. `execution/attempts.jsonl`
-records attempt starts, acceptance, discard and target acceptance;
-`execution/events.jsonl` records rollback destinations. The event sequence spans
-these streams; branch IDs distinguish work after retry and attempt changes.
-Attempt numbers are local to a protocol stage and must be paired with its path.
-Physical time can go backwards, so neither time nor physical step identifies a
-state uniquely. Parent-branch and rollback events preserve execution history.
+MCN, Fabric and periodic contact-geometry conductivity retain their previous
+meaning and units. `thermal_conductivity` and its trace mean are dimensionless
+geometry measures, not thermal transport coefficients in W/(m·K). Missing
+observables remain missing. Stress is compression-positive contact stress and
+solid fraction counts overlapping sphere volumes separately.
 
-`RunReader.series()` excludes discarded and pending attempts by default. Use
-`include_discarded=True` to inspect all work, with a `disposition` on each sample.
-DEM samples include `mean_coordination_number` (MCN), `fabric_tensor` as a
-full 3×3 nested array, and `fabric_second_invariant`; all are dimensionless.
-They are recorded for periodic and open boundaries and included in the final
-report in `final.h5`.
-
-Periodic DEM samples include `thermal_conductivity` as a full 3×3 nested array
-and `thermal_conductivity_trace` as its trace divided by three. Both are
-adimensional DEMGen contact geometry measures, not thermal transport coefficients
-in W/(m·K). The final report in `final.h5` contains the same fields. Open-boundary
-runs omit them.
-
-Missing observables remain missing. The metrics dictionary records SI units and
-physical meaning, including compression-positive contact pressure and nominal
-solid fraction. Unknown legacy branch membership is never presented as accepted.
-
-Checkpoints stay under `backend/kratos/checkpoints/`. Ordinary boundary restarts
-support analysis only; complete density checkpoints support internal rollback.
-Neither provides CLI resume. `--retention analysis` skips ordinary restarts and
-removes internal checkpoints after execution, including after handled failure;
-it preserves common states, target metadata, logs and native diagnostics. Full
-retention is the default. Hard-killed runs apply retention during explicit recovery.
-The backend's input `run.py` refuses in-place execution a second time. Pass
-`--output-dir /new/path` to execute a copied case in a fresh standalone stage
-folder. Standalone solver execution produces stage artifacts; it does not create
-a new JPGen run manifest or publish validated HDF5 results. Use the JPGen CLI
-with the effective YAML when a complete new run is wanted.
+Standalone input `run.py` refuses in-place execution a second time. Use
+`--output-dir /new/path` for a fresh standalone execution. This creates stage
+artifacts; use the JPGen CLI with the effective YAML to create a complete run.
 
 ## Reader and browser data
 
@@ -190,6 +167,5 @@ preserved archive. Unsupported HDF5 schemas are rejected explicitly; no numerica
 conversion is attempted. Imported creation time means import time; unavailable
 execution timestamps and branch identities are marked unknown, never invented.
 The old requested YAML is unavailable, so the legacy effective configuration is
-preserved as the imported requested configuration. Unknown density branches are
-available through diagnostic series queries. Import may duplicate substantial
+preserved as the imported requested configuration. Historical density samples are preserved in the archive. Import may duplicate substantial
 data to preserve the original byte record. Symlinks are rejected.

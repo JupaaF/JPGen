@@ -6,10 +6,12 @@ from protocol import STRESS_OBSERVABLES
 
 
 class LiggghtsProtocolAdapter:
-    def __init__(self, library, execution, ids):
+    def __init__(self, library, execution, ids, store):
         self.library = library
         self.execution = execution
         self.ids = ids
+        self.store = store
+        self.active_friction = (execution["contact"]["static_friction"], execution["contact"]["dynamic_friction"])
         self.origin = np.array(execution["box"]["origin"], dtype=float)
         self.lengths = np.array(execution["box"]["lengths"], dtype=float)
         self.periodic = execution["box"]["periodic"]
@@ -57,6 +59,21 @@ class LiggghtsProtocolAdapter:
         yield "radii", self.library.atom("radius")[order].copy()
         yield "velocities", self.library.atom("v", columns=3)[order].copy()
         yield "angular_velocities", self.library.atom("omega", columns=3)[order].copy()
+
+    def friction(self):
+        return self.active_friction
+
+    def set_friction(self, static, dynamic):
+        if not all(math.isfinite(value) and value >= 0 for value in (static, dynamic)) or dynamic > static:
+            raise ValueError('Invalid friction update')
+        self.library.set_friction(static, dynamic)
+        self.active_friction = (static, dynamic)
+
+    def checkpoint(self, metadata):
+        self.store.density_state(self.arrays(), self.box(), metadata, accepted=False)
+
+    def publish_target(self, metadata):
+        self.store.density_state(self.arrays(), self.box(), metadata, accepted=True)
 
     def observe(self, requested):
         result = {}

@@ -7,7 +7,7 @@ from ....atomic_io import atomic_json
 from .library import runtime_provenance
 
 
-def write_case(case, directory, options, *, retention="full"):
+def write_case(case, directory, options):
     inputs = directory / "backend/liggghts/input"
     inputs.mkdir(parents=True, exist_ok=False)
     (directory / "backend/liggghts/native").mkdir()
@@ -50,7 +50,7 @@ def write_case(case, directory, options, *, retention="full"):
     if magnitude:
         commands.insert(-1, f"fix gravity all gravity {magnitude:.17g} vector " + " ".join(f"{v:.17g}" for v in gravity))
     (inputs / "in.liggghts").write_text("\n".join(commands) + "\n", encoding="utf-8")
-    atomic_json(inputs / "execution.json", {"options": options, "retention": retention,
+    atomic_json(inputs / "execution.json", {"options": options,
         "steps": case.steps, "dt": case.time_step, "protocol": case.protocol,
         "material": asdict(material), "contact": case.contact.to_config(),
         "gravity": list(case.gravity), "runtime": runtime_provenance(options["library"]),

@@ -50,8 +50,6 @@ def main():
     parser.add_argument("--label", help="Human-readable run label")
     parser.add_argument("--tag", action="append", default=[], help="Run tag (repeatable)")
     parser.add_argument("--experiment", help="Experiment identifier for grouping runs")
-    parser.add_argument("--retention", choices=("full", "analysis"), default="full",
-                        help="Retain native checkpoints (full) or analysis results only")
     args = parser.parse_args()
     generated = None
     try:
@@ -66,7 +64,7 @@ def main():
         build_application(args.output_dir).run(
             load_config(args.file_path),
             observer=_progress_observer(args.progress),
-            label=args.label, tags=args.tag, experiment_id=args.experiment, retention=args.retention,
+            label=args.label, tags=args.tag, experiment_id=args.experiment,
         )
     except (ValueError, OSError, KeyError, OverflowError) as error:
         _rollback(generated)

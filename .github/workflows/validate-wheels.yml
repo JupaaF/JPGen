@@ -104,13 +104,6 @@ jobs:
               "assert _backend.name == 'native' and _backend.native is not None; "
               "print('Placement:', _backend.name, _backend.native.__file__); "
               "print('Kratos:', bundled_installation(), bundled_revision())")
-          run(python, "-c", "import subprocess,sys; "
-              "from jpgen.dem.backends.kratos.backend import KratosBackend; "
-              "subprocess.run([sys.executable, '-c', "
-              "'import KratosMultiphysics.DEMApplication as DEM; "
-              "assert DEM.JPGEN_DENSITY_RESTART_VERSION == 1; "
-              "print(DEM.JPGEN_DENSITY_RESTART_VERSION)'], "
-              "env=KratosBackend.from_config({}).environment(), check=True)")
           case = {
               "packing": {
                   "sizing_method": "fixed_count", "count": 2, "seed": 14, "exports": [],

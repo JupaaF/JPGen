@@ -71,13 +71,6 @@ def _positive_float(value, answers):
     return result
 
 
-def _density_targets(value, answers):
-    values = [_positive_float(part, answers) for part in value.replace(',', ' ').split()]
-    if not values:
-        raise ValueError('Enter at least one density target.')
-    return values
-
-
 def _vector(value, answers):
     result = [_float(v, answers) for v in value.replace(',', ' ').split()]
     if len(result) != 3:
@@ -143,11 +136,9 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
             kinds.append(('Equilibrated pressure path', 'path'))
         density_available = (path_available and 'density_continuation' in capabilities.controls
                              and all(getattr(capabilities, flag) for flag in
-                                     ('state_restore', 'contact_parameter_updates',
-                                      'contact_history_checkpoint', 'rollback',
-                                      'target_publication', 'native_restart_export')))
+                                     ('contact_parameter_updates', 'target_publication')))
         if density_available:
-            kinds.append(('Friction driven density continuation', 'density'))
+            kinds.append(('Density by zero-friction cycles', 'density'))
         questions.append(_question(key + '.kind', f'Piece {index + 1}', 'stage', choices=kinds,
                                    explanation='Choose one stage, a repeated sequence, or a pressure path that saves each equilibrated target before moving to the next.'))
         questions.append(_question(key + '.name', 'Piece name', f'stage_{index + 1}', parser=lambda v, _: v.strip(),
@@ -291,48 +282,30 @@ def _pressure_path_questions(key, answers, anisotropic_available):
 
 def _density_questions(key):
     defaults = [
-        ('targets', 'Increasing solid fraction targets', '0.620 0.625 0.630', _density_targets,
-         'Space separated nominal solid fractions. Each is saved only after pressure, force, energy and density stability have held.'),
+        ('target', 'Target solid fraction', 0.620, _positive_float,
+         'One target. A stable normal-friction state at or above target minus tolerance is accepted.'),
         ('density_atol', 'Absolute density tolerance', 0.0002, _positive_float,
-         'Absolute tolerance around each requested solid fraction.'),
+         'Allow this much below the target; any overshoot is accepted after normal-friction stabilization.'),
         ('target_pressure', 'Confining mean pressure (Pa)', 5000.0, _positive_float,
-         'Positive mean pressure maintained during the whole continuation.'),
+         'Positive mean pressure maintained during stabilization and the 100 steps with zero friction.'),
         ('pressure_rtol', 'Relative pressure tolerance', 0.01, _positive_float,
-         'Acceptance requires measured pressure inside this relative tolerance.'),
-        ('max_velocity', 'Maximum wall velocity (m/s)', 0.01, _positive_float,
-         'Limit for the pressure servo on each face.'),
-        ('min_factor', 'Minimum friction factor', 0.0, _float,
-         'Both entry friction coefficients are multiplied by this factor at the limit.'),
-        ('initial_decrement', 'Initial friction factor decrement', 0.05, _positive_float,
-         'First reduction of the shared friction factor.'),
-        ('min_decrement', 'Minimum decrement', 0.0001, _positive_float,
-         'Smallest retry resolution before declaring a resolution limit.'),
-        ('max_decrement', 'Maximum decrement', 0.10, _positive_float,
-         'Largest allowed reduction in one accepted step.'),
-        ('safety_factor', 'Prediction safety factor', 0.5, _positive_float,
-         'Fraction of the predicted decrement when an accepted slope is available.'),
-        ('growth_factor', 'Maximum decrement growth factor', 1.5, _positive_float,
-         'Upper bound on growth relative to the last successful decrement.'),
-        ('retry_factor', 'Retry reduction factor', 0.5, _positive_float,
-         'Multiplier applied to a discarded decrement.'),
-        ('kinetic_energy_below', 'Kinetic energy threshold (J)', 1e-8, _positive_float,
-         'Translation plus rotation energy required for relaxation.'),
+         'Stabilization requires pressure within this relative tolerance.'),
+        ('max_velocity', 'Maximum wall velocity (m/s)', DEFAULT_SERVO_MAX_VELOCITY, _positive_float,
+         'Maximum absolute velocity of each cell face.'),
+        ('loading_factor', 'Servo loading factor', DEFAULT_SERVO_LOADING_FACTOR, _positive_float,
+         'Positive multiplier of the pressure-error response.'),
+        ('update_every_steps', 'Move cell every N steps', DEFAULT_SERVO_UPDATE_EVERY_STEPS, _positive_integer,
+         'Servo update interval throughout the density stage.'),
         ('unbalanced_force_below', 'Unbalanced force threshold', 1e-3, _positive_float,
-         'Dimensionless force imbalance required for relaxation.'),
-        ('hold_for', 'Hold all conditions for (s)', 0.005, _positive_float,
-         'Consecutive time for the joint acceptance condition.'),
+         'Force imbalance threshold required for each stabilization.'),
+        ('hold_for', 'Hold all stabilization conditions for (s)', 0.005, _positive_float,
+         'Pressure, force and density stability must hold together for this duration.'),
         ('stability_window', 'Density stability window (s)', 0.005, _positive_float,
-         'Observation interval whose density range must stay small.'),
+         'Density observation interval, reset when normal friction is restored.'),
         ('stability_max_range', 'Maximum density range', 0.00005, _positive_float,
-         'Largest nominal solid fraction range in the stability window.'),
-        ('relaxation_max_duration', 'Maximum duration per attempt (s)', 0.1, _positive_float,
-         'Failed attempts are rolled back after this simulated duration.'),
-        ('max_attempts', 'Maximum friction reduction attempts', 200, _positive_integer,
-         'Total attempts across all density targets.'),
-        ('max_retries_per_increment', 'Maximum retries per decrement', 12, _positive_integer,
-         'Maximum discarded attempts before a diagnosed failure.'),
-        ('max_duration', 'Total attempted duration (s)', 10.0, _positive_float,
-         'Integrated work budget including rolled back attempts.'),
+         'Maximum solid-fraction variation in the stability window.'),
+        ('max_duration', 'Maximum stage duration (s)', 10.0, _positive_float,
+         'Total duration of initial stabilization and all cycles; fail when exhausted.'),
     ]
     return [_question(key + '.density.' + field, label, default, parser, explanation=help_text)
             for field, label, default, parser, help_text in defaults]
@@ -347,31 +320,22 @@ def build_protocol(answers, prefix='dem.protocol'):
             stage.update(repeat=answers[key + '.repeat'], stages=build_protocol(answers, key + '.children')['stages'])
         elif answers[key + '.kind'] == 'density':
             value = lambda field: answers[key + '.density.' + field]
-            targets = value('targets')
             stage.update(
                 control={
-                    'type': 'density_continuation', 'targets': targets,
+                    'type': 'density_continuation', 'target': value('target'),
                     'density_atol': value('density_atol'),
                     'confinement': {field: value(field) for field in
-                                    ('target_pressure', 'pressure_rtol', 'max_velocity')},
-                    'friction': {field: value(field) for field in
-                                 ('min_factor', 'initial_decrement', 'min_decrement',
-                                  'max_decrement', 'safety_factor', 'growth_factor', 'retry_factor')},
+                                    ('target_pressure', 'pressure_rtol', 'max_velocity', 'loading_factor', 'update_every_steps')},
                     'relaxation': {
-                        'max_duration': value('relaxation_max_duration'),
                         'condition': {'all': [
-                            {'observable': 'kinetic_energy', 'op': 'below',
-                             'value': value('kinetic_energy_below')},
                             {'observable': 'unbalanced_force', 'op': 'below',
                              'value': value('unbalanced_force_below')}],
                             'hold_for': value('hold_for')},
                         'density_stability': {'window': value('stability_window'),
                                               'max_range': value('stability_max_range')}},
-                    'limits': {field: value(field) for field in
-                               ('max_attempts', 'max_retries_per_increment')},
-                    'snapshots': {'mode': 'equilibrated', 'include_restart': True}},
+                },
                 until={'observable': 'density_targets_completed', 'op': 'above',
-                       'value': len(targets)}, max_duration=value('max_duration'))
+                       'value': 1}, max_duration=value('max_duration'))
         elif answers[key + '.kind'] == 'path':
             value = lambda field: answers[key + '.path.' + field]
             energy_mode = answers.get(key + '.path.kinetic_energy_mode', 'kinetic_energy')
@@ -429,10 +393,9 @@ def pressure_path_previews(stages):
             if 'stages' in piece:
                 visit(piece['stages'], label + '/')
             elif piece.get('control', {}).get('type') == 'density_continuation':
-                values = piece['control']['targets']
-                lines.append(f"{label}: {len(values)} density targets (solid fraction)")
-                for index, value in enumerate(values, 1):
-                    lines.append(f"  {index}: {value:.9g}")
+                target = piece['control']['target']
+                tolerance = piece['control']['density_atol']
+                lines.append(f"{label}: solid fraction >= {target:.9g} - {tolerance:.9g}, after normal-friction stabilization")
             elif 'path' in piece and piece['path']['observable'] == 'pressure':
                 targets = piece['path']['targets']
                 values = list(path_targets(targets))

@@ -45,8 +45,8 @@ dem:
 
 `library` defaults to `JPGEN_LIGGGHTS_LIBRARY` when set, otherwise the path
 shown above. Normalized configurations store an absolute library path. The
-runtime probe requires JPGen extension ABI 4; rebuild with the command above
-when upgrading from ABI 2 or 3. The probe opens the runtime and checks the
+runtime probe requires JPGen extension ABI 5; rebuild with the command above
+when upgrading from ABI 2, 3 or 4. The probe opens the runtime and checks the
 actual OpenMP team using the same environment as the worker. A stock LIGGGHTS or LAMMPS
 library cannot silently substitute different contact physics.
 
@@ -55,10 +55,8 @@ library cannot silently substitute different contact physics.
 Open and periodic spheres, one elastic material, fixed time stepping, free
 evolution, periodic strain rate and isotropic/anisotropic stress servos are
 supported. Nested sequences and pressure paths use the portable protocol
-runner. Particle states are exported at all stage/block boundaries. Full
-retention additionally exports native restart files; analysis retention keeps
-scientific states without restart archives. Density continuation, rollback,
-and CLI resume are not advertised.
+runner. Particle states are exported at all stage/block boundaries. Density control uses the same zero-friction cycles as Kratos, with scientific
+checkpoints before each reset. Solver restart and rollback are not supported.
 
 Periodic samples, stage exits and final results include `thermal_conductivity`
 (a full 3×3 tensor) and `thermal_conductivity_trace` (trace divided by three).
@@ -118,8 +116,7 @@ tangential force, reduces it on unloading and applies Coulomb clipping to the
 combined elastic/viscous tangential force. History version 2 stores the previous
 contact normal and transports elastic force by the minimal rotation between
 contact normals. Observations evaluate this transport without mutating history.
-Native restart files from history version 1 (ABI 2/3) are incompatible with
-ABI 4 and must not be reused. `jpgen/sphere` evaluates forces before
+JPGen no longer writes native restart files. `jpgen/sphere` evaluates forces before
 a full velocity kick and position drift, with direct angular velocity integration
 and solid-sphere inertia. Rolling resistance and global damping are absent.
 The stock LIGGGHTS Hertz/history model and velocity Verlet integration have
@@ -155,21 +152,20 @@ loss is an execution error.
 ## Artifacts and standalone execution
 
 Inputs are under `stages/dem/backend/liggghts/input/`, native outputs under
-`backend/liggghts/native/` and native restart archives under
-`backend/liggghts/checkpoints/`. Common HDF5 results, state archives and JSONL
+`backend/liggghts/native/`. Density checkpoints are common scientific states under
+`results/states/`. Common HDF5 results, state archives and JSONL
 indices use the same contracts as Kratos. `runtime.json` records the actual
 library SHA-256, checked build metadata and current invocation, including
 standalone execution. The prepared case pins the library hash and rejects a
 changed library. The execution report records the engine version, extension
-ABI, history version and library hash. Native restart archives have adjacent
-metadata with the box, physical time, ID-map path and runtime identity.
+ABI, history version and library hash. Accepted density states have adjacent target metadata with the normal friction pair.
 Readers do not need the LIGGGHTS runtime.
 
 Before collecting the final state, both backends use the same accepted-target
 validator. Reported acceptances must match the state index count, configured
 target order, stage path and increasing integer steps. Each accepted boundary
 must reference a readable, valid particle state with matching identity, time
-and geometry; declared checkpoint and restart references must exist. Failed
+and geometry; declared target metadata must exist. Failed
 protocols may retain a valid prefix of accepted targets. Successful completion
 still requires every configured target through execution-report validation.
 
@@ -199,7 +195,7 @@ packing. `--packing /path/to/packing.h5` instead reuses one immutable initial
 state. `--kratos-run` and `--liggghts-run` accept completed existing runs, checking
 that particle arrays, geometry and physical DEM configuration are identical.
 The script preserves the full two-stage protocol, including the 0.001 force
-imbalance threshold and 0.001 s hold, and uses analysis retention.
+imbalance threshold and 0.001 s hold.
 
 `comparison.json` records raw values, differences, engine versions, input
 checks and explicit tolerances. Default relative margins are 0.5% for pressure,
@@ -216,3 +212,10 @@ margin produces a nonzero exit code and retains the numerical report.
 
 See [the improvement record](liggghts-improvements.md) for the changes, manual
 validation results and remaining numerical limits. No test suite was added.
+
+## ABI 5 density control
+
+ABI 5 adds live static/dynamic friction updates. It updates both the source
+properties and the cached contact-model matrices, preserving the current solver
+and its elastic contact history. Rebuild ABI 4 libraries before use. See
+[density control](density-continuation-protocol.md) for configuration.

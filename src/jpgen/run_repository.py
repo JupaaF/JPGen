@@ -146,9 +146,6 @@ class RunWorkspace:
     def finalize(self):
         """Inventory closed diagnostics, preserving stronger publication validation."""
         manifest = self.read_manifest()
-        if manifest["retention"] == "analysis" and manifest["status"] in TERMINAL:
-            for checkpoints in (self.directory / "stages/dem/backend").glob("*/checkpoints"):
-                shutil.rmtree(checkpoints)
         inventory = json.loads((self.directory / "artifacts.json").read_text())
         known = {item["path"]: item for item in inventory["artifacts"]}
         entries = []
@@ -208,7 +205,7 @@ def artifact_schema(path, relative, role):
         "particle_state": ("JPGen.dem.state", "1.0"),
     }
     if relative.endswith(".target.json"):
-        return {"schema": "JPGen.dem.target", "schema_version": "1.0"}
+        return {"schema": "JPGen.dem.target", "schema_version": "1.1"}
     if role in schemas:
         schema, version = schemas[role]
         return {"schema": schema, "schema_version": version}
@@ -276,7 +273,7 @@ class FileRunRepository:
             "created_at": now, "started_at": now, "updated_at": now, "finished_at": None,
             "status": "running", "stages": {}, "results": {},
             "configuration": "config/effective.yaml", "artifacts": "artifacts.json",
-            "provenance": "provenance/sources.json", "retention": metadata.get("retention", "full"),
+            "provenance": "provenance/sources.json",
         })
         atomic_json(directory / "artifacts.json", {
             "schema": "JPGen.artifacts", "schema_version": FORMAT_VERSION, "artifacts": []})

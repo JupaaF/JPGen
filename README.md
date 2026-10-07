@@ -15,7 +15,7 @@ pinned Linux library with `python tools/build_liggghts.py --jobs 4`, then select
 Hertz contact law and symplectic Euler integration; an ordinary upstream
 LIGGGHTS library is rejected. See [LIGGGHTS setup and numerical comparison](docs/liggghts.md)
 for configuration, capabilities and reproducible comparison commands.
-The current extensions require ABI 4; rebuild existing ABI 2/3 libraries.
+The current extensions require ABI 5; rebuild existing ABI 2/3/4 libraries.
 See the [implementation and validation record](docs/liggghts-improvements.md)
 for the force-balance, contact-history and runtime changes.
 The [14,089-particle comparison report](docs/liggghts-comparison-14089.md)
@@ -87,7 +87,7 @@ sizing, placement settings, DEM physics, stopping conditions and protocols.
 - Random sequential insertion, overlap relaxation and progressive growth.
 - Open or periodic DEM boundaries, one particle material, Hertz viscous Coulomb contacts.
 - Free evolution, strain-rate control, isotropic and anisotropic stress servos.
-- Nested repeated protocols, equilibrated pressure paths and density continuation with rollback.
+- Nested repeated protocols, equilibrated pressure paths and density control by zero-friction cycles.
 - HDF5 scientific outputs, optional VTK/MDPA packing exports, saved particle states and observables.
 
 Geometric placement does not establish mechanical equilibrium. DEM success
@@ -117,7 +117,7 @@ Each invocation creates a separate run under `runs/` or `--output-dir`:
     summary.json
     results/{final.h5,observables.jsonl,states.jsonl,states/}
     execution/
-    backend/<engine>/{input,native,checkpoints/}
+    backend/<engine>/{input,native/}
     logs/
   logs/{events.jsonl,jpgen.log}
   view/                             # Regenerable JSON projections
@@ -125,9 +125,9 @@ Each invocation creates a separate run under `runs/` or `--output-dir`:
 
 Failed runs retain earlier results and diagnostic states. State readers validate
 arrays, geometry, time and index references; incomplete state pairs are omitted
-from listings. `--retention analysis` removes internal checkpoints after
-execution while keeping scientific states, inputs and logs. The default
-`--retention full` keeps checkpoints. Neither policy provides CLI resume.
+from listings. Density stages save stable scientific checkpoints before every
+friction reset. Solver restart files and the `--retention` option are no longer
+supported. All scientific snapshots are kept, including after handled failures.
 
 ```bash
 jpgen runs list runs
@@ -144,7 +144,7 @@ NPZ/JSON states and their index references. After the original process has
 stopped, `jpgen runs recover runs/<run>` reconciles an abandoned run.
 Replay with `jpgen runs/<run>/config/effective.yaml`; imported packing references
 resolve to the run's own snapshot. The [run-format contract](docs/run-format.md)
-describes schemas, partial results, retention and comparison semantics.
+describes schemas, partial results and comparison semantics.
 
 ## Development
 

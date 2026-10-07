@@ -90,12 +90,6 @@ class KratosBackend:
         if plan.contact.model not in CONTACT_LAWS:
             raise ConfigurationError(f"Kratos contact model must be one of: {', '.join(CONTACT_LAWS)}.")
         probe_code = "import KratosMultiphysics\nfrom KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage"
-        if plan.protocol and 'density_continuation' in control_types(plan.protocol['stages']):
-            probe_code += "\nimport KratosMultiphysics.DEMApplication as DEM"
-            probe_code += "\nassert getattr(DEM, 'JPGEN_DENSITY_RESTART_VERSION', None) == 1, 'Kratos lacks JPGen contact-history restart support'"
-        if plan.protocol and self.capabilities.native_restart_export:
-            probe_code += "\nassert hasattr(KratosMultiphysics, 'FileSerializer'), 'Kratos lacks native restart serialization'"
-            probe_code += "\nassert hasattr(KratosMultiphysics.Serializer, 'SHALLOW_GLOBAL_POINTERS_SERIALIZATION'), 'Kratos lacks restart pointer serialization'"
         if plan.protocol:
             probe_code += "\nfrom KratosMultiphysics.DEMApplication import SphericElementGlobalPhysicsCalculator as Physics"
             for method in ("CalculateTranslationalKinematicEnergy", "CalculateRotationalKinematicEnergy", "CalculateTotalVolume"):
@@ -124,8 +118,8 @@ class KratosBackend:
         if probe.returncode:
             raise ConfigurationError(f"Kratos DEM runtime is unavailable: {(probe.stderr or probe.stdout)[-4000:]}")
 
-    def prepare(self, case, directory, *, retention="full"):
-        write_case(case, directory, retention=retention)
+    def prepare(self, case, directory):
+        write_case(case, directory)
         return PreparedDemCase(directory.resolve(), case)
 
     def run(self, prepared, observer=None):
@@ -166,7 +160,6 @@ class KratosBackend:
                 steps=result["steps"], stop_reason=result["stop_reason"],
                 completed_stages=result["completed_stages"],
                 accepted_targets=result.get("accepted_targets", 0),
-                attempted_duration=result.get("attempted_duration", 0.0),
                 diagnostics=result.get("diagnostics", {}),
                 failed_stage=result.get("failed_stage"), observables=result["observables"],
                 time=result.get("time"), time_step=result.get("time_step", {}),

@@ -1,12 +1,9 @@
-From b0bdba096f0cce09a0a520afb08e070cb1d4d33c Mon Sep 17 00:00:00 2001
+From 3e0c8141ba9b6f8286474a2b8daa007b6c23320a Mon Sep 17 00:00:00 2001
 From: Juan Pablo Fernandez <jpfernandez@cimne.upc.edu>
-Date: Thu, 1 Oct 2026 15:26:28 +0200
-Subject: [PATCH] Optimize DEM neighbour search and preserve ThermalDEM
- compatibility
+Date: Tue, 6 Oct 2026 12:00:00 +0200
+Subject: [PATCH] Optimize DEM neighbour search without JPGen restart
+ extensions
 
-Reuse search and contact-history storage, index reciprocal connectivity, skip unused distances, and use a contiguous periodic cell grid with the original intersection criterion.
-
-Fix ThermalDEM neighbour-delta indexing and heat-generation model iteration. Validate with 10000 particles at packing fraction 0.6 and 12 ThermalDEM trajectories: 59.4% lower median search CPU and 97.3% fewer allocated bytes per search.
 ---
  .../custom_elements/spheric_particle.cpp      |  19 +-
  .../add_custom_strategies_to_python.cpp       |   7 +-
@@ -17,10 +14,10 @@ Fix ThermalDEM neighbour-delta indexing and heat-generation model iteration. Val
  6 files changed, 337 insertions(+), 31 deletions(-)
 
 diff --git a/applications/DEMApplication/custom_elements/spheric_particle.cpp b/applications/DEMApplication/custom_elements/spheric_particle.cpp
-index 928f35417e..d0f5bd89f1 100644
+index 5ec59c9507..bbe81266b7 100644
 --- a/applications/DEMApplication/custom_elements/spheric_particle.cpp
 +++ b/applications/DEMApplication/custom_elements/spheric_particle.cpp
-@@ -448,8 +448,10 @@ void SphericParticle::CalculateLocalAngularMomentum(array_1d<double, 3>& r_angul
+@@ -434,8 +434,10 @@ void SphericParticle::CalculateLocalAngularMomentum(array_1d<double, 3>& r_angul
  void SphericParticle::ComputeNewNeighboursHistoricalData(DenseVector<int>& temp_neighbours_ids,
                                                           std::vector<array_1d<double, 3> >& temp_neighbour_elastic_contact_forces)
  {
@@ -33,7 +30,7 @@ index 928f35417e..d0f5bd89f1 100644
      unsigned int new_size = mNeighbourElements.size();
      array_1d<double, 3> vector_of_zeros = ZeroVector(3);
      temp_neighbours_ids.resize(new_size, false);
-@@ -482,9 +484,16 @@ void SphericParticle::ComputeNewNeighboursHistoricalData(DenseVector<int>& temp_
+@@ -468,9 +470,16 @@ void SphericParticle::ComputeNewNeighboursHistoricalData(DenseVector<int>& temp_
      }
  
      vector_of_ids_of_neighbours.swap(temp_neighbours_ids);
@@ -81,7 +78,7 @@ index 940abd046e..654b4c51d7 100755
                                                   NodesContainerType & b,
                                                   const py::list & radii,
 diff --git a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
-index 62bbaa82d5..6fd804100b 100644
+index 347016704c..ee82af3e54 100644
 --- a/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
 +++ b/applications/DEMApplication/custom_strategies/strategies/explicit_solver_strategy.cpp
 @@ -5,11 +5,13 @@
@@ -98,7 +95,7 @@ index 62bbaa82d5..6fd804100b 100644
  
  namespace Kratos {
  
-@@ -1442,10 +1444,82 @@ namespace Kratos {
+@@ -1439,10 +1441,82 @@ namespace Kratos {
          GetResults().resize(number_of_elements);
          GetResultsDistances().resize(number_of_elements);
  
@@ -182,7 +179,7 @@ index 62bbaa82d5..6fd804100b 100644
          typedef std::map<SphericParticle*,std::vector<SphericParticle*>> ConnectivitiesMap;
          std::vector<ConnectivitiesMap> thread_maps_of_connectivities;
          thread_maps_of_connectivities.resize(ParallelUtilities::GetNumThreads());
-@@ -1506,8 +1580,8 @@ namespace Kratos {
+@@ -1497,8 +1571,8 @@ namespace Kratos {
  
          #pragma omp parallel
          {

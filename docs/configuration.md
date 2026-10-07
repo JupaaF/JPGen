@@ -277,7 +277,7 @@ experiment. Every stage runs on the same live solver, preserving contact history
 | `stress_servo` | `mode: isotropic`, `target_pressure`, `max_velocity`, `loading_factor`, `update_every_steps` | Control mean normal contact stress |
 | `stress_servo` | `mode: anisotropic`, `target_stress: [xx, yy, zz]`, `max_velocity`, `loading_factor`, `update_every_steps` | Independently control three normal stresses |
 | `strain_rate` | `rate: [x, y, z]` | Prescribe logarithmic cell strain rates in 1/s; expansion positive |
-| `density_continuation` | `targets`, confinement, friction, relaxation and limits | Reduce contact friction adaptively under pressure control; publish equilibrated density targets |
+| `density_continuation` | One `target`, `density_atol`, confinement and relaxation | Cycle zero/normal friction under pressure control; accept after normal-friction stabilization |
 
 The portable JPGen servo uses Kratos' wall-velocity formula. For each controlled
 axis it commands `(target - measured) * loading_factor * D50 /
@@ -447,52 +447,31 @@ Successful targets have `accepted: true`, their requested target, measured
 observables, time and a common particle-state reference. A failed target remains
 a diagnostic boundary, never an accepted target. Earlier accepted targets remain
 available after later failures. The same index is used for pressure and density
-objectives. Native checkpoint references have explicit analysis/rollback/resume
-capabilities; ordinary boundary restart files do not promise JPGen resume.
+objectives. Checkpoints are scientific particle states for analysis.
 
 ### Density continuation
 
-Use `control.type: density_continuation` in a periodic leaf stage to reduce the
-active static and dynamic friction by a common factor while an isotropic servo
-maintains the configured pressure. Targets must be strictly increasing, with
-a separation greater than twice `density_atol`. Acceptance requires the target
-density, pressure tolerance, kinetic energy, force imbalance and density
-stability to hold together. A transient crossing never publishes a target.
-See the [complete density continuation protocol](density-continuation-protocol.md).
-
-A failed increment restores the preceding solver checkpoint and retries with a
-smaller friction decrement. `max_duration` counts all integrated attempts,
-including discarded branches. The physical time in the final state follows
-only the accepted branch; `attempted_duration` reports total integrated work.
-Each accepted target is published in `stages/dem/results/states/`, with a
-common particle state and a `.target.json` file. Its native checkpoint stays in
-`stages/dem/backend/kratos/checkpoints/` under full retention.
-`stages/dem/execution/attempts.jsonl` records attempts, transient crossings,
-discards and acceptances. Earlier targets remain available after later failures.
-Kratos uses neighbour search on every step for this controller so restored
-contact forces reproduce the uninterrupted trajectory.
-
-Density rollback requires the JPGen Kratos DEM patch in
-[vendor/kratos-dem-restart.patch](../vendor/kratos-dem-restart.patch).
-The runtime checks for its version marker before creating a run. Apply the
-patch to the matching Kratos source and rebuild `KratosDEMCore` and
-`KratosDEMApplication`, or use the bundled wheel, which includes this modification.
-The serialized checkpoint includes the portable controller state for audit;
-CLI resume after a process exit is not implemented. Rollback is performed
-inside the active worker run.
+Use `control.type: density_continuation` with one scalar `target`, a
+`density_atol`, isotropic `confinement` and `relaxation` settings. Kratos and
+LIGGGHTS support this stage. The initial normal-friction state is stabilized
+first and accepted immediately if it already reaches the target minus tolerance.
+Otherwise each cycle saves the stable packing, sets both frictions to zero,
+runs exactly 100 solver steps, restores the entry friction pair, and stabilizes before
+checking density. Overshoot is accepted. The same servo runs throughout.
+`max_duration` limits the entire stage; there is no cycle limit or rollback.
+The old `targets`, `friction`, `limits`, `snapshots` and relaxation timeout
+options are rejected. See [the configuration and output example](density-continuation-protocol.md).
 
 ### Results and extension points
 
 For DEM protocols, every leaf-stage and repeated-block boundary is indexed in
 `stages/dem/results/states.jsonl`. Simultaneous boundaries share a `state_id`.
 States contain IDs, positions, radii, velocities, angular velocities and box
-geometry in a versioned NPZ/JSON pair. Native checkpoints remain separate.
+geometry in a versioned NPZ/JSON pair. No native solver restart files are produced.
 
 `stages/dem/results/observables.jsonl` records sampled observables and geometry,
-including stage exits. Records include an event sequence, branch and attempt
-identity; physical time can decrease after rollback. `RunReader.series()`
-excludes discarded and unresolved attempts by default; pass
-`include_discarded=True` for diagnostic history. Final HDF5 retains the report,
+including stage exits. Records include an event sequence; time and step advance
+monotonically. Density samples also identify the friction phase and cycle. Final HDF5 retains the report,
 observables and domain geometries. Failed protocols keep diagnostic states and
 execution artifacts without publishing a successful `final.h5`.
 

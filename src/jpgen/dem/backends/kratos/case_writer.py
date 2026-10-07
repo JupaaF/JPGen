@@ -7,7 +7,7 @@ import numpy as np
 
 from ....packing.exporters.kratos import KratosExporter
 from ....atomic_io import atomic_json
-from ...protocol import STRESS_OBSERVABLES, required_observables, control_types
+from ...protocol import STRESS_OBSERVABLES, required_observables
 
 TRANSLATION_SCHEMES = {"symplectic_euler": "Symplectic_Euler"}
 ROTATION_SCHEMES = {"direct": "Direct_Integration"}
@@ -15,7 +15,7 @@ ROTATION_SCHEMES = {"direct": "Direct_Integration"}
 CONTACT_LAWS = {"hertz_viscous_coulomb": "DEM_D_Hertz_viscous_Coulomb"}
 
 
-def write_case(case, directory, *, retention="full"):
+def write_case(case, directory):
     directory.mkdir(parents=True, exist_ok=True)
     inputs = directory / "backend/kratos/input"
     inputs.mkdir(parents=True, exist_ok=False)
@@ -55,8 +55,7 @@ def write_case(case, directory, *, retention="full"):
         "BoundingBoxOption": case.boundary == "periodic", "AutomaticBoundingBoxOption": False,
         "BoundingBoxStartTime": 0.0, "BoundingBoxStopTime": case.end_time,
         "do_print_results_option": False, "post_gid_option": False,
-        "NeighbourSearchFrequency": (1 if case.protocol and
-                                     'density_continuation' in control_types(case.protocol['stages']) else 5),
+        "NeighbourSearchFrequency": 5,
         "DeltaOption": "Relative", "SearchToleranceMultiplier": 0.01,
         "ContactMeshOption": needs_contacts, "PostStressStrainOption": needs_stress,
         "ComputeStressTensorOption": needs_stress,
@@ -72,7 +71,7 @@ def write_case(case, directory, *, retention="full"):
         parameters[f"BoundingBoxMin{letter}"] = float(case.packing.box.origin[axis])
         parameters[f"BoundingBoxMax{letter}"] = float(case.packing.box.origin[axis] + case.packing.box.lengths[axis])
     for name, value in (("ProjectParametersDEM.json", parameters), ("MaterialsDEM.json", materials),
-                        ("execution.json", {"retention": retention, "steps": case.steps, "protocol": case.protocol,
+                        ("execution.json", {"steps": case.steps, "protocol": case.protocol,
                                              "density": case.material.density, "boundary": case.boundary,
                                              "particle_diameter_d50": particle_diameter_d50,
                                              "young_modulus": material.young_modulus, "poisson_ratio": material.poisson_ratio,

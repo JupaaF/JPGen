@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import numpy as np
 
-API_VERSION = 4
+API_VERSION = 5
 
 
 def runtime_provenance(path):
@@ -32,7 +32,7 @@ class Library:
         self.lib = C.CDLL(str(path))
         self.lib.jpgen_liggghts_api_version.restype = C.c_int
         if self.lib.jpgen_liggghts_api_version() != API_VERSION:
-            raise ValueError("Rebuild LIGGGHTS with tools/build_liggghts.py (ABI 4 required)")
+            raise ValueError("Rebuild LIGGGHTS with tools/build_liggghts.py (ABI 5 required)")
         self.lib.jpgen_liggghts_set_threads.argtypes = [C.c_int]
         self.lib.jpgen_liggghts_set_threads.restype = None
         self.lib.jpgen_liggghts_threads.argtypes = []
@@ -67,6 +67,8 @@ class Library:
         self.lib.jpgen_liggghts_refresh_ghosts.restype = None
         self.lib.jpgen_liggghts_advance.argtypes = [C.c_void_p]
         self.lib.jpgen_liggghts_advance.restype = None
+        self.lib.jpgen_liggghts_set_friction.argtypes = [C.c_void_p, C.c_double, C.c_double]
+        self.lib.jpgen_liggghts_set_friction.restype = None
         self.handle = C.c_void_p()
         self.expected_count = None
         args = [b"jpgen", b"-screen", b"none", b"-log", log.encode(), b"-echo", b"none"]
@@ -92,6 +94,9 @@ class Library:
         origin, lengths = np.ascontiguousarray(origin, dtype=np.float64), np.ascontiguousarray(lengths, dtype=np.float64)
         self.lib.jpgen_liggghts_set_cell(self.handle, origin.ctypes.data_as(C.POINTER(C.c_double)),
                                        lengths.ctypes.data_as(C.POINTER(C.c_double)))
+
+    def set_friction(self, static, dynamic):
+        self.lib.jpgen_liggghts_set_friction(self.handle, static, dynamic)
 
     def count(self):
         raw = self.lib.lammps_extract_global(self.handle, b"nlocal")

@@ -54,7 +54,7 @@ class JPGenApplication:
     version_provider: Callable[[], dict]
     dem: DemApplication | None = None
 
-    def run(self, raw, observer=None, *, label=None, tags=(), experiment_id=None, retention="full"):
+    def run(self, raw, observer=None, *, label=None, tags=(), experiment_id=None):
         """Execute the configured pipeline and publish one run."""
 
         if label is not None and (not isinstance(label, str) or not label.strip()):
@@ -63,8 +63,6 @@ class JPGenApplication:
             raise ConfigurationError("Run tags must be nonempty strings.")
         if experiment_id is not None and not isinstance(experiment_id, str):
             raise ConfigurationError("experiment_id must be text.")
-        if retention not in {"full", "analysis"}:
-            raise ConfigurationError("retention must be full or analysis.")
         mapping(raw, "pipeline", {"packing", "packing_source", "dem"})
 
         plan = self.packing.prepare(raw)
@@ -88,7 +86,7 @@ class JPGenApplication:
             status["dem"] = {"status": "pending", "engine": dem_plan.backend.name}
         workspace = self.runs.create(effective, status, requested=raw,
                                      metadata={"label": label, "tags": list(tags),
-                                               "experiment_id": experiment_id, "retention": retention})
+                                               "experiment_id": experiment_id})
         destination_observer = observer
         def observer(event):
             workspace.record_event(event)
@@ -144,7 +142,6 @@ class JPGenApplication:
                 report = error.execution_report
                 status["dem"].update(
                     accepted_targets=report.accepted_targets,
-                    attempted_duration=report.attempted_duration,
                     diagnostics=report.diagnostics,
                     failed_stage=report.failed_stage,
                     stop_reason=report.stop_reason,

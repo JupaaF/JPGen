@@ -7,8 +7,8 @@ wheels. See [LIGGGHTS setup](liggghts.md).
 JPGen release wheels contain both native components: the pybind11 C++ placement
 extension and the pinned JPGen Kratos Core/DEM fork. The fork is based on Kratos
 commit `66dbb226f80dc78d5ff3985351effb03798ad2b8`, plus
-`vendor/kratos-dem-restart.patch` and `vendor/kratos-neighbour-optimizations.patch`.
-The resulting commit is `b0bdba096f0cce09a0a520afb08e070cb1d4d33c`. The build rejects another
+`vendor/kratos-neighbour-optimizations.patch`.
+The resulting commit is `3e0c8141ba9b6f8286474a2b8daa007b6c23320a`. The build rejects another
 revision or uncommitted Kratos source changes.
 
 Build a separate wheel on every supported operating system, architecture and
@@ -80,8 +80,7 @@ validation workflow on `master` also trigger validation of existing artifacts.
 
 Each Linux/Windows runner creates a fresh Python 3.12 virtual environment,
 installs the wheel with its dependencies, and runs `pip check`. It requires
-the native C++ placement backend, reports the bundled Kratos revision, imports
-the fork's density restart marker, and executes a two-particle packing and a
+the native C++ placement backend, reports the bundled Kratos revision, and executes a two-particle packing and a
 short DEM simulation. It does not check out JPGen or build Kratos; all native
 code must come from the downloaded wheel.
 

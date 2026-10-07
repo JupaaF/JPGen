@@ -9,9 +9,12 @@
 #include "integrate.h"
 #include "output.h"
 #include "error.h"
+#include "force.h"
+#include "fix_property_global.h"
+#include <cmath>
 #include "version_liggghts.h"
 #include <omp.h>
-extern "C" int jpgen_liggghts_api_version() { return 4; }
+extern "C" int jpgen_liggghts_api_version() { return 5; }
 extern "C" void jpgen_liggghts_advance(void *handle) {
   LAMMPS_NS::LAMMPS *lmp=static_cast<LAMMPS_NS::LAMMPS*>(handle);
   LAMMPS_NS::Update *u=lmp->update;
@@ -63,4 +66,24 @@ extern "C" void jpgen_liggghts_set_cell(void *handle, const double *origin, cons
 }
 extern "C" void jpgen_liggghts_refresh_ghosts(void *handle) {
   static_cast<LAMMPS_NS::LAMMPS*>(handle)->comm->forward_comm();
+}
+
+extern "C" void jpgen_liggghts_set_friction(void *handle, double static_mu, double dynamic_mu) {
+  auto *lmp=static_cast<LAMMPS_NS::LAMMPS*>(handle);
+  if (!std::isfinite(static_mu) || !std::isfinite(dynamic_mu) ||
+      dynamic_mu < 0 || static_mu < dynamic_mu || lmp->atom->ntypes != 1)
+    lmp->error->all(FLERR,"Invalid JPGen single-material friction update");
+  auto &registry=lmp->force->registry;
+  const char *names[2]={"coefficientFriction","jpgenDynamicFriction"};
+  const char *cached[2]={"coeffFrict","jpgenDynamicFriction"};
+  const double values[2]={static_mu,dynamic_mu};
+  for (int i=0;i<2;++i) {
+    auto *property=registry.getGlobalProperty(names[i],"property/global",
+                                              "peratomtypepair",1,1,"jpgen");
+    // Keep the source property and the live contact-model cache in sync.
+    // No fix/pair reconstruction: elastic contact history remains live.
+    const_cast<double*>(property->get_values())[0]=values[i];
+    const_cast<double*>(property->get_array()[0])[0]=values[i];
+    registry.getMatrixProperty(cached[i],"jpgen")->data[1][1]=values[i];
+  }
 }

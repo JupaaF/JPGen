@@ -19,8 +19,7 @@ def main():
     destination = args.destination.resolve()
     base = (ROOT / "vendor/kratos-base-revision.txt").read_text().strip()
     expected = (ROOT / "vendor/kratos-revision.txt").read_text().strip()
-    patches = [ROOT / "vendor/kratos-dem-restart.patch",
-               ROOT / "vendor/kratos-neighbour-optimizations.patch"]
+    patches = [ROOT / "vendor/kratos-neighbour-optimizations.patch"]
     if destination.exists():
         raise SystemExit(f"Destination already exists: {destination}")
     # Fetch the declared public base itself, even after its branch has advanced.

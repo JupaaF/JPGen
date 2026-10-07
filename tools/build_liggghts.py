@@ -99,7 +99,7 @@ def main():
                     "compile_flags": "-O2 -fPIC -fopenmp", "link_flags": "-O2 -fPIC -shared -fopenmp",
                     "contact_history_version": 2,
                     "library_sha256": hashlib.sha256(built.read_bytes()).hexdigest(),
-                    "mpi": False, "openmp": True, "jpgen_liggghts_api": 4}
+                    "mpi": False, "openmp": True, "jpgen_liggghts_api": 5}
         publish_library(built, library, metadata)
     print(f"LIGGGHTS library: {library}")
 

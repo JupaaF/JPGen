@@ -117,7 +117,7 @@ def _import_legacy_dem(source, workspace):
     native = source / 'dem/native_results'
     if not native.exists():
         return
-    store = StageOutput(workspace.directory / 'stages/dem', engine='legacy')
+    store = StageOutput(workspace.directory / 'stages/dem')
     converted = {}
     seen = set()
     for index in ('snapshots.jsonl', 'accepted_states.jsonl'):

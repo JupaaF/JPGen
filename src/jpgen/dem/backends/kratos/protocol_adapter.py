@@ -1,7 +1,5 @@
 """Kratos cell actuation and observations for the standalone protocol worker."""
 import math
-import shutil
-from pathlib import Path
 
 import numpy as np
 import KratosMultiphysics as KM
@@ -10,8 +8,6 @@ import KratosMultiphysics.DEMApplication as DEM
 from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 from protocol import STRESS_OBSERVABLES
-from state_exchange import write_state
-from atomic_io import atomic_json
 
 
 class KratosProtocolAdapter:
@@ -169,71 +165,8 @@ class KratosProtocolAdapter:
             prop[DEM.STATIC_FRICTION] = static
             prop[DEM.DYNAMIC_FRICTION] = dynamic
 
-    def checkpoint(self, stage, physical_step, time, observables):
-        """Save every DEM model part at a completed step for a fresh solver load."""
-        runner = self.analysis.protocol
-        runner.checkpoint_serial += 1
-        stem = f'checkpoint_{runner.checkpoint_serial:08d}'
-        directory = self.store.checkpoints / stem
-        temporary = directory.with_name(directory.name + '.tmp')
-        temporary.mkdir(parents=True, exist_ok=False)
-        try:
-            parts = (self.analysis.spheres_model_part, self.analysis.contact_model_part,
-                     self.analysis.cluster_model_part, self.analysis.dem_inlet_model_part,
-                     self.analysis.rigid_face_model_part, self.analysis.mapping_model_part)
-            for part in parts:
-                serializer = KM.FileSerializer(str(temporary / part.Name),
-                                               KM.SerializerTraceType.SERIALIZER_NO_TRACE)
-                serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
-                serializer.Save(part.Name, part)
-                del serializer
-            box = self.box()
-            write_state(temporary, self.analysis._particle_arrays(), time=time, box=box, stem='state')
-            metadata = {'schema': 'JPGen.dem.kratos_checkpoint', 'schema_version': '1.0',
-                        'kratos_version': KM.Kernel.Version(), 'stage': stage,
-                        'step': physical_step, 'time': time, 'box': box,
-                        'friction': self.friction(), 'observables': dict(observables),
-                        'protocol_state': runner.state(), 'output_context': self.store.context(),
-                        'model_parts': [part.Name for part in parts]}
-            atomic_json(temporary / 'checkpoint.json', metadata)
-            temporary.replace(directory)
-        except BaseException:
-            shutil.rmtree(temporary, ignore_errors=True)
-            raise
-        return {'directory': str(directory), 'metadata': metadata}
+    def checkpoint(self, metadata):
+        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata, accepted=False)
 
-    def restore(self, checkpoint):
-        # The current Kratos strategy owns pointers into its model parts. A new
-        # analysis loads the checkpoint after this completed step; in-place load
-        # would invalidate those pointers and erase contact history.
-        self.store.append(self.store.execution / 'events.jsonl', {
-            'event': 'rollback', 'checkpoint_id': Path(checkpoint['directory']).name,
-            'checkpoint': self.store.relative(Path(checkpoint['directory']) / 'checkpoint.json') if self.store.retention == 'full' else None,
-            'restored_time': checkpoint['metadata']['time'],
-            'restored_step': checkpoint['metadata']['step']})
-        self.store.branch_id = checkpoint['metadata']['output_context']['branch_id']
-        self.analysis.rollback_checkpoint = checkpoint
-
-    def log_attempt(self, record):
-        self.store.attempt(record)
-
-    def publish_target(self, checkpoint, metadata):
-        saved = self.store.state(source=Path(checkpoint['directory']) / 'state',
-                                 time=metadata['time'], box=checkpoint['metadata']['box'], key=self.analysis.completed_steps)
-        metadata = dict(metadata, schema='JPGen.dem.target', schema_version='1.0',
-                        kratos_version=KM.Kernel.Version(),
-                        provenance={'backend': 'kratos', 'seed': str(self.execution.get('seed')),
-                                    'contact_model': self.execution.get('contact_model')})
-        metadata_path = self.store.results / 'states' / (saved['state_id'] + '.target.json')
-        atomic_json(metadata_path, metadata)
-        restart = (self.store.relative(Path(checkpoint['directory']) / 'SpheresPart.rest')
-                   if self.store.retention == 'full' else None)
-        self.store.boundary({**saved, 'kind': 'density_target', 'phase': 'end', 'accepted': True,
-                            'path': metadata['stage'], 'target': {'observable': 'solid_fraction',
-                            'index': metadata['index'], 'value': metadata['target']},
-                            'step': self.analysis.completed_steps, 'physical_step': metadata['step'],
-                            'attempted_duration': metadata['attempted_duration'],
-                            'restart': restart,
-                            'checkpoint': self.store.relative(Path(checkpoint['directory']) / 'checkpoint.json') if restart else None,
-                            'metadata': self.store.relative(metadata_path),
-                            'checkpoint_capabilities': {'analysis': True, 'rollback': restart is not None, 'resume': False}})
+    def publish_target(self, metadata):
+        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata, accepted=True)

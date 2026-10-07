@@ -26,8 +26,7 @@ class DemApplication:
 
     def execute(self, plan, packing, workspace, observer=None):
         case = plan.create_case(packing)
-        prepared = plan.backend.prepare(case, workspace.directory / "stages/dem",
-                                        retention=workspace.read_manifest()["retention"])
+        prepared = plan.backend.prepare(case, workspace.directory / "stages/dem")
         report = plan.backend.run(prepared, observer)
         try:
             validate_execution_report(case, report)
@@ -55,7 +54,6 @@ class DemApplication:
             "elapsed_seconds": report.elapsed_seconds, "versions": report.versions,
             "stop_reason": report.stop_reason, "return_code": report.return_code,
             "completed_stages": report.completed_stages, "accepted_targets": report.accepted_targets,
-            "attempted_duration": report.attempted_duration,
             "diagnostics": report.diagnostics,
             **({"accepted_states_index": "stages/dem/results/states.jsonl"}
                if report.accepted_targets else {}),

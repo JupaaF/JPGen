@@ -21,11 +21,7 @@ class DemCapabilities:
     actuator_commands: frozenset[str] = frozenset()
     native_controls: frozenset[str] = frozenset()
     particle_snapshots: bool = False
-    native_restart_export: bool = False
-    state_restore: bool = False
     contact_parameter_updates: bool = False
-    contact_history_checkpoint: bool = False
-    rollback: bool = False
     target_publication: bool = False
 
     def validate(self, plan) -> None:
@@ -44,9 +40,7 @@ class DemCapabilities:
             raise ConfigurationError(f"Backend {plan.backend.name} cannot export protocol boundary snapshots.")
         controls = control_types(plan.protocol["stages"])
         if 'density_continuation' in controls:
-            required = ('state_restore', 'contact_parameter_updates',
-                        'contact_history_checkpoint', 'rollback',
-                        'target_publication', 'native_restart_export')
+            required = ('contact_parameter_updates', 'target_publication')
             missing = [name for name in required if not getattr(self, name)]
             if missing:
                 raise ConfigurationError(f"Backend {plan.backend.name} cannot run density_continuation: "
@@ -74,11 +68,7 @@ class DemCapabilities:
             "actuator_commands": sorted(self.actuator_commands),
             "native_controls": sorted(self.native_controls),
             "particle_snapshots": self.particle_snapshots,
-            "native_restart_export": self.native_restart_export,
-            "state_restore": self.state_restore,
             "contact_parameter_updates": self.contact_parameter_updates,
-            "contact_history_checkpoint": self.contact_history_checkpoint,
-            "rollback": self.rollback,
             "target_publication": self.target_publication,
         }
 
@@ -96,24 +86,15 @@ class DemControlPort(Protocol):
 
 
 class DemContinuationPort(Protocol):
-    """Stateful paths require complete, equivalent solver restoration.
+    """Live friction updates and scientific snapshots for density cycles."""
 
-    A checkpoint includes integrator, contact history, cell, active material
-    parameters and protocol-local state. Exporting a native restart alone does
-    not satisfy this contract.
-    """
-
-    def checkpoint(self, stage: str, physical_step: int, time: float, observables: dict) -> object: ...
-
-    def restore(self, checkpoint: object) -> None: ...
+    def checkpoint(self, metadata: dict) -> None: ...
 
     def friction(self) -> tuple[float, float]: ...
 
     def set_friction(self, static: float, dynamic: float) -> None: ...
 
-    def publish_target(self, checkpoint: object, metadata: dict) -> None: ...
-
-    def log_attempt(self, record: dict) -> None: ...
+    def publish_target(self, metadata: dict) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -131,7 +112,6 @@ class ExecutionReport:
     stop_reason: str = "end_time"
     completed_stages: int = 0
     accepted_targets: int = 0
-    attempted_duration: float = 0.0
     diagnostics: dict = field(default_factory=dict)
     failed_stage: str | None = None
     observables: dict = field(default_factory=dict)
@@ -149,7 +129,7 @@ class DemBackend(Protocol):
     def validate(self, plan) -> None:
         """Reject unsupported physics and unavailable runtimes before packing."""
 
-    def prepare(self, case: DemCase, directory: Path, *, retention: str = "full") -> PreparedDemCase: ...
+    def prepare(self, case: DemCase, directory: Path) -> PreparedDemCase: ...
 
     def run(self, prepared: PreparedDemCase, observer=None) -> ExecutionReport: ...
 

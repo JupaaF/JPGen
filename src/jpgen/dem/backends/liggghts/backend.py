@@ -79,8 +79,8 @@ class LiggghtsBackend:
             environment[name] = str(self.threads)
         return environment
 
-    def prepare(self, case, directory, *, retention="full"):
-        write_case(case, directory, self.to_config(), retention=retention)
+    def prepare(self, case, directory):
+        write_case(case, directory, self.to_config())
         return PreparedDemCase(directory.resolve(), case)
 
     def run(self, prepared, observer=None):

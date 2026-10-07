@@ -11,26 +11,7 @@ from pathlib import Path
 import numpy as np
 
 
-def _configure_stack_limit():
-    """Allow deep native checkpoint serialization in this worker process."""
-    if os.name != "posix":
-        return
-    import resource
-
-    soft, hard = resource.getrlimit(resource.RLIMIT_STACK)
-    # Kratos recursively serializes ordinary particle-neighbour pointers even
-    # with SHALLOW_GLOBAL_POINTERS_SERIALIZATION. Large contact networks can
-    # exhaust the usual 8 MiB stack. Raising its limit preserves the complete
-    # checkpoint and leaves all solver inputs and numerical operations intact.
-    desired = 256 * 1024 * 1024
-    if hard != resource.RLIM_INFINITY:
-        desired = min(desired, hard)
-    if soft != resource.RLIM_INFINITY and soft < desired:
-        resource.setrlimit(resource.RLIMIT_STACK, (desired, hard))
-
-
 def main():
-    _configure_stack_limit()
     import KratosMultiphysics as KM
     from KratosMultiphysics.DEMApplication.DEM_analysis_stage import DEMAnalysisStage
 
@@ -61,16 +42,14 @@ def main():
     from atomic_io import atomic_json, atomic_text
     from state_exchange import write_state
     from output_writer import StageOutput
-    store = StageOutput(stage, execution.get("retention", "full"), engine="kratos")
+    store = StageOutput(stage)
 
     class JPGenAnalysis(DEMAnalysisStage):
-        def __init__(self, model, parameters, resume_runner=None, restart_checkpoint=None):
+        def __init__(self, model, parameters):
             self.output_store = store
-            self.completed_steps = resume_runner.attempted_steps if resume_runner else 0
+            self.completed_steps = 0
             self.final_state = None
-            self.protocol = resume_runner
-            self.restart_checkpoint = restart_checkpoint
-            self.rollback_checkpoint = None
+            self.protocol = None
             self.adapter = None
             self.observables = {}
             super().__init__(model, parameters)
@@ -82,7 +61,7 @@ def main():
 
         def KeepAdvancingSolutionLoop(self):
             if self.protocol is not None:
-                return not self.protocol.done and self.rollback_checkpoint is None
+                return not self.protocol.done
             return self.completed_steps < execution["steps"]
 
         def _AdvanceTime(self):
@@ -91,36 +70,12 @@ def main():
                              self.completed_steps * self.DEM_parameters["MaxTimeStep"].GetDouble())
             return self._GetSolver().AdvanceInTime(previous_time)
 
-        def ReadModelPartsFromRestartFile(self, settings):
-            if self.restart_checkpoint is None:
-                return super().ReadModelPartsFromRestartFile(settings)
-            metadata = self.restart_checkpoint['metadata']
-            if (metadata['schema'] != 'JPGen.dem.kratos_checkpoint' or
-                    metadata['schema_version'] != '1.0' or
-                    metadata['kratos_version'] != KM.Kernel.Version()):
-                raise ValueError('Incompatible Kratos density checkpoint.')
-            directory = Path(self.restart_checkpoint['directory'])
-            for name in metadata['model_parts']:
-                # ContactPart is a derived measurement mesh. Kratos rebuilds it
-                # on the first completed step; loading it here duplicates one
-                # generation of contact elements in the first stress sample.
-                if name == 'ContactPart':
-                    continue
-                part = self.model.GetModelPart(name)
-                serializer = KM.FileSerializer(str(directory / name),
-                                               KM.SerializerTraceType.SERIALIZER_NO_TRACE)
-                serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
-                serializer.Load(name, part)
-                del serializer
-                part.ProcessInfo[KM.IS_RESTARTED] = True
-
         def Initialize(self):
             try:
                 super().Initialize()
                 if execution.get("protocol"):
                     specification = execution['protocol']
-                    if self.protocol is None:
-                        self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
+                    self.protocol = ProtocolRunner(specification, self.DEM_parameters["MaxTimeStep"].GetDouble())
                     self.output_observables = {'kinetic_energy', 'mean_coordination_number', 'fabric_tensor'}
                     if execution['boundary'] == 'periodic':
                         self.output_observables |= {'solid_fraction', 'bulk_density', 'thermal_conductivity'}
@@ -132,19 +87,9 @@ def main():
                     if 'unbalanced_force' in requested:
                         self.output_observables.add('unbalanced_force')
                     self.adapter = KratosProtocolAdapter(self, execution)
-                    if self.restart_checkpoint is None:
-                        self.protocol.attach(self.adapter)
-                    else:
-                        self.protocol.rebind(self.adapter)
-                    if self.restart_checkpoint is None:
-                        self.observables = self.adapter.observe(self.protocol.observables)
-                        self._save_boundaries(output)
-                    else:
-                        # Contact stress is refreshed by the next solver step.
-                        # Use the exact checkpoint measurement for the first actuation.
-                        self.observables = dict(self.restart_checkpoint['metadata']['observables'])
-                        if self.protocol.done:
-                            self._save_boundaries(output)
+                    self.protocol.attach(self.adapter)
+                    self.observables = self.adapter.observe(self.protocol.observables)
+                    self._save_boundaries(output)
             finally:
                 atomic_text(output / "resolved_parameters.json", self.DEM_parameters.PrettyPrintJsonString())
 
@@ -163,10 +108,10 @@ def main():
             self.completed_steps += 1
             if self.protocol is not None:
                 stage_path = self.protocol.path
-                sample_context = store.context() if store.attempt_stage == stage_path else {"attempt_id": None, "branch_id": store.branch_id}
+                density = self.protocol.density
+                sample_context = ({'density_phase': density.phase, 'cycles': density.cycles}
+                                  if density is not None else {})
                 self.observables = self.protocol.advance(self.adapter.observe(self.protocol.observables))
-                if self.protocol.restored:
-                    return
                 stage_exited = self.protocol.stage_exited
                 sampled = self.completed_steps % execution['protocol']['sample_every'] == 0
                 if sampled or stage_exited:
@@ -176,7 +121,7 @@ def main():
                 # the observables log, including density and the stress tensor.
                 self._save_boundaries(output)
                 if sampled or stage_exited:
-                    store.sample({"step": self.completed_steps, "physical_step": self.protocol.steps,
+                    store.sample({"step": self.completed_steps,
                                   "stage": stage_path, "observables": self.observables,
                                   "box": self.adapter.box(), "time_step": {"dt": self.protocol.dt},
                                   **sample_context})
@@ -201,50 +146,23 @@ def main():
                     (value for node in nodes for value in node.GetSolutionStepValue(variable)),
                     dtype=np.float64, count=3 * count).reshape(count, 3)
 
-        def _save_native_restart(self, output, stem, box):
-            if store.retention != "full":
-                return None
-            directory = store.checkpoints / stem
-            directory.mkdir(parents=True, exist_ok=True)
-            model_part = self.spheres_model_part
-            temporary_stem = directory / "SpheresPart.tmp"
-            serializer = KM.FileSerializer(str(temporary_stem), KM.SerializerTraceType.SERIALIZER_NO_TRACE)
-            serializer.Set(KM.Serializer.SHALLOW_GLOBAL_POINTERS_SERIALIZATION)
-            serializer.Save(model_part.Name, model_part)
-            del serializer
-            (directory / "SpheresPart.tmp.rest").replace(directory / "SpheresPart.rest")
-            metadata = {
-                "schema": "JPGen.dem.kratos_restart", "schema_version": "1.0",
-                "model_parts": ["SpheresPart"], "step": self.completed_steps,
-                "time": self.protocol.time, "box": box,
-                "kratos_version": KM.Kernel.Version(),
-            }
-            atomic_json(directory / "restart.json", metadata)
-            return store.relative(directory / "SpheresPart.rest")
-
         def _save_boundaries(self, output):
             boundaries = self.protocol.take_boundaries()
             if not boundaries:
                 return
             box = self.adapter.box()
             saved = store.state(self._particle_arrays(), time=self.protocol.time, box=box, key=self.completed_steps)
-            restart = self._save_native_restart(output, saved["state_id"], box)
             for boundary in boundaries:
-                store.boundary({**saved, **boundary, "physical_step": boundary["step"],
-                                "step": self.completed_steps, "restart": restart,
-                                "checkpoint_capabilities": {"analysis": True, "rollback": False, "resume": False}})
+                store.boundary({**saved, **boundary, "step": self.completed_steps})
 
         def Finalize(self):
-            if self.rollback_checkpoint is not None:
-                super().Finalize()
-                return
             if self.protocol is None:
                 self.adapter = KratosProtocolAdapter(self, execution)
                 final_observables = {'mean_coordination_number', 'fabric_tensor'}
                 if execution['boundary'] == 'periodic':
                     final_observables.add('thermal_conductivity')
                 self.observables = self.adapter.observe(final_observables)
-                store.sample({"step": self.completed_steps, "physical_step": self.completed_steps,
+                store.sample({"step": self.completed_steps,
                               "stage": None, "observables": self.observables,
                               "box": self.adapter.box(), "time_step": {"dt": execution['end_time'] / execution['steps']}})
             self.final_state = {
@@ -263,22 +181,9 @@ def main():
                             "accepted": False if self.protocol and self.protocol.failed else None})
             super().Finalize()
 
-    runner = None
-    checkpoint = None
-    while True:
-        parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
-        if checkpoint is not None:
-            parameters["solver_settings"]["model_import_settings"]["input_type"].SetString("rest")
-            box = checkpoint['metadata']['box']
-            for axis, letter in enumerate('XYZ'):
-                parameters[f'BoundingBoxMin{letter}'].SetDouble(box['origin'][axis])
-                parameters[f'BoundingBoxMax{letter}'].SetDouble(box['origin'][axis] + box['lengths'][axis])
-        analysis = JPGenAnalysis(KM.Model(), parameters, runner, checkpoint)
-        analysis.Run()
-        if analysis.rollback_checkpoint is None:
-            break
-        runner = analysis.protocol
-        checkpoint = analysis.rollback_checkpoint
+    parameters = KM.Parameters((inputs / "ProjectParametersDEM.json").read_text(encoding="utf-8"))
+    analysis = JPGenAnalysis(KM.Model(), parameters)
+    analysis.Run()
     atomic_json(output / "execution_report.json", {
         "steps": analysis.completed_steps,
         "stop_reason": (analysis.protocol.stop_reason if analysis.protocol.failed else "protocol_complete") if execution.get("protocol") else "end_time",
@@ -286,7 +191,6 @@ def main():
         "time_step": {"mode": "fixed", "value": execution["end_time"] / execution["steps"]},
         "completed_stages": analysis.protocol.completed_stages if analysis.protocol else 0,
         "accepted_targets": analysis.protocol.accepted_targets if analysis.protocol else 0,
-        "attempted_duration": analysis.protocol.attempted_steps * analysis.protocol.dt if analysis.protocol else 0.0,
         "diagnostics": analysis.protocol.diagnostics if analysis.protocol else {},
         "failed_stage": analysis.protocol.failed_stage if analysis.protocol else None,
         "observables": analysis.observables,

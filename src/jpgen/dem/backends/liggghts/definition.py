@@ -4,7 +4,7 @@ from ..registry import BackendDefinition
 
 CAPABILITIES = DemCapabilities(
     boundaries=frozenset({"open", "periodic"}),
-    controls=frozenset({"free_evolution", "strain_rate", "stress_servo"}),
+    controls=frozenset({"free_evolution", "strain_rate", "stress_servo", "density_continuation"}),
     observables=frozenset({"kinetic_energy", "normalized_kinetic_energy", "pressure",
         "stress_xx", "stress_yy", "stress_zz", "stress_xy", "stress_xz", "stress_yz",
         "solid_fraction", "bulk_density", "unbalanced_force", "mean_coordination_number", "fabric_tensor",
@@ -13,7 +13,8 @@ CAPABILITIES = DemCapabilities(
     integration_schemes=frozenset({("symplectic_euler", "direct")}),
     actuator_commands=frozenset({"cell_strain_rate", "symmetric_wall_velocity"}),
     particle_snapshots=True,
-    native_restart_export=True,
+    contact_parameter_updates=True,
+    target_publication=True,
 )
 
 DEFINITION = BackendDefinition(

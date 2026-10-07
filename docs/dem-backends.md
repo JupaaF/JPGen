@@ -37,10 +37,10 @@ Set `particle_snapshots=True` only when the backend exports the particle state
 at every protocol boundary: entry and exit of each leaf stage and each repetition
 of a sequence block. A backend without this capability is rejected for protocols
 before execution. The snapshots are analysis outputs; this flag does not promise
-solver restart or rollback. Kratos writes one `JPGen.dem.state` archive per unique
+solver restart. Kratos writes one `JPGen.dem.state` archive per unique
 boundary step under `stages/dem/results/states/` and records all boundary
-events in `states.jsonl`. All engines use the common state index and exchange schema; native checkpoints
-remain under `backend/<engine>/`. `StageOutput` is available to standalone workers.
+events in `states.jsonl`. All engines use the common state index and exchange schema.
+`StageOutput` is available to standalone workers.
 
 Pressure paths use the ordinary portable `stress_servo` command for each
 resolved target. A backend advertising pressure control, pressure/energy/force
@@ -48,26 +48,13 @@ observables and particle snapshots can run the path; successful target exits
 must be distinguishable from failed diagnostic boundaries. Kratos publishes
 accepted exits through `states.jsonl` with `accepted: true`.
 
-Density continuation additionally requires `state_restore`,
-`contact_parameter_updates`, `contact_history_checkpoint`, `rollback`,
-`target_publication` and `native_restart_export`. `DemContinuationPort` provides
-checkpoint, restore, live-friction and publication operations. Kratos advertises
-these only with the JPGen DEM restart patch: runtime preflight checks its
-version marker. Its density checkpoint stores all DEM model parts, cell geometry,
-active friction and portable controller state. A failed increment reloads a fresh
-analysis from that checkpoint while keeping attempt counters in the worker.
-Neighbour search runs every density step, and the derived contact measurement
-mesh is rebuilt after reload. A checkpoint is also published for each accepted
-target. Restarting the CLI from an earlier run is not implemented.
-
-`native_restart_export` is a separate optional capability. Kratos advertises it
-and writes the native `SpheresPart.rest` for every unique protocol boundary step,
-using the same `FileSerializer` and pointer serialization flag as its restart
-utility. `restart.json` stores the step, time, box and Kratos version. The
-`states.jsonl` event records the corresponding `.rest` path. This capability
-only promises export of native solver files; it does not advertise a JPGen resume
-or rollback operation on its own. A future backend may produce a different native format,
-and a backend without this capability can still export particle snapshots.
+Density control additionally requires `contact_parameter_updates` and
+`target_publication`. `DemContinuationPort` reads and changes the live friction
+pair, saves scientific checkpoints before resets, and publishes the accepted
+target. Both Kratos and LIGGGHTS implement it without restarting their solver.
+`StageOutput.density_state` publishes common snapshots and accepted metadata.
+No native restart, contact-history serialization, restore or rollback capability
+is advertised. Scientific snapshots contain particle arrays and cell geometry.
 
 These capabilities are illustrative: advertise them only if the engine actually
 implements the requested physics. Register the definition in `DEM_BACKENDS`.
@@ -194,12 +181,10 @@ future features change radii or particle population.
 
 ## Run-format integration
 
-`prepare(case, directory, *, retention="full")` receives the stage directory
+`prepare(case, directory)` receives the stage directory
 (`stages/dem`), which may already contain its summary. Create engine files under
 `backend/<engine>/input`, native scratch under `backend/<engine>/native`, and
-solver logs under `logs/`. Preserve common results under `results/` and attempt
-history under `execution/`. Storage policy does not belong in the physics config.
-Every index path is relative to the run root. `analysis` retention omits archived
-restart files but must not disable checkpoints needed during live execution.
+solver logs under `logs/`. Preserve common results under `results/` and
+execution progress under `execution/`. Every index path is relative to the run root.
 Readers must be able to inspect common results without importing the engine.
 See [run-format.md](run-format.md) for the contract.
