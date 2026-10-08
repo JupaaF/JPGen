@@ -25,7 +25,7 @@ class DemCapabilities:
     target_publication: bool = False
 
     def validate(self, plan) -> None:
-        from ..protocol import control_types, required_actuator_commands, required_observables
+        from ..protocol import control_types, required_actuator_commands, required_observables, uses_protocol_friction
 
         if plan.contact.model not in self.contact_models:
             raise ConfigurationError(f"Backend {plan.backend.name} does not support contact model {plan.contact.model}.")
@@ -39,6 +39,8 @@ class DemCapabilities:
         if not self.particle_snapshots:
             raise ConfigurationError(f"Backend {plan.backend.name} cannot export protocol boundary snapshots.")
         controls = control_types(plan.protocol["stages"])
+        if uses_protocol_friction(plan.protocol["stages"]) and not self.contact_parameter_updates:
+            raise ConfigurationError(f"Backend {plan.backend.name} cannot change protocol friction.")
         if 'density_continuation' in controls:
             required = ('contact_parameter_updates', 'target_publication')
             missing = [name for name in required if not getattr(self, name)]

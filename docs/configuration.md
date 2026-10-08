@@ -269,6 +269,45 @@ and `name`. Blocks can nest up to 20 levels and are traversed lazily; repetition
 reset stage time, signal phase and condition history. Reorder stages to change the
 experiment. Every stage runs on the same live solver, preserving contact history.
 
+### Friction in stages, pressure paths and sequence blocks
+
+Every protocol piece accepts an optional boolean `friction`: `true` uses the original
+`dem.contact.static_friction` and `dynamic_friction`, and `false` sets both
+coefficients to zero for the stage, all targets in the pressure path, or all
+stages and pressure targets in the block. Put `friction` beside `control`,
+`path` or `stages`, rather than inside the controller or path specification.
+Omitting it inherits the enclosing block's choice; the top-level default is
+the original friction. A nested block may override its parent, including
+restoring the original coefficients with `true` inside a frictionless block.
+After a block ends, subsequent stages use their enclosing block's choice.
+Successful protocol completion restores the original pair. The live solver
+and contact history are preserved, and `friction_decay` is unchanged.
+
+```yaml
+protocol:
+  stages:
+    - name: frictionless_relaxation
+      friction: false
+      repeat: 2
+      stages:
+        - control: {type: free_evolution}
+          until: {observable: stage_time, op: above, value: 0.001}
+          max_duration: 0.01
+    - name: original_friction
+      friction: true
+      control: {type: free_evolution}
+      until: {observable: stage_time, op: above, value: 0.001}
+      max_duration: 0.01
+```
+
+Both Kratos and LIGGGHTS support this option, including open boundaries.
+Only YAML booleans are accepted; strings and numbers are rejected. The
+interactive builder offers inherited, original or zero friction for every piece.
+Stage boundary events record the resolved `friction` choice when a protocol
+uses this option. Within `density_continuation`, the block's selected pair
+becomes the stage's normal friction: a `friction: false` block therefore keeps
+zero friction during stabilization as well as during the 100-step cycles.
+
 ### Controllers and targets
 
 | Controller | Parameters | Behavior |

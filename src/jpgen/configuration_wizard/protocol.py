@@ -143,6 +143,11 @@ def _stage_questions(answers, prefix, periodic, depth=0, capabilities=None):
                                    explanation='Choose one stage, a repeated sequence, or a pressure path that saves each equilibrated target before moving to the next.'))
         questions.append(_question(key + '.name', 'Piece name', f'stage_{index + 1}', parser=lambda v, _: v.strip(),
                                    explanation='Give this stage or repeat block a nonempty descriptive name. The name appears in the saved configuration and in the failed-stage diagnostic when applicable.'))
+        if capabilities is None or capabilities.contact_parameter_updates:
+            questions.append(_question(key + '.friction', 'Contact friction in this piece', 'inherit',
+                               choices=[('Inherit parent (original at the top level)', 'inherit'),
+                                        ('Use original friction', True), ('Set friction to zero', False)],
+                               explanation='Original uses both static and dynamic coefficients from the DEM contact configuration. Zero disables both throughout this stage, pressure path or block. Nested pieces may override this choice; subsequent pieces inherit their parent choice.'))
         if answers.get(key + '.kind') == 'repeat':
             questions.append(_question(key + '.repeat', 'Number of repetitions', 10, _positive_integer,
                                    explanation='Number of times to execute the entire nested sequence, including the first pass. Each pass keeps the physical state from the previous one, while stage time and condition timers restart.'))
@@ -316,6 +321,9 @@ def build_protocol(answers, prefix='dem.protocol'):
     for index in range(answers[prefix + '.count']):
         key = f'{prefix}.{index}'
         stage = {'name': answers[key + '.name']}
+        friction = answers.get(key + '.friction', 'inherit')
+        if isinstance(friction, bool):
+            stage['friction'] = friction
         if answers[key + '.kind'] == 'repeat':
             stage.update(repeat=answers[key + '.repeat'], stages=build_protocol(answers, key + '.children')['stages'])
         elif answers[key + '.kind'] == 'density':

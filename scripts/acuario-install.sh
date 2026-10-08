@@ -10,6 +10,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 source "$root/scripts/acuario-env.sh"
 python3.12 -m venv "$HOME/jpgen-venv"
 python="$HOME/jpgen-venv/bin/python"
+"$python" -m pip install --no-index --find-links "$root/acuario-deps" --force-reinstall --no-deps "$wheel"
 "$python" -m pip install --no-index --find-links "$root/acuario-deps" "$wheel"
 "$python" -m pip check
 "$python" - <<'PY'

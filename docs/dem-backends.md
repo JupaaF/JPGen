@@ -52,6 +52,11 @@ Density control additionally requires `contact_parameter_updates` and
 `target_publication`. `DemContinuationPort` reads and changes the live friction
 pair, saves scientific checkpoints before resets, and publishes the accepted
 target. Both Kratos and LIGGGHTS implement it without restarting their solver.
+Stages, pressure paths and sequence blocks with an explicit `friction` boolean also require
+`contact_parameter_updates` and the port's `friction()` / `set_friction()`
+operations, independently of density control. The portable runner captures the
+original pair on attachment, applies each leaf's inherited block choice before
+its first step, and restores the original pair after successful completion.
 `StageOutput.density_state` publishes common snapshots and accepted metadata.
 No native restart, contact-history serialization, restore or rollback capability
 is advertised. Scientific snapshots contain particle arrays and cell geometry.

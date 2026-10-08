@@ -83,6 +83,24 @@ a otros sistemas.
 
 ## 4. Instalar y ejecutar
 
+Para actualizar una instalación existente, prepara el código y la revisión de
+Kratos que declara `vendor/kratos-revision.txt` en un directorio nuevo. Actualiza
+también `acuario-deps`: la interfaz actual necesita Textual. Con el código de
+Kratos preparado bajo `Kratos/` y los wheels bajo `acuario-deps/`, puedes compilar
+e instalar en un único trabajo:
+
+```bash
+cd /ruta/al/codigo/nuevo
+sbatch scripts/acuario-update.sbatch
+```
+
+Ejecuta la actualización cuando tus simulaciones anteriores hayan terminado.
+Este trabajo conserva una copia de `~/jpgen-venv` en
+`~/jpgen-venv-backup-ID`, crea su propio entorno de compilación y actualiza
+`~/jpgen-venv` después de generar el wheel. Consulta
+`jpgen-update-ID.out` y `jpgen-update-ID.err` para comprobar el resultado.
+El instalador reinstala JPGen incluso si el número de versión coincide.
+
 Tras una compilación correcta, desde `~/JPGen` instala el wheel nativo con
 el script de instalación. Carga por sí mismo los módulos y usa el directorio de
 wheels local, sin conexión a PyPI:

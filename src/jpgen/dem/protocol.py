@@ -310,15 +310,17 @@ def validate_protocol(raw, dt, boundary):
         for kind, _, stage in _pieces(stages):
             if 'name' in stage and (not isinstance(stage['name'], str) or not stage['name'].strip()):
                 raise ValueError('Stage name must be nonempty text.')
+            if 'friction' in stage and not isinstance(stage['friction'], bool):
+                raise ValueError('Protocol friction must be true or false.')
             if kind == 'block':
-                _mapping(stage, {'name', 'repeat', 'stages'}, {'stages'})
+                _mapping(stage, {'name', 'repeat', 'stages', 'friction'}, {'stages'})
                 budget += _count(stage.get('repeat', 1)) * visit(stage['stages'], depth + 1)
                 continue
             if kind == 'path':
-                _mapping(stage, {'name', 'path'}, {'path'})
+                _mapping(stage, {'name', 'path', 'friction'}, {'path'})
                 budget += validate_path(stage['path'], dt, boundary)
                 continue
-            _mapping(stage, {'name', 'control', 'until', 'max_duration'}, {'control', 'until', 'max_duration'})
+            _mapping(stage, {'name', 'control', 'until', 'max_duration', 'friction'}, {'control', 'until', 'max_duration'})
             control = stage['control']
             if isinstance(control, dict) and control.get('type') == 'density_continuation':
                 _density_control(control, dt)
@@ -406,20 +408,31 @@ def iter_stages(stages, prefix=''):
             yield path, stage
 
 
-def iter_stage_boundaries(stages, prefix=''):
+def uses_protocol_friction(stages):
+    """Whether a sequence explicitly requests live contact friction updates."""
+    return any('friction' in stage or
+               (kind == 'block' and uses_protocol_friction(stage['stages']))
+               for kind, _, stage in _pieces(stages))
+
+
+def iter_stage_boundaries(stages, prefix='', friction=None):
     """Yield block boundaries and leaf stages lazily in execution order."""
     for kind, path, stage in _pieces(stages, prefix):
+        selected_friction = stage.get('friction', friction)
         if kind == 'block':
             for cycle in range(stage.get('repeat', 1)):
                 cycle_path = f'{path}[{cycle + 1}]'
                 yield 'block_start', cycle_path, None
-                yield from iter_stage_boundaries(stage['stages'], cycle_path + '/')
+                yield from iter_stage_boundaries(stage['stages'], cycle_path + '/', selected_friction)
                 yield 'block_end', cycle_path, None
         elif kind == 'path':
             for index, target in enumerate(path_targets(stage['path']['targets']), 1):
-                yield 'stage', f'{path}/target_{index:04d}', pressure_path_stage(stage['path'], target, index)
+                leaf = pressure_path_stage(stage['path'], target, index)
+                if selected_friction is not None:
+                    leaf['_friction'] = selected_friction
+                yield 'stage', f'{path}/target_{index:04d}', leaf
         else:
-            yield 'stage', path, stage
+            yield 'stage', path, stage if selected_friction is None else dict(stage, _friction=selected_friction)
 
 
 def required_observables(stages):
@@ -553,13 +566,25 @@ class ProtocolRunner:
         self.stop_reason = None
         self.diagnostics = {}
         self.port = None
+        self.manage_friction = uses_protocol_friction(protocol['stages'])
+        self.original_friction = None
         self.density = None
         self._enter()
 
     def attach(self, port):
         """Attach a live solver after its own initialization has completed."""
         self.port = port
+        if self.manage_friction:
+            self.original_friction = port.friction()
+            self._apply_friction()
         self._start_density()
+
+    def _apply_friction(self):
+        if self.original_friction is None:
+            return
+        pair = self.original_friction if self.stage.get('_friction', True) else (0.0, 0.0)
+        if self.port.friction() != pair:
+            self.port.set_friction(*pair)
 
     def _start_density(self):
         if self.port is None or self.stage['control']['type'] != 'density_continuation':
@@ -576,10 +601,13 @@ class ProtocolRunner:
             item = next(self.iterator, None)
             if item is None:
                 self.done = True
+                if self.original_friction is not None and self.port.friction() != self.original_friction:
+                    self.port.set_friction(*self.original_friction)
                 return
             kind, path, stage = item
             if kind == 'stage':
                 self.path, self.stage = path, stage
+                self._apply_friction()
                 self._record_boundary('stage', 'start', path)
                 break
             self._record_boundary('block', 'start' if kind == 'block_start' else 'end', path)
@@ -594,6 +622,8 @@ class ProtocolRunner:
     def _record_boundary(self, kind, phase, path, *, accepted=None, values=None):
         event = {'kind': kind, 'phase': phase, 'path': path,
                  'step': self.steps, 'time': self.time}
+        if kind == 'stage' and self.manage_friction:
+            event['friction'] = self.stage.get('_friction', True)
         if kind == 'stage' and ('_path_target' in self.stage or
                                 self.stage['control']['type'] == 'density_continuation'):
             if '_path_target' in self.stage:
