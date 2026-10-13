@@ -506,7 +506,11 @@ options are rejected. See [the configuration and output example](density-continu
 For DEM protocols, every leaf-stage and repeated-block boundary is indexed in
 `stages/dem/results/states.jsonl`. Simultaneous boundaries share a `state_id`.
 States contain IDs, positions, radii, velocities, angular velocities and box
-geometry in a versioned NPZ/JSON pair. No native solver restart files are produced.
+geometry in a versioned NPZ/JSON pair. New snapshots also store original ID
+pairs, periodic contact geometry and total, normal and tangential force vectors
+for analysis after filtering particles. The [run-format contract](run-format.md)
+describes force timing and access through `RunReader.load_state`. No native
+solver restart files are produced.
 
 `stages/dem/results/observables.jsonl` records sampled observables and geometry,
 including stage exits. Records include an event sequence; time and step advance

@@ -1,0 +1,91 @@
+# Isotropic pressure cycles with the same material and path acceptance as the
+# existing friction characterization. Seeds and initial fractions are sampled
+# once by prepare_pressure_cycles.py and recorded in the batch manifest.
+packing:
+  sizing_method: variable_box_fraction
+  count: 15000
+  target_solid_fraction: 0.56
+  solid_fraction_tolerance: 0.001
+  box:
+    origin_mode: center
+    lengths: [0.1, 0.1, 0.1]
+    periodic: true
+  radii: {type: uniform, min: 0.003, max: 0.007}
+  velocity: {type: constant, value: 0.0}
+  angular_velocity: {type: constant, value: 0.0}
+  placement:
+    method: progressive_growth
+    max_overlap: 0.02
+    max_iterations: 10000
+    stagnation_iterations: 200
+    max_perturbations: 3
+    relax_all_overlaps: true
+    step_size: 1.0
+    max_displacement: 0.2
+    improvement_tolerance: 1.0e-6
+    perturbation: 0.01
+    overlap_tolerance: 1.0e-8
+    initial_scale: 0.25
+    initial_increment: 0.05
+    min_increment: 0.0001
+    max_increment: 0.1
+    max_stages: 200
+  exports: []
+dem:
+  engine: liggghts
+  backend_options: {threads: 1, timeout_seconds: null}
+  material: {density: 2650.0, young_modulus: 600000000.0, poisson_ratio: 0.3}
+  contact:
+    model: hertz_viscous_coulomb
+    static_friction: 0.4
+    dynamic_friction: 0.4
+    friction_decay: 500.0
+    restitution: 0.5
+  integration: {translation: symplectic_euler, rotation: direct}
+  boundary: periodic
+  gravity: [0.0, 0.0, 0.0]
+  time_step: 1.0e-5
+  protocol:
+    sample_every: 100
+    stages:
+      - name: free_until_5kPa
+        friction: true
+        control: {type: free_evolution}
+        until: {observable: pressure, op: below, value: 5000.0, hold_for: 0.0}
+        max_duration: 1.0
+      - name: pressure_cycles
+        repeat: 50
+        friction: true
+        stages:
+          - name: loading_5_to_200kPa
+            path:
+              observable: pressure
+              targets: {start: 5000.0, end: 200000.0, intermediate_states: 18, spacing: log}
+              control:
+                type: stress_servo
+                mode: isotropic
+                max_velocity: 0.1
+                loading_factor: 0.8
+                update_every_steps: 1
+              acceptance:
+                target_rtol: 0.01
+                normalized_kinetic_energy_below: 1.0e-6
+                unbalanced_force_below: 0.001
+                hold_for: 0.001
+              max_duration_per_target: 100.0
+          - name: unloading_200_to_5kPa
+            path:
+              observable: pressure
+              targets: {start: 200000.0, end: 5000.0, intermediate_states: 18, spacing: log}
+              control:
+                type: stress_servo
+                mode: isotropic
+                max_velocity: 0.1
+                loading_factor: 0.8
+                update_every_steps: 1
+              acceptance:
+                target_rtol: 0.01
+                normalized_kinetic_energy_below: 1.0e-5
+                unbalanced_force_below: 0.001
+                hold_for: 0.001
+              max_duration_per_target: 100.0

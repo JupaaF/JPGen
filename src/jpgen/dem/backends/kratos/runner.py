@@ -81,7 +81,6 @@ def main():
                         self.output_observables |= {'solid_fraction', 'bulk_density', 'thermal_conductivity'}
                     requested = required_observables(specification['stages'])
                     self.needs_stress = bool(requested & STRESS_OBSERVABLES)
-                    self.needs_contacts = True
                     if self.needs_stress:
                         self.output_observables |= STRESS_OBSERVABLES | {'normalized_kinetic_energy'}
                     if 'unbalanced_force' in requested:
@@ -95,9 +94,9 @@ def main():
 
         def InitializeSolutionStep(self):
             super().InitializeSolutionStep()
+            # Contact forces must also be current in runs without a protocol.
+            self.UpdateIsTimeToUpdateContactElementForServo(True)
             if self.protocol is not None:
-                if self.needs_contacts:
-                    self.UpdateIsTimeToUpdateContactElementForServo(True)
                 dt = self.protocol.dt
                 command = self.protocol.act(
                     self.observables, self.adapter.control_context(dt))
@@ -151,7 +150,8 @@ def main():
             if not boundaries:
                 return
             box = self.adapter.box()
-            saved = store.state(self._particle_arrays(), time=self.protocol.time, box=box, key=self.completed_steps)
+            saved = store.state(self._particle_arrays(), time=self.protocol.time, box=box,
+                                key=self.completed_steps, **self.adapter.contact_snapshot())
             for boundary in boundaries:
                 store.boundary({**saved, **boundary, "step": self.completed_steps})
 
@@ -173,7 +173,7 @@ def main():
                     "periodic": execution["boundary"] == "periodic"},
             }
             # Stream numeric arrays before Kratos deletes its model parts.
-            write_state(output, self._particle_arrays(), **self.final_state)
+            write_state(output, self._particle_arrays(), **self.final_state, **self.adapter.contact_snapshot())
             saved = store.state(source=output / "final_state", key=self.completed_steps, **self.final_state)
             store.boundary({**saved, "kind": "diagnostic" if self.protocol and self.protocol.failed else "final",
                             "phase": "end", "step": self.completed_steps,

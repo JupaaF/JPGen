@@ -171,6 +171,8 @@ class KratosBackend:
     def collect(self, prepared, report):
         try:
             raw = read_state(prepared.directory / "backend/kratos/native")
+            raw.pop("contacts", None)
+            raw.pop("contact_metadata", None)
             raw["box"] = Box(**raw["box"])
             state = DemState(**raw)
             if prepared.case.boundary == "periodic":

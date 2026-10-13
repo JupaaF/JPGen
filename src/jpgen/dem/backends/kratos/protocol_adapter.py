@@ -8,6 +8,7 @@ import KratosMultiphysics.DEMApplication as DEM
 from commands import ActuatorCommand, NoActuation, CellStrainRate, SymmetricWallVelocity
 
 from protocol import STRESS_OBSERVABLES
+from contact_snapshot import contact_snapshot
 
 
 class KratosProtocolAdapter:
@@ -166,7 +167,34 @@ class KratosProtocolAdapter:
             prop[DEM.DYNAMIC_FRICTION] = dynamic
 
     def checkpoint(self, metadata):
-        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata, accepted=False)
+        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata,
+                                 accepted=False, **self.contact_snapshot())
 
     def publish_target(self, metadata):
-        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata, accepted=True)
+        self.store.density_state(self.analysis._particle_arrays(), self.box(), metadata,
+                                 accepted=True, **self.contact_snapshot())
+
+    def contact_snapshot(self):
+        self.analysis._GetSolver().PrepareContactElementsForPrinting()
+        pairs, branches, overlaps, forces, tangential = [], [], [], [], []
+        lengths = np.asarray(self.box()['lengths']) if self.periodic else None
+        for element in self.analysis.contact_model_part.Elements:
+            first, second = element.GetNode(0), element.GetNode(1)
+            branch = np.array([first.X - second.X, first.Y - second.Y, first.Z - second.Z])
+            if lengths is not None:
+                branch -= lengths * np.rint(branch / lengths)
+            overlap = (first.GetSolutionStepValue(KM.RADIUS) + second.GetSolutionStepValue(KM.RADIUS)
+                       - np.linalg.norm(branch))
+            force = np.asarray(element.GetValue(DEM.GLOBAL_CONTACT_FORCE), dtype=np.float64).copy()
+            # Keep opening contacts with a force used during the last step too.
+            if overlap <= 0 and not np.any(force):
+                continue
+            pairs.append((first.Id, second.Id))
+            branches.append(branch)
+            overlaps.append(overlap)
+            forces.append(force)
+            tangential.append(np.asarray(element.GetValue(DEM.GLOBAL_CONTACT_FORCE_TANGENTIAL),
+                                         dtype=np.float64).copy())
+        return contact_snapshot(pairs, branches, overlaps, forces, tangential_forces=tangential,
+                                engine='kratos', force_time_level=(
+                                    'step_force_evaluation' if self.analysis.completed_steps else 'initial_uncomputed'))

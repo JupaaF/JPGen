@@ -102,6 +102,60 @@ metadata (`JPGen.dem.target`, version `1.1`). Acceptance is one-sided:
 No native restart files or internal solver checkpoints are written. The former
 `--retention` option is removed; scientific checkpoints are always preserved.
 
+New NPZ/JSON snapshots use `JPGen.dem.state` version `1.1`. They retain the
+particle arrays and add a per-contact table, including at protocol boundaries,
+density checkpoints/targets and the final or diagnostic snapshot. Readers also
+accept version `1.0`; absent contact data in those archives remain unavailable.
+The JSON `contacts` mapping documents the engine, force evaluation time level,
+geometry time level, vector conventions and units. NPZ members are:
+
+| Member | Shape | Dtype | Meaning |
+| --- | --- | --- | --- |
+| `contact_ids` | M × 2 | int64 | Original particle IDs, first < second, unique sorted pairs |
+| `contact_branches` | M × 3 | float64 | First center minus second center, minimum image for periodic cells (m) |
+| `contact_normals` | M × 3 | float64 | Unit branch directions at the saved geometry |
+| `contact_overlaps` | M | float64 | Radius sum minus center distance at the saved geometry (m) |
+| `contact_forces` | M × 3 | float64 | Total contact force on the first particle by the second (N) |
+| `contact_normal_forces` | M × 3 | float64 | Normal component of that force (N) |
+| `contact_tangential_forces` | M × 3 | float64 | Tangential component of that force (N) |
+
+All vectors use global Cartesian coordinates. Force components include the
+constitutive elastic and viscous contributions after Coulomb limiting; their
+sum is the total. The force on the second particle is the negative of the
+stored force. Empty tables have the same shapes with M = 0. Readers validate
+IDs, shapes, dtypes, finite values, force sums and agreement of contact geometry
+with the particles and box.
+
+Kratos exports native stored forces with `force_time_level: step_force_evaluation`.
+These precede the completed-step position/velocity update, so their native
+normal/tangential decomposition need not align exactly with the saved geometric
+normal. Its table includes native contact elements with positive snapshot
+overlap or nonzero stored force, retaining opening contacts that contributed
+during the step. Initial Kratos boundaries use `initial_uncomputed`: native
+forces have not yet been evaluated and zero values are initialization values.
+LIGGGHTS uses `completed_step_reevaluation`: active native contacts and forces
+are observed at completed-step geometry/velocities without advancing history.
+Geometry always has `geometry_time_level: snapshot`.
+
+`RunReader.load_state` returns the table as `state["contacts"]` and its
+description as `state["contact_metadata"]` for version `1.1`. For example, to
+remove a selected group from the instantaneous contact analysis:
+
+```python
+import numpy as np
+
+state = run.load_state(accepted[0]["state_id"])
+contacts = state["contacts"]
+removed_ids = np.array([12, 34], dtype=np.int64)
+keep = ~np.isin(contacts["ids"], removed_ids).any(axis=1)
+remaining_contacts = {name: values[keep] for name, values in contacts.items()}
+```
+
+This preserves the recorded forces between retained particles; it does not
+predict a new equilibrium after removal. No contact history or restart state
+is serialized. The common `final.h5` schema remains unchanged; use the indexed
+final NPZ/JSON snapshot for its per-contact data.
+
 `results/observables.jsonl` contains sampled numeric measurements. Density samples
 also include `density_phase` and `cycles` outside the numeric observables mapping.
 Time and step increase monotonically; there are no rejected or restored branches.

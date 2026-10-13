@@ -60,7 +60,7 @@ def write_case(case, directory, options):
     for source, target in ((here / "runner.py", "run.py"), (here / "library.py", "library.py"),
                             (here / "protocol_adapter.py", "protocol_adapter.py")):
         shutil.copyfile(source, inputs / target)
-    for name in ("protocol.py", "density_continuation.py", "commands.py", "state_exchange.py", "output_writer.py"):
+    for name in ("protocol.py", "density_continuation.py", "commands.py", "state_exchange.py", "contact_snapshot.py", "output_writer.py"):
         shutil.copyfile(here.parents[1] / name, inputs / name)
     for name in ("atomic_io.py", "particle_data.py"):
         shutil.copyfile(here.parents[2] / name, inputs / name)

@@ -39,14 +39,16 @@ class StageOutput:
             stream.write(json.dumps(record, allow_nan=False) + "\n")
         return record
 
-    def state(self, arrays=None, *, time, box, source=None, key=None):
+    def state(self, arrays=None, *, time, box, source=None, key=None,
+              contacts=None, contact_metadata=None):
         if key is not None and key == self.last_state_key:
             return dict(self.last_state)
         self.state_serial += 1
         state_id = f"state_{self.state_serial:08d}"
         stem = self.results / "states" / state_id
         if source is None:
-            write_state(stem.parent, arrays, time=time, box=box, stem=stem.name)
+            write_state(stem.parent, arrays, time=time, box=box, stem=stem.name,
+                        contacts=contacts, contact_metadata=contact_metadata)
         else:
             completed = read_state(Path(source).parent, Path(source).name)
             if completed["time"] != time or completed["box"] != box:
@@ -60,8 +62,9 @@ class StageOutput:
                            "validation": "exchange_complete"}
         return dict(self.last_state)
 
-    def density_state(self, arrays, box, metadata, *, accepted):
-        saved = self.state(arrays, time=metadata['time'], box=box, key=metadata['step'])
+    def density_state(self, arrays, box, metadata, *, accepted, contacts=None, contact_metadata=None):
+        saved = self.state(arrays, time=metadata['time'], box=box, key=metadata['step'],
+                           contacts=contacts, contact_metadata=contact_metadata)
         record = {**saved, 'path': metadata['stage'], 'step': metadata['step'],
                   'phase': 'end' if accepted else 'before_reset',
                   'kind': 'density_target' if accepted else 'density_checkpoint',

@@ -139,6 +139,8 @@ class LiggghtsBackend:
     def collect(self, prepared, report):
         try:
             raw = read_state(prepared.directory / "backend/liggghts/native")
+            raw.pop("contacts", None)
+            raw.pop("contact_metadata", None)
             raw["box"] = Box(**raw["box"])
             if raw["box"].periodic:
                 raw["positions"] = raw["box"].origin + (raw["positions"] - raw["box"].origin) % raw["box"].lengths

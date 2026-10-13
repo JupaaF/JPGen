@@ -58,7 +58,8 @@ def main():
             records = runner.take_boundaries() if runner else []
             if not records:
                 return
-            saved = store.state(adapter.arrays(), time=steps * execution["dt"], box=adapter.box(), key=steps)
+            saved = store.state(adapter.arrays(), time=steps * execution["dt"], box=adapter.box(),
+                                key=steps, **adapter.contact_snapshot())
             for record in records:
                 store.boundary({**saved, **record, "step": steps})
 
@@ -97,7 +98,7 @@ def main():
                 last_progress = now
         final_time = steps * execution["dt"]
         values.update(adapter.observe(output_names - values.keys()))
-        write_state(native, adapter.arrays(), time=final_time, box=adapter.box())
+        write_state(native, adapter.arrays(), time=final_time, box=adapter.box(), **adapter.contact_snapshot())
         saved = store.state(source=native / "final_state", time=final_time, box=adapter.box(), key=steps)
         store.boundary({**saved, "kind": "diagnostic" if runner and runner.failed else "final", "phase": "end",
                         "step": steps, "stage": runner.path if runner else None,

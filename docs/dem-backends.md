@@ -139,10 +139,19 @@ standalone case. Other process-based engines must also ship their required porta
 modules, or arrange an explicit runtime dependency on JPGen.
 
 Kratos also copies the solver-independent `dem/state_exchange.py` module. Its
-`JPGen.dem.state` version `1.0` exchange consists of `final_state.npz` and a small
+`JPGen.dem.state` version `1.1` exchange consists of `final_state.npz` and a small
 `final_state.json` metadata file (schema, version, SI units, time and box).
 The NPZ archive stores `ids` as int64 and `positions`, `radii`, `velocities` and
 `angular_velocities` as float64 NPY members, without compression or pickle.
+It also stores `contact_ids` (int64), `contact_branches`, `contact_normals`,
+`contact_overlaps`, `contact_forces`, `contact_normal_forces` and
+`contact_tangential_forces` (float64). Workers copy `contact_snapshot.py` with
+the exchange module and supply contact arrays plus their metadata to every
+snapshot writer. Use original portable IDs, unique ordered pairs, global
+vectors and force on the first particle by the second. Document the native
+force evaluation time level; do not advance contact history to take a snapshot.
+See [run-format.md](run-format.md) for exact semantics and the Kratos initial
+boundary limitation. Readers retain support for version `1.0` without contacts.
 `write_state` consumes arrays sequentially in that order and publishes metadata
 after the archive; `read_state` checks the schema, member names and dtypes.
 Adapters remain responsible for constructing `DemState` and normalizing native

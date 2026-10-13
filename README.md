@@ -88,7 +88,8 @@ sizing, placement settings, DEM physics, stopping conditions and protocols.
 - Open or periodic DEM boundaries, one particle material, Hertz viscous Coulomb contacts.
 - Free evolution, strain-rate control, isotropic and anisotropic stress servos.
 - Nested repeated protocols, equilibrated pressure paths and density control by zero-friction cycles.
-- HDF5 scientific outputs, optional VTK/MDPA packing exports, saved particle states and observables.
+- HDF5 scientific outputs, optional VTK/MDPA packing exports, saved particle states,
+  per-contact total/normal/tangential forces in NPZ snapshots, and observables.
 
 Geometric placement does not establish mechanical equilibrium. DEM success
 means the configured stopping criteria were met. Walls, multiple materials,

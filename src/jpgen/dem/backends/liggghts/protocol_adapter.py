@@ -3,6 +3,7 @@ import math
 import numpy as np
 from commands import NoActuation, CellStrainRate, SymmetricWallVelocity
 from protocol import STRESS_OBSERVABLES
+from contact_snapshot import contact_snapshot
 
 
 class LiggghtsProtocolAdapter:
@@ -70,10 +71,26 @@ class LiggghtsProtocolAdapter:
         self.active_friction = (static, dynamic)
 
     def checkpoint(self, metadata):
-        self.store.density_state(self.arrays(), self.box(), metadata, accepted=False)
+        self.store.density_state(self.arrays(), self.box(), metadata,
+                                 accepted=False, **self.contact_snapshot())
 
     def publish_target(self, metadata):
-        self.store.density_state(self.arrays(), self.box(), metadata, accepted=True)
+        self.store.density_state(self.arrays(), self.box(), metadata,
+                                 accepted=True, **self.contact_snapshot())
+
+    def contact_snapshot(self):
+        contacts = self.library.contacts()
+        native_pairs = contacts[:, 6:8].astype(np.int64)
+        # Pair-local IDs are native consecutive IDs, never portable IDs cast to float.
+        pairs = self.ids[native_pairs - 1]
+        branches = contacts[:, :3] - contacts[:, 3:6]
+        if self.periodic:
+            branches -= self.lengths * np.rint(branches / self.lengths)
+        radii = np.empty(len(self.ids) + 1)
+        radii[self.library.atom('id', integer=True)] = self.library.atom('radius')
+        overlaps = radii[native_pairs[:, 0]] + radii[native_pairs[:, 1]] - np.linalg.norm(branches, axis=1)
+        return contact_snapshot(pairs, branches, overlaps, contacts[:, 9:12],
+                                engine='liggghts', force_time_level='completed_step_reevaluation')
 
     def observe(self, requested):
         result = {}

@@ -79,6 +79,9 @@ es configurable; si `max_duration` se agota antes, la etapa falla.
 Los checkpoints son pares NPZ/JSON bajo `stages/dem/results/states/`, indexados
 como `kind: density_checkpoint`, `phase: before_reset` en `states.jsonl`.
 Conservan IDs, posiciones, radios, velocidades, velocidades angulares y celda.
+Los nuevos snapshots también conservan pares de IDs, geometría periódica y
+fuerzas total, normal y tangencial por contacto, con sus convenciones y momento
+de evaluación. Véase [el contrato de resultados](run-format.md).
 El índice registra ciclo, observables y ambos coeficientes normales.
 Son estados para análisis; no incluyen serializaciones ni capacidades de restart.
 
