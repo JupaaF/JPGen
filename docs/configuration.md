@@ -86,14 +86,31 @@ Available methods:
 - `overlap_relaxation`: begins from random centers and iteratively removes overlap using bounded displacements and optional seeded perturbations.
 - `progressive_growth`: places reduced temporary radii, relaxes them, and grows toward the final radii with rollback and adaptive increments.
 
-The relaxation-based methods accept `max_iterations`, `step_size`, `max_displacement`, `overlap_tolerance`, `stagnation_iterations`, `improvement_tolerance`, `max_perturbations`, `perturbation` and `relax_all_overlaps`. The last option defaults to `true`: while any pair exceeds `max_overlap`, every overlapping pair contributes a correction toward zero overlap. Set it to `false` to correct only the portion of overlap above `max_overlap`. In both modes relaxation stops as soon as all pairs satisfy `max_overlap` within `overlap_tolerance`. Progressive growth additionally accepts `initial_scale`, `initial_increment`, `min_increment`, `max_increment` and `max_stages`.
+The relaxation-based methods accept `max_iterations`, `step_size`, `max_displacement`, `overlap_tolerance`, `stagnation_iterations`, `improvement_tolerance`, `max_perturbations`, `perturbation` and `relax_all_overlaps`. The last option defaults to `true`: while any pair exceeds `max_overlap`, every overlapping pair contributes a correction toward zero overlap. Set it to `false` to correct only the portion of overlap above `max_overlap`. With attraction disabled, relaxation stops as soon as all pairs satisfy `max_overlap` within `overlap_tolerance`. Progressive growth additionally accepts `initial_scale`, `initial_increment`, `min_increment`, `max_increment` and `max_stages`.
+
+Both relaxation methods also accept `attraction_strength` in `[0, 1]` (default `0`, disabled) and `contact_tolerance` in `(0, 1]` (default `1e-6`). For example:
+
+```yaml
+placement:
+  method: progressive_growth
+  max_overlap: 0.01
+  attraction_strength: 0.2
+  contact_tolerance: 1e-6
+```
+
+With attraction enabled, particles whose nearest surface gap exceeds `contact_tolerance` times their own radius move toward that neighbor, alongside the overlap corrections. Neighbors are selected by surface gap rather than center distance, with periodic minimum images where applicable. Equal gaps are resolved by particle index. Wall contacts and self periodic images are not counted. Attraction contributes half the gap times `attraction_strength` before the usual `step_size` and per-particle displacement limit are applied. In progressive growth this runs only when the final radii are reached, avoiding clustering and extra attraction iterations during temporary-radius stages.
+
+Relaxation continues after the overlap constraint is met to try to give every particle a neighbor. If the iteration or stagnation budget is exhausted, it returns the best admissible configuration found, preferring fewer isolated particles and then smaller squared normalized gaps. Attraction never bypasses the final overlap audit. It adds neighbor-search work and can change the spatial distribution or form clusters; a single contact does not establish mechanical stability or eliminate all rattlers.
+
+Progress and the final completion message report isolated particles when attraction is enabled. The returned configuration's count is saved as `placement.isolated_particles` in packing metadata and the packing summary, including when attraction stops with isolated particles remaining. It uses the geometric gap tolerance above; this does not imply force-bearing DEM contacts. A single-particle packing remains isolated and returns immediately because there is no neighbor to approach. The field is absent for disabled attraction and unavailable in older results. A complete packing-only example is provided in [`examples/packing_attraction.yaml`](../examples/packing_attraction.yaml).
 
 These methods are geometric heuristics. They do not guarantee convergence, calculate forces, establish mechanical equilibrium or run DEM.
 
-The wizard asks only for maximum overlap and maximum relaxation iterations for
-`overlap_relaxation` and `progressive_growth`, plus maximum growth stages for
-`progressive_growth`. Other algorithm settings use their defaults and are included
-in the generated YAML. Edit that YAML to customize the advanced settings.
+The wizard asks for maximum overlap, maximum relaxation iterations and attraction
+strength for `overlap_relaxation` and `progressive_growth`. When attraction is
+enabled it also asks for the contact gap tolerance. Progressive growth additionally
+asks for maximum growth stages. Other algorithm settings use their defaults and
+are included in the generated YAML. Edit that YAML to customize the advanced settings.
 
 ## DEM simulation
 

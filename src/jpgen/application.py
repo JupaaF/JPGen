@@ -116,6 +116,7 @@ class JPGenApplication:
                     particle_count=len(packing.ids),
                     solid_fraction=packing.solid_fraction,
                     filenames=result.filenames,
+                    isolated_particles=result.summary["placement"].get("isolated_particles"),
                 ),
             )
             if dem_plan is not None:

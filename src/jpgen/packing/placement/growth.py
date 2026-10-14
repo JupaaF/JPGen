@@ -1,6 +1,6 @@
 """Place particles through progressive temporary-radius growth and relaxation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ...configuration_values import integer, mapping, number
 from ..domain import GrowthStage, GrowthStatistics
@@ -58,8 +58,11 @@ class ProgressiveGrowth(PlacementStrategy):
         check_feasibility(request.radii, request.box, request.constraints.max_overlap)
         scale = self.initial_scale
         temporary_radii = scale * request.radii
+        # Attract only at final radii; temporary-stage contacts would be lost as
+        # particles grow and would add clustering and repeated search work.
+        growth_options = replace(self.options, attraction_strength=0.0)
         result = relax(random_positions(temporary_radii, request.box, request.rng), temporary_radii,
-                       request.box, request.constraints.max_overlap, self.options, request.rng, observer)
+                       request.box, request.constraints.max_overlap, growth_options, request.rng, observer)
         if not result.converged:
             raise PackingGenerationError(f"Initial growth stage at scale {scale:.6g} did not converge; maximum overlap excess {result.max_excess:.6g}.")
         accepted = result.positions
@@ -77,7 +80,7 @@ class ProgressiveGrowth(PlacementStrategy):
             # relax() copies accepted positions. Failed stages never overwrite this checkpoint.
             result = relax(accepted, trial_scale * request.radii, request.box,
                            request.constraints.max_overlap,
-                           self.options, request.rng, observer)
+                           self.options if trial_scale == 1.0 else growth_options, request.rng, observer)
             iterations += result.iterations
             perturbations += result.perturbations
             history.append(GrowthStage(trial_scale, result.converged, result.iterations, result.max_excess))
@@ -99,5 +102,6 @@ class ProgressiveGrowth(PlacementStrategy):
                 perturbations=perturbations,
                 final_scale=scale,
                 stages=tuple(history),
+                isolated_particles=result.isolated_particles,
             ),
         )

@@ -1,6 +1,6 @@
 """Placement audits and algorithm-specific statistics."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 import numpy as np
@@ -77,14 +77,24 @@ class RelaxationStatistics(PlacementStatistics):
     method: ClassVar[str] = "overlap_relaxation"
 
     perturbations: int
+    isolated_particles: int | None = field(default=None, kw_only=True)
 
     def __post_init__(self):
         super().__post_init__()
         if isinstance(self.perturbations, bool) or not isinstance(self.perturbations, (int, np.integer)) or self.perturbations < 0:
             raise ValueError("Perturbations must be a nonnegative integer.")
+        if self.isolated_particles is not None and (
+            isinstance(self.isolated_particles, bool)
+            or not isinstance(self.isolated_particles, (int, np.integer))
+            or self.isolated_particles < 0
+        ):
+            raise ValueError("Isolated particles must be a nonnegative integer when available.")
 
     def to_dict(self):
-        return {**super().to_dict(), "perturbations": self.perturbations}
+        result = {**super().to_dict(), "perturbations": self.perturbations}
+        if self.isolated_particles is not None:
+            result["isolated_particles"] = self.isolated_particles
+        return result
 
 
 @dataclass(frozen=True)
@@ -125,6 +135,7 @@ class GrowthStatistics(RelaxationStatistics):
             perturbations=values["perturbations"],
             final_scale=values["final_scale"],
             stages=tuple(GrowthStage(**stage) for stage in values["stages"]),
+            isolated_particles=values.get("isolated_particles"),
         )
 
     final_scale: float

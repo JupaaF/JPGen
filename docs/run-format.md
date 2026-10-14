@@ -40,6 +40,14 @@ contains resolved defaults and the actual seed. A reused packing points to
 this file through `load_config` resolves the source relative to the config file;
 ordinary user YAML files retain launch-directory path semantics.
 
+With packing attraction enabled, packing metadata and the stage summary include
+`placement.isolated_particles` for the returned geometry, measured using
+`packing.placement.contact_tolerance` in the effective configuration. This counts
+particles without a neighbor within the geometric gap tolerance, excluding walls
+and self images; it is not a mechanical rattler count. Disabled attraction and
+older packing records omit this optional statistic. Existing packing files remain
+readable without a schema migration.
+
 `provenance/sources.json` records the original source path and hash, local
 snapshot, source run UUID and artifact path when available. `uses_packing` does
 not mean continuing the previous DEM solver. `environment.json` records dependency

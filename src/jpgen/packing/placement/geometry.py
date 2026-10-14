@@ -30,6 +30,61 @@ def random_positions(radii, box, rng):
     return rng.uniform(lower, upper, size=(len(radii), 3))
 
 
+def isolated_attraction(positions, radii, box, contact_tolerance):
+    """Move isolated spheres toward the nearest surface, using minimum images.
+
+    A nearest-center query supplies an upper bound on the surface gap. Querying
+    that gap plus the largest radius then includes every possible better target,
+    even for polydisperse radii. Blocks bound temporary neighbor-list memory.
+    Returned gaps are normalized by each particle's radius, zero for particles
+    within contact tolerance, and infinite when no other particle exists.
+    """
+    correction = np.zeros_like(positions)
+    gaps = np.zeros(len(radii))
+    if len(radii) < 2:
+        gaps[:] = np.inf  # Isolated, but no other particle can be a target.
+        return correction, gaps
+    tree = cKDTree(positions, boxsize=box.lengths if box.periodic else None)
+    largest = float(np.max(radii))
+    for start in range(0, len(radii), 128):
+        stop = min(start + 128, len(radii))
+        centers = positions[start:stop]
+        distances, indices = tree.query(centers, k=2)
+        # With coincident centers the first result need not be the query itself.
+        own = np.arange(start, stop)
+        other = np.where(indices[:, 0] == own, indices[:, 1], indices[:, 0])
+        distance = np.where(indices[:, 0] == own, distances[:, 1], distances[:, 0])
+        upper_gap = distance - radii[own] - radii[other]
+        cutoff = np.nextafter(np.maximum(0, radii[own] + largest + upper_gap), np.inf)
+        candidates = tree.query_ball_point(centers, cutoff, return_sorted=True)
+        sizes = np.fromiter((len(items) for items in candidates), dtype=np.int64)
+        i = np.repeat(own, sizes)
+        j = np.concatenate(candidates).astype(np.int64)
+        keep = i != j
+        i, j = i[keep], j[keep]
+        delta = positions[j] - positions[i]
+        if box.periodic:
+            delta -= box.lengths * np.rint(delta / box.lengths)
+        surface_gap = np.linalg.norm(delta, axis=1) - radii[i] - radii[j]
+        nearest_gap = np.full(stop - start, np.inf)
+        np.minimum.at(nearest_gap, i - start, surface_gap)
+        nearest = surface_gap == nearest_gap[i - start]
+        # Resolve equal gaps by particle index for reproducible target selection.
+        target = np.full(stop - start, len(radii), dtype=np.int64)
+        np.minimum.at(target, i[nearest] - start, j[nearest])
+        isolated = (nearest_gap > contact_tolerance * radii[own]) & (target < len(radii))
+        selected = own[isolated]
+        delta = positions[target[isolated]] - positions[selected]
+        if box.periodic:
+            delta -= box.lengths * np.rint(delta / box.lengths)
+        distance = np.linalg.norm(delta, axis=1)
+        gap = nearest_gap[isolated]
+        gaps[selected] = gap / radii[selected]
+        # Half the gap avoids crossing when two isolated spheres approach.
+        correction[selected] = 0.5 * gap[:, None] * delta / distance[:, None]
+    return correction, gaps
+
+
 def _candidate_pairs(positions, radii, box, skin=0.0):
     """Stream sorted pairs in fixed particle blocks, with per-particle cutoffs."""
     tree = cKDTree(positions, boxsize=box.lengths if box.periodic else None)

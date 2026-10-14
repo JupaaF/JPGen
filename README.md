@@ -80,6 +80,12 @@ enable simulation; omit it for packing only. Unknown options are rejected.
 The [configuration reference](docs/configuration.md) describes distributions,
 sizing, placement settings, DEM physics, stopping conditions and protocols.
 
+For relaxation-based placement, optional `placement.attraction_strength` moves
+isolated particles toward their nearest neighbor while preserving the overlap
+limit. It defaults to `0` (disabled) and is also available in the wizard. See the
+[packing attraction example](examples/packing_attraction.yaml); reducing isolated
+particles does not guarantee mechanical stability or eliminate all rattlers.
+
 ## Supported features
 
 - Fixed particle count, fixed-box solid fraction, or a box scaled to a target fraction.

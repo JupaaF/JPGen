@@ -362,6 +362,27 @@ class PackingStageWizard:
                 default=3000,
                 visible=relaxation,
             ),
+            _number_question(
+                "placement.attraction_strength",
+                "Attraction strength for particles without contacts",
+                "Moves isolated particles toward their nearest neighbor while respecting the overlap limit. Use 0 to disable; a contact does not guarantee mechanical stability.",
+                "0.2",
+                default=0,
+                minimum=0,
+                maximum=1,
+                visible=relaxation,
+            ),
+            _number_question(
+                "placement.contact_tolerance",
+                "Contact gap tolerance relative to particle radius",
+                "A particle is considered isolated when every surface gap exceeds this fraction of its radius. This is a geometric tolerance for attraction.",
+                "0.000001",
+                default=1e-6,
+                minimum=0,
+                maximum=1,
+                strict_minimum=True,
+                visible=lambda a: relaxation(a) and a.get("placement.attraction_strength", 0) > 0,
+            ),
             _integer_question(
                 "placement.max_stages",
                 "Maximum growth stages",
@@ -413,6 +434,9 @@ class PackingStageWizard:
             placement["position_attempts"] = answers["placement.position_attempts"]
         else:
             placement["max_iterations"] = answers["placement.max_iterations"]
+            placement["attraction_strength"] = answers.get("placement.attraction_strength", 0)
+            if placement["attraction_strength"] > 0:
+                placement["contact_tolerance"] = answers["placement.contact_tolerance"]
             if method == "progressive_growth":
                 placement["max_stages"] = answers["placement.max_stages"]
         packing["placement"] = placement

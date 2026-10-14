@@ -25,6 +25,8 @@ packing:
     improvement_tolerance: 1.0e-6
     perturbation: 0.01
     overlap_tolerance: 1.0e-8
+    attraction_strength: 0.0  # Set to e.g. 0.2 to attract isolated particles at final radii.
+    contact_tolerance: 1.0e-6
     initial_scale: 0.25
     initial_increment: 0.05
     min_increment: 0.0001

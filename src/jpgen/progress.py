@@ -29,6 +29,7 @@ class ExpectedParticleCount(ProgressEvent):
 class RelaxationProgress(ProgressEvent):
     iteration: int
     max_overlap_excess: float
+    isolated_particles: int | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class PackingCompleted(ProgressEvent):
     particle_count: int
     solid_fraction: float
     filenames: tuple[str, ...]
+    isolated_particles: int | None = None
 
 
 @dataclass(frozen=True)
@@ -130,10 +132,12 @@ class LoggingProgressObserver:
         elif isinstance(event, ExpectedParticleCount):
             self.logger.info("Expected particle count: %s", event.count)
         elif isinstance(event, RelaxationProgress):
+            isolated = "" if event.isolated_particles is None else f"; isolated particles {event.isolated_particles}"
             self.logger.debug(
-                "Relaxation iteration %s: maximum overlap excess %.6g",
+                "Relaxation iteration %s: maximum overlap excess %.6g%s",
                 event.iteration,
                 event.max_overlap_excess,
+                isolated,
             )
         elif isinstance(event, GrowthStageStarted):
             self.logger.info(
@@ -151,6 +155,8 @@ class LoggingProgressObserver:
                 event.particle_count,
                 event.solid_fraction,
             )
+            if event.isolated_particles is not None:
+                self.logger.info("Isolated particles after attraction: %s", event.isolated_particles)
             self.logger.info(
                 "Saved %s to %s", ", ".join(event.filenames), event.directory
             )
@@ -202,9 +208,10 @@ class ConsoleProgressObserver:
         elif isinstance(event, ExpectedParticleCount):
             print(f"Expected particle count: {event.count}")
         elif isinstance(event, RelaxationProgress):
+            isolated = "" if event.isolated_particles is None else f"; isolated particles {event.isolated_particles}"
             print(
                 f"Relaxation iteration {event.iteration}: "
-                f"maximum overlap excess {event.max_overlap_excess:.6g}"
+                f"maximum overlap excess {event.max_overlap_excess:.6g}{isolated}"
             )
         elif isinstance(event, GrowthStageStarted):
             print(f"Growth stage {event.stage}: radius scale {event.radius_scale:.6g}")
@@ -218,6 +225,8 @@ class ConsoleProgressObserver:
                 f"Packing contains {event.particle_count} particles; "
                 f"solid fraction: {event.solid_fraction:.9g}"
             )
+            if event.isolated_particles is not None:
+                print(f"Isolated particles after attraction: {event.isolated_particles}")
             print(f"Saved {', '.join(event.filenames)} to {event.directory}")
         elif isinstance(event, PackingFailed):
             print(f"Packing failed: {event.error}")

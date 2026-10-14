@@ -9,12 +9,12 @@ from ..domain import RelaxationStatistics
 from ...errors import ConfigurationError, PackingGenerationError
 from ...progress import RelaxationProgress, emit
 from .base import PlacementRequest, PlacementResult, PlacementStrategy
-from .geometry import NeighborList, check_feasibility, constrain, evaluate, random_positions
+from .geometry import NeighborList, check_feasibility, constrain, evaluate, isolated_attraction, random_positions
 
 RELAXATION_OPTIONS = {
     "max_iterations", "step_size", "max_displacement", "stagnation_iterations",
     "improvement_tolerance", "max_perturbations", "perturbation", "overlap_tolerance",
-    "relax_all_overlaps",
+    "relax_all_overlaps", "attraction_strength", "contact_tolerance",
 }
 
 
@@ -29,6 +29,8 @@ class RelaxationOptions:
     improvement_tolerance: float
     perturbation: float
     overlap_tolerance: float
+    attraction_strength: float = 0.0
+    contact_tolerance: float = 1e-6
 
     @classmethod
     def from_config(cls, config):
@@ -51,9 +53,11 @@ class RelaxationOptions:
                 ("improvement_tolerance", 1e-6),
                 ("perturbation", 0.01),
                 ("overlap_tolerance", 1e-8),
+                ("contact_tolerance", 1e-6),
             )
         }
-        return cls(relax_all_overlaps=relax_all_overlaps, **integers, **numbers)
+        attraction_strength = number(config.get("attraction_strength", 0), "placement.attraction_strength", 0, 1)
+        return cls(relax_all_overlaps=relax_all_overlaps, attraction_strength=attraction_strength, **integers, **numbers)
 
     def to_config(self):
         return {
@@ -66,6 +70,8 @@ class RelaxationOptions:
             "improvement_tolerance": self.improvement_tolerance,
             "perturbation": self.perturbation,
             "overlap_tolerance": self.overlap_tolerance,
+            "attraction_strength": self.attraction_strength,
+            "contact_tolerance": self.contact_tolerance,
         }
 
 
@@ -76,6 +82,7 @@ class RelaxationResult:
     iterations: int
     perturbations: int
     max_excess: float
+    isolated_particles: int | None = None
 
 
 def relax(positions, radii, box, max_overlap, options, rng, observer=None):
@@ -86,6 +93,8 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
     lowest_energy = float("inf")
     last_progress = 0
     perturbations = 0
+    best_feasible = None
+    best_feasible_score = (float("inf"), float("inf"), float("inf"))
     neighbors = NeighborList(radii, box)
     cap = options.max_displacement * radii
     for iteration in range(options.max_iterations + 1):
@@ -98,20 +107,35 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
             relax_all_overlaps=options.relax_all_overlaps,
             neighbors=neighbors,
         )
+        isolated = 0
+        attraction_energy = 0.0
+        if options.attraction_strength > 0:
+            attraction, gaps = isolated_attraction(positions, radii, box, options.contact_tolerance)
+            isolated = int(np.count_nonzero(gaps))
+            attraction_energy = float(np.sum(gaps**2))
+            correction += options.attraction_strength * attraction
         if excess <= options.overlap_tolerance:
-            return RelaxationResult(positions, True, iteration, perturbations, excess)
+            if not isolated or len(radii) < 2:
+                return RelaxationResult(positions, True, iteration, perturbations, excess,
+                                        isolated if options.attraction_strength > 0 else None)
+            feasible_score = (isolated, attraction_energy, energy)
+            if feasible_score < best_feasible_score:
+                best_feasible_score = feasible_score
+                best_feasible = (positions.copy(), excess)
         score = (excess, energy)
         if score < best_score:
             best_score = score
             best_positions = positions.copy()
-        if energy < lowest_energy:
-            if energy < lowest_energy * (1 - options.improvement_tolerance):
+        progress_energy = energy + options.attraction_strength * attraction_energy
+        if progress_energy < lowest_energy:
+            if progress_energy < lowest_energy * (1 - options.improvement_tolerance):
                 last_progress = iteration
-            lowest_energy = energy
+            lowest_energy = progress_energy
         if iteration == options.max_iterations:
             break
         if iteration and iteration % 100 == 0:
-            emit(observer, RelaxationProgress(iteration, excess))
+            emit(observer, RelaxationProgress(iteration, excess,
+                                             isolated if options.attraction_strength > 0 else None))
         stalled = iteration - last_progress >= options.stagnation_iterations
         if stalled or not np.any(correction):
             if perturbations >= options.max_perturbations:
@@ -119,7 +143,8 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
             jitter = rng.normal(size=positions.shape)
             lengths = np.linalg.norm(jitter, axis=1)
             jitter = np.divide(jitter, lengths[:, None], out=np.zeros_like(jitter), where=lengths[:, None] != 0)
-            positions = constrain(best_positions + options.perturbation * radii[:, None] * jitter, radii, box)
+            checkpoint = best_feasible[0] if best_feasible is not None else best_positions
+            positions = constrain(checkpoint + options.perturbation * radii[:, None] * jitter, radii, box)
             perturbations += 1
             last_progress = iteration
             continue
@@ -127,6 +152,11 @@ def relax(positions, radii, box, max_overlap, options, rng, observer=None):
         magnitude = np.linalg.norm(displacement, axis=1)
         factor = np.minimum(1, np.divide(cap, magnitude, out=np.ones_like(cap), where=magnitude > 0))
         positions = constrain(positions + displacement * factor[:, None], radii, box)
+    # Attraction is a best-effort objective; never discard an admissible packing
+    # merely because some isolated particles cannot reach a neighbor.
+    if best_feasible is not None:
+        return RelaxationResult(best_feasible[0], True, iteration, perturbations,
+                                best_feasible[1], best_feasible_score[0])
     return RelaxationResult(best_positions, False, iteration, perturbations, best_score[0])
 
 
@@ -167,5 +197,6 @@ class OverlapRelaxation(PlacementStrategy):
                 position_draws=len(request.radii),
                 iterations=result.iterations,
                 perturbations=result.perturbations,
+                isolated_particles=result.isolated_particles,
             ),
         )

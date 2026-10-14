@@ -41,6 +41,9 @@ class PackingMetadata:
             raise ValueError("Solid fraction must be finite and positive.")
         if isinstance(self.count, bool) or not isinstance(self.count, int) or self.count <= 0:
             raise ValueError("Particle count must be a positive integer.")
+        isolated = getattr(self.placement, "isolated_particles", None)
+        if isolated is not None and isolated > self.count:
+            raise ValueError("Isolated particle count exceeds the packing population.")
         if not isinstance(self.versions, Mapping):
             raise ValueError("Versions must be a mapping.")
         if not isinstance(self.rng, str) or not isinstance(self.stream_scheme, str):

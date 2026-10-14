@@ -16,5 +16,6 @@ __pycache__/
 /jpgen_*.yaml
 /jpgen-source.tar.gz
 prototypes/
-examples/
+examples/*
+!examples/packing_attraction.yaml
 symbolic_regression/
